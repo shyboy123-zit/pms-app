@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import DashboardLayout from './layouts/DashboardLayout';
 import AuthLayout from './layouts/AuthLayout';
+import DebugOverlay from './components/DebugOverlay';
 
 import Dashboard from './pages/Dashboard';
 import Molds from './pages/Molds';
@@ -26,6 +27,7 @@ function App() {
     <AuthProvider>
       <DataProvider>
         <Router>
+          <DebugOverlay />
           <Routes>
             {/* Auth Routes */}
             <Route element={<AuthLayout />}>

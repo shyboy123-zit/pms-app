@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext(null);
 
@@ -7,53 +8,101 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Check local storage for existing session
-        const storedUser = localStorage.getItem('pms_user');
-        if (storedUser) {
-            setUser(JSON.parse(storedUser));
-        }
-        setLoading(false);
+        // 1. Check active session
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                await fetchProfile(session.user);
+            } else {
+                setLoading(false);
+            }
+        };
+        checkSession();
+
+        // 2. Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (session?.user) {
+                await fetchProfile(session.user);
+            } else {
+                setUser(null);
+                setLoading(false);
+            }
+        });
+
+        return () => subscription.unsubscribe();
     }, []);
 
-    const login = (id, password) => {
-        // Mock login logic
-        // In a real app, this would be an API call
-        const users = JSON.parse(localStorage.getItem('pms_users') || '[]');
-        const foundUser = users.find(u => u.id === id && u.password === password);
+    const fetchProfile = async (authUser) => {
+        try {
+            // Fetch employee data linked to this auth user
+            const { data, error } = await supabase
+                .from('employees')
+                .select('*')
+                .eq('auth_user_id', authUser.id)
+                .single();
 
-        if (foundUser) {
-            const userData = { ...foundUser };
-            delete userData.password; // Don't store password in session
-            setUser(userData);
-            localStorage.setItem('pms_user', JSON.stringify(userData));
-            return { success: true };
+            if (data) {
+                setUser({ ...data, email: authUser.email }); // Combine auth email with employee data
+            } else if (authUser) {
+                // Fallback if employee record missing (shouldn't happen with correct flow)
+                setUser({ email: authUser.email, role: 'unknown' });
+            }
+        } catch (err) {
+            console.error('Error fetching profile:', err);
+        } finally {
+            setLoading(false);
         }
-        return { success: false, message: 'Invalid ID or Password' };
     };
 
-    const register = (userData) => {
-        const users = JSON.parse(localStorage.getItem('pms_users') || '[]');
-        if (users.find(u => u.id === userData.id)) {
-            return { success: false, message: 'User ID already exists' };
+    const login = async (email, password) => {
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error) return { success: false, message: error.message };
+        return { success: true };
+    };
+
+    // Updated Register: Sign up Auth + Create Employee Record
+    const register = async (userData) => {
+        // 1. SignUp with Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: userData.email,
+            password: userData.password,
+        });
+
+        if (authError) return { success: false, message: authError.message };
+        if (!authData.user) return { success: false, message: '회원가입에 실패했습니다.' };
+
+        // 2. Create Record in 'employees' table
+        const newEmployee = {
+            auth_user_id: authData.user.id,
+            emp_id: userData.id, // Custom Employee ID (e.g. EMP-001)
+            name: userData.name,
+            email: userData.email,
+            department: '생산팀', // Default
+            position: '사원',     // Default
+            join_date: new Date().toISOString().split('T')[0],
+            status: '재직',
+            permissions: { dashboard: true, molds: true, materials: true, delivery: true, quality: true, sales: true, employees: false, equipments: true } // Default permissions
+        };
+
+        const { error: dbError } = await supabase
+            .from('employees')
+            .insert([newEmployee]);
+
+        if (dbError) {
+            // If DB insert fails, we might want to clean up the auth user, but for MVP just return error
+            console.error('DB Insert Error:', dbError);
+            return { success: false, message: '계정은 생성되었으나 직원 정보 등록에 실패했습니다. 관리자에게 문의하세요.' };
         }
-
-        // Add new user
-        const newUser = { ...userData, role: 'employee' }; // Default role
-        users.push(newUser);
-        localStorage.setItem('pms_users', JSON.stringify(users));
-
-        // Auto login after register
-        const sessionUser = { ...newUser };
-        delete sessionUser.password;
-        setUser(sessionUser);
-        localStorage.setItem('pms_user', JSON.stringify(sessionUser));
 
         return { success: true };
     };
 
-    const logout = () => {
-        setUser(null);
-        localStorage.removeItem('pms_user');
+    const logout = async () => {
+        await supabase.auth.signOut();
     };
 
     return (

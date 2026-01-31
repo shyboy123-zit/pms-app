@@ -15,13 +15,13 @@ const Signup = () => {
     const { register } = useAuth();
     const navigate = useNavigate();
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
 
         // Basic Validation
-        if (!formData.id || !formData.name || !formData.password || !formData.confirmPassword) {
-            setError('필수 정보를 모두 입력해주세요.');
+        if (!formData.id || !formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
+            setError('모든 항목을 입력해주세요.');
             return;
         }
 
@@ -30,36 +30,24 @@ const Signup = () => {
             return;
         }
 
-        if (formData.password.length < 4) {
-            setError('비밀번호는 4자 이상이어야 합니다.');
+        if (formData.password.length < 6) {
+            setError('비밀번호는 6자 이상이어야 합니다.');
             return;
         }
 
-        const result = register({
-            id: formData.id,
-            name: formData.name,
-            email: formData.email
-            // password is not stored in plaintext in real apps, but here we just pass it
-        });
-
-        // In the context we handled the "mock" password logic implicitly or need to pass it? 
-        // Ah, in AuthContext `register` takes `userData`. I should double check logic.
-        // Wait, I need to pass password to register function too so it can simulate "check".
-        // Actually AuthContext logic was: `const newUser = { ...userData, role: 'employee' };` 
-        // It didn't mention password. I need to make sure I pass password in userData.
-
-        // Let's modify the call:
-        const regResult = register({
+        // Call Register in AuthContext
+        const result = await register({
             id: formData.id,
             name: formData.name,
             email: formData.email,
             password: formData.password
         });
 
-        if (regResult.success) {
+        if (result.success) {
+            alert('가입이 완료되었습니다! 자동 로그인됩니다.');
             navigate('/');
         } else {
-            setError(regResult.message || '회원가입 실패');
+            setError(result.message || '회원가입 실패');
         }
     };
 
@@ -101,7 +89,7 @@ const Signup = () => {
                     <input
                         type="email"
                         name="email"
-                        placeholder="이메일 (선택)"
+                        placeholder="이메일 (필수)"
                         value={formData.email}
                         onChange={handleChange}
                         className="glass-input"
@@ -113,7 +101,7 @@ const Signup = () => {
                     <input
                         type="password"
                         name="password"
-                        placeholder="비밀번호"
+                        placeholder="비밀번호 (6자 이상)"
                         value={formData.password}
                         onChange={handleChange}
                         className="glass-input"

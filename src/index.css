@@ -3,13 +3,17 @@
 
 :root {
   /* Color Palette - Modern & Professional */
-  --primary: #4f46e5; /* Indigo 600 */
+  --primary: #4f46e5;
+  /* Indigo 600 */
   --primary-hover: #4338ca;
-  --secondary: #64748b; /* Slate 500 */
-  
-  --bg-main: #f8fafc; /* Slate 50 */
+  --secondary: #64748b;
+  /* Slate 500 */
+
+  --bg-main: #f8fafc;
+  /* Slate 50 */
   --bg-card: #ffffff;
-  --text-main: #0f172a; /* Slate 900 */
+  --text-main: #0f172a;
+  /* Slate 900 */
   --text-muted: #64748b;
 
   --border: #e2e8f0;
@@ -71,9 +75,51 @@ button {
   justify-content: center;
 }
 
-.w-full { width: 100%; }
-.h-full { height: 100%; }
+.w-full {
+  width: 100%;
+}
 
-.text-primary { color: var(--primary); }
-.text-success { color: var(--success); }
-.text-danger { color: var(--danger); }
+.h-full {
+  height: 100%;
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+.text-success {
+  color: var(--success);
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
+/* Mobile Responsive Fixes */
+@media (max-width: 768px) {
+  body {
+    font-size: 14px;
+  }
+
+  * {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  p,
+  span,
+  div {
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-break: keep-all;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    word-break: keep-all;
+  }
+}

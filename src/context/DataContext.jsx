@@ -42,14 +42,27 @@ export const DataProvider = ({ children }) => {
             const { data: emp } = await supabase.from('employees').select('*').order('created_at', { ascending: true });
             if (emp) setEmployees(emp);
 
-            const { data: usage } = await supabase.from('material_usage').select('*').order('usage_date', { ascending: false });
-            if (usage) setMaterialUsage(usage);
+            // Optional tables - fail silently if not exist
+            try {
+                const { data: usage } = await supabase.from('material_usage').select('*').order('usage_date', { ascending: false });
+                if (usage) setMaterialUsage(usage);
+            } catch (e) {
+                console.warn('material_usage table not available:', e.message);
+            }
 
-            const { data: trans } = await supabase.from('inventory_transactions').select('*').order('transaction_date', { ascending: false });
-            if (trans) setInventoryTransactions(trans);
+            try {
+                const { data: trans } = await supabase.from('inventory_transactions').select('*').order('transaction_date', { ascending: false });
+                if (trans) setInventoryTransactions(trans);
+            } catch (e) {
+                console.warn('inventory_transactions table not available:', e.message);
+            }
 
-            const { data: movements } = await supabase.from('mold_movement').select('*').order('outgoing_date', { ascending: false });
-            if (movements) setMoldMovement(movements);
+            try {
+                const { data: movements } = await supabase.from('mold_movement').select('*').order('outgoing_date', { ascending: false });
+                if (movements) setMoldMovement(movements);
+            } catch (e) {
+                console.warn('mold_movement table not available:', e.message);
+            }
 
         } catch (error) {
             console.error('Error fetching data:', error);

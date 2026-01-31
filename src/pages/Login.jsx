@@ -12,12 +12,18 @@ const Login = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        console.log('Login button clicked!', { email, password: '***' });
         setError('');
 
+        console.log('Calling login function...');
         const result = await login(email, password);
+        console.log('Login result:', result);
+
         if (result.success) {
+            console.log('Login successful, navigating to /');
             navigate('/');
         } else {
+            console.log('Login failed:', result.message);
             setError('이메일 또는 비밀번호가 올바르지 않습니다.');
         }
     };

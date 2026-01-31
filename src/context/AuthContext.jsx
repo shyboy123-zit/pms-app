@@ -8,6 +8,12 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Safety timeout - force loading to false after 3 seconds
+        const safetyTimeout = setTimeout(() => {
+            console.warn('Auth initialization timeout - forcing loading to false');
+            setLoading(false);
+        }, 3000);
+
         // Check active session on mount
         const initAuth = async () => {
             try {
@@ -33,42 +39,57 @@ export const AuthProvider = ({ children }) => {
                 console.error('Session check error:', error);
                 setUser(null);
             } finally {
+                clearTimeout(safetyTimeout);
                 setLoading(false);
             }
         };
 
         initAuth();
 
-        // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            if (session?.user) {
-                const { data: employee } = await supabase
-                    .from('employees')
-                    .select('*')
-                    .eq('auth_user_id', session.user.id)
-                    .single();
-
-                if (employee) {
-                    setUser({ ...employee, email: session.user.email });
-                } else {
-                    setUser({ email: session.user.email, role: 'unknown' });
-                }
-            } else {
-                setUser(null);
-            }
-        });
-
-        return () => subscription.unsubscribe();
+        return () => {
+            clearTimeout(safetyTimeout);
+        };
     }, []);
 
     const login = async (email, password) => {
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
+        try {
+            console.log('[AuthContext] Starting login with Supabase...');
 
-        if (error) return { success: false, message: error.message };
-        return { success: true };
+            const loginPromise = supabase.auth.signInWithPassword({
+                email,
+                password
+            });
+
+            const timeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Login timeout')), 10000)
+            );
+
+            const { data, error } = await Promise.race([loginPromise, timeout]);
+
+            console.log('[AuthContext] Login response:', { data: !!data, error: error?.message });
+
+            if (error) return { success: false, message: error.message };
+
+            // Manually fetch and set user data
+            if (data?.user) {
+                const { data: employee } = await supabase
+                    .from('employees')
+                    .select('*')
+                    .eq('auth_user_id', data.user.id)
+                    .single();
+
+                if (employee) {
+                    setUser({ ...employee, email: data.user.email });
+                } else {
+                    setUser({ email: data.user.email, role: 'unknown' });
+                }
+            }
+
+            return { success: true };
+        } catch (err) {
+            console.error('[AuthContext] Login error:', err);
+            return { success: false, message: err.message || 'Login failed' };
+        }
     };
 
     // Updated Register: Sign up Auth + Create Employee Record

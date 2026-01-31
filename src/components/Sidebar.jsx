@@ -60,10 +60,12 @@ const Sidebar = () => {
       <div className="sidebar-footer">
         {user && (
           <div className="user-profile">
-            <div className="user-avatar">{user.name[0]}</div>
+            <div className="user-avatar">
+              {(user.name && user.name[0]) || (user.email && user.email[0]) || 'U'}
+            </div>
             <div className="user-info">
-              <span className="user-name">{user.name}</span>
-              <span className="user-role">{user.position}</span>
+              <span className="user-name">{user.name || user.email || '직원'}</span>
+              <span className="user-role">{user.position || '미지정'}</span>
             </div>
           </div>
         )}

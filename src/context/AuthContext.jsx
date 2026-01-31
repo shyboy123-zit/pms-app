@@ -30,8 +30,8 @@ export const AuthProvider = ({ children }) => {
                 setLoading(false); // Force loading end
             }
         };
-        // checkSession();
-        setLoading(false); // Force manual login on refresh
+        checkSession(); // Re-enable session persistence
+        // setLoading(false); // Commented out - let checkSession handle loading
 
         // 2. Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {

@@ -13,6 +13,8 @@ export const DataProvider = ({ children }) => {
     const [eqHistory, setEqHistory] = useState([]);
     const [inspections, setInspections] = useState([]);
     const [employees, setEmployees] = useState([]); // Moved employees here
+    const [materialUsage, setMaterialUsage] = useState([]);
+    const [inventoryTransactions, setInventoryTransactions] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -38,6 +40,12 @@ export const DataProvider = ({ children }) => {
 
             const { data: emp } = await supabase.from('employees').select('*').order('created_at', { ascending: true });
             if (emp) setEmployees(emp);
+
+            const { data: usage } = await supabase.from('material_usage').select('*').order('usage_date', { ascending: false });
+            if (usage) setMaterialUsage(usage);
+
+            const { data: trans } = await supabase.from('inventory_transactions').select('*').order('transaction_date', { ascending: false });
+            if (trans) setInventoryTransactions(trans);
 
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -76,6 +84,10 @@ export const DataProvider = ({ children }) => {
     const updateMaterial = async (id, fields) => { // e.g., updates stock
         const { error } = await supabase.from('materials').update(fields).eq('id', id);
         if (!error) setMaterials(materials.map(m => m.id === id ? { ...m, ...fields } : m));
+    };
+    const deleteMaterial = async (id) => {
+        const { error } = await supabase.from('materials').delete().eq('id', id);
+        if (!error) setMaterials(materials.filter(m => m.id !== id));
     };
 
     // 4. Equipments
@@ -118,6 +130,150 @@ export const DataProvider = ({ children }) => {
         if (!error) setEmployees(employees.filter(e => e.id !== id));
     };
 
+    // 8. Material Usage
+    const addMaterialUsage = async (item) => {
+        const { data, error } = await supabase.from('material_usage').insert([item]).select();
+        if (!error && data) {
+            setMaterialUsage([data[0], ...materialUsage]);
+
+            // Update material stock automatically
+            if (item.material_id) {
+                const material = materials.find(m => m.id === item.material_id);
+                if (material) {
+                    const newStock = material.stock - item.quantity;
+                    await updateMaterial(item.material_id, { stock: newStock });
+                }
+            }
+        }
+        return { data, error };
+    };
+
+    const getMaterialUsageHistory = async (materialId) => {
+        const { data } = await supabase
+            .from('material_usage')
+            .select('*')
+            .eq('material_id', materialId)
+            .order('usage_date', { ascending: false });
+        return data || [];
+    };
+
+    const updateMaterialUsage = async (id, oldQuantity, fields) => {
+        const { error } = await supabase.from('material_usage').update(fields).eq('id', id);
+        if (!error) {
+            setMaterialUsage(materialUsage.map(u => u.id === id ? { ...u, ...fields } : u));
+
+            // Adjust material stock if quantity changed
+            if (fields.quantity !== undefined && fields.material_id) {
+                const material = materials.find(m => m.id === fields.material_id);
+                if (material) {
+                    // Add back old quantity and subtract new quantity
+                    const stockAdjustment = oldQuantity - fields.quantity;
+                    const newStock = material.stock + stockAdjustment;
+                    await updateMaterial(fields.material_id, { stock: newStock });
+                }
+            }
+        }
+        return { error };
+    };
+
+    const deleteMaterialUsage = async (id, materialId, quantity) => {
+        const { error } = await supabase.from('material_usage').delete().eq('id', id);
+        if (!error) {
+            setMaterialUsage(materialUsage.filter(u => u.id !== id));
+
+            // Add back the quantity to material stock
+            if (materialId) {
+                const material = materials.find(m => m.id === materialId);
+                if (material) {
+                    const newStock = material.stock + quantity;
+                    await updateMaterial(materialId, { stock: newStock });
+                }
+            }
+        }
+        return { error };
+    };
+
+    // 9. Inventory Transactions
+    const addInventoryTransaction = async (item) => {
+        const { data, error } = await supabase.from('inventory_transactions').insert([item]).select();
+        if (!error && data) setInventoryTransactions([data[0], ...inventoryTransactions]);
+        return { data, error };
+    };
+
+    const updateInventoryTransaction = async (id, fields) => {
+        const { error } = await supabase.from('inventory_transactions').update(fields).eq('id', id);
+        if (!error) setInventoryTransactions(inventoryTransactions.map(t => t.id === id ? { ...t, ...fields } : t));
+    };
+
+    const deleteInventoryTransaction = async (id) => {
+        const { error } = await supabase.from('inventory_transactions').delete().eq('id', id);
+        if (!error) setInventoryTransactions(inventoryTransactions.filter(t => t.id !== id));
+    };
+
+    const getTransactionsByDateRange = async (startDate, endDate) => {
+        let query = supabase.from('inventory_transactions').select('*');
+
+        if (startDate) query = query.gte('transaction_date', startDate);
+        if (endDate) query = query.lte('transaction_date', endDate);
+
+        const { data } = await query.order('transaction_date', { ascending: false });
+        return data || [];
+    };
+
+    // Historical queries
+    const getInventorySnapshot = async (targetDate) => {
+        // Get all transactions up to target date
+        const { data } = await supabase
+            .from('inventory_transactions')
+            .select('*')
+            .lte('transaction_date', targetDate)
+            .order('transaction_date', { ascending: false });
+
+        // Calculate stock by item
+        const stockByItem = {};
+        if (data) {
+            data.reverse().forEach(trans => {
+                if (!stockByItem[trans.item_code || trans.item_name]) {
+                    stockByItem[trans.item_code || trans.item_name] = {
+                        itemName: trans.item_name,
+                        itemCode: trans.item_code,
+                        stock: 0,
+                        unit: trans.unit
+                    };
+                }
+
+                if (trans.transaction_type === 'IN') {
+                    stockByItem[trans.item_code || trans.item_name].stock += parseFloat(trans.quantity);
+                } else {
+                    stockByItem[trans.item_code || trans.item_name].stock -= parseFloat(trans.quantity);
+                }
+            });
+        }
+
+        return Object.values(stockByItem);
+    };
+
+    const getMaterialStockAtDate = async (materialId, targetDate) => {
+        // Get material's initial stock and all usage up to target date
+        const { data: usageData } = await supabase
+            .from('material_usage')
+            .select('*')
+            .eq('material_id', materialId)
+            .lte('usage_date', targetDate);
+
+        const material = materials.find(m => m.id === materialId);
+        if (!material) return null;
+
+        let stockAtDate = material.stock;
+        if (usageData) {
+            usageData.forEach(usage => {
+                stockAtDate += parseFloat(usage.quantity); // Add back the usage to get historical stock
+            });
+        }
+
+        return stockAtDate;
+    };
+
     // --- Image Upload ---
     const uploadImage = async (file) => {
         if (!file) return null;
@@ -147,11 +303,16 @@ export const DataProvider = ({ children }) => {
             loading,
             molds, addMold, updateMold,
             repairHistory, addMoldHistory,
-            materials, addMaterial, updateMaterial,
+            materials, addMaterial, updateMaterial, deleteMaterial,
             equipments, addEquipment, updateEquipment,
             eqHistory, addEqHistory,
             inspections, addInspection, updateInspection,
             employees, addEmployee, updateEmployee, deleteEmployee,
+            materialUsage, addMaterialUsage, getMaterialUsageHistory,
+            updateMaterialUsage, deleteMaterialUsage,
+            inventoryTransactions, addInventoryTransaction, updateInventoryTransaction,
+            deleteInventoryTransaction, getTransactionsByDateRange,
+            getInventorySnapshot, getMaterialStockAtDate,
             uploadImage
         }}>
             {children}

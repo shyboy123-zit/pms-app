@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, UserPlus, UserMinus, Shield, Trash2 } from 'lucide-react';
+import { Plus, UserPlus, UserMinus, Shield, Trash2, Calendar } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Employees = () => {
@@ -15,6 +15,8 @@ const Employees = () => {
     const [selectedEmp, setSelectedEmp] = useState(null);
     const [tempPerms, setTempPerms] = useState({});
     const [viewMode, setViewMode] = useState('재직'); // '재직' or '퇴사'
+    const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+    const [leaveUsage, setLeaveUsage] = useState({ employeeId: null, days: 1, startDate: '', reason: '' });
 
     const filteredEmployees = employees.filter(e => {
         if (viewMode === '전체') return true;
@@ -47,6 +49,26 @@ const Employees = () => {
         },
     ];
 
+    // Calculate annual leave based on join date
+    const calculateAnnualLeave = (joinDate) => {
+        if (!joinDate) return 15;
+
+        const join = new Date(joinDate);
+        const today = new Date();
+        const yearsOfService = (today - join) / (1000 * 60 * 60 * 24 * 365.25);
+
+        // Korean labor law: 15 days for first year, +1 day per year after 1 year (max 25 days)
+        if (yearsOfService < 1) {
+            // For employees with less than 1 year, calculate proportionally
+            const monthsWorked = Math.floor(yearsOfService * 12);
+            return Math.floor(monthsWorked * 1.25); // 15 days / 12 months
+        } else {
+            const additionalYears = Math.floor(yearsOfService - 1);
+            const totalLeave = 15 + additionalYears;
+            return Math.min(totalLeave, 25); // Max 25 days
+        }
+    };
+
     const handleSave = () => {
         if (!newItem.name || !newItem.joinDate) return alert('필수 항목을 입력해주세요.');
 
@@ -54,13 +76,16 @@ const Employees = () => {
         const newId = `EMP-${String(count).padStart(3, '0')}`;
         const defaultPerms = { dashboard: true, molds: true, materials: true, delivery: true, quality: true, sales: true, employees: false, equipments: true };
 
+        // Calculate leave automatically based on join date
+        const calculatedLeave = calculateAnnualLeave(newItem.joinDate);
+
         const itemToAdd = {
             emp_id: newId,
             name: newItem.name,
             department: newItem.department,
             position: newItem.position,
             join_date: newItem.joinDate,
-            total_leave: newItem.totalLeave,
+            total_leave: calculatedLeave,
             resign_date: null,
             status: '재직',
             used_leave: 0,
@@ -70,6 +95,37 @@ const Employees = () => {
         addEmployee(itemToAdd);
         setIsModalOpen(false);
         setNewItem({ name: '', department: '생산팀', position: '사원', joinDate: '', totalLeave: 15 });
+    };
+
+    const openLeaveModal = (emp) => {
+        setLeaveUsage({
+            employeeId: emp.id,
+            employeeName: emp.name,
+            days: 1,
+            startDate: new Date().toISOString().split('T')[0],
+            reason: ''
+        });
+        setIsLeaveModalOpen(true);
+    };
+
+    const handleLeaveUsage = () => {
+        if (!leaveUsage.startDate || leaveUsage.days <= 0) {
+            return alert('사용일자와 일수를 입력해주세요.');
+        }
+
+        const emp = employees.find(e => e.id === leaveUsage.employeeId);
+        const remainingLeave = emp.total_leave - emp.used_leave;
+
+        if (leaveUsage.days > remainingLeave) {
+            return alert(`잔여 연차(${remainingLeave}일)가 부족합니다.`);
+        }
+
+        const newUsedLeave = emp.used_leave + leaveUsage.days;
+        updateEmployee(leaveUsage.employeeId, { used_leave: newUsedLeave });
+
+        alert(`${leaveUsage.employeeName}님의 연차 ${leaveUsage.days}일이 사용 처리되었습니다.`);
+        setIsLeaveModalOpen(false);
+        setLeaveUsage({ employeeId: null, employeeName: '', days: 1, startDate: '', reason: '' });
     };
 
     const handleResign = (id) => {
@@ -102,7 +158,7 @@ const Employees = () => {
         dashboard: '대시보드',
         molds: '금형관리',
         materials: '원재료관리',
-        delivery: '납품관리',
+        delivery: '입출고관리',
         quality: '품질관리',
         sales: '매입매출',
         employees: '직원관리',
@@ -145,9 +201,14 @@ const Employees = () => {
                             <Shield size={16} />
                         </button>
                         {row.status === '재직' && (
-                            <button className="icon-btn" onClick={() => handleResign(row.id)} title="퇴사 처리">
-                                <UserMinus size={16} />
-                            </button>
+                            <>
+                                <button className="icon-btn leave-btn" onClick={() => openLeaveModal(row)} title="연차 사용 처리">
+                                    <Calendar size={16} />
+                                </button>
+                                <button className="icon-btn" onClick={() => handleResign(row.id)} title="퇴사 처리">
+                                    <UserMinus size={16} />
+                                </button>
+                            </>
                         )}
                         <button className="icon-btn delete-btn" onClick={() => handleDelete(row.id)} title="영구 삭제">
                             <Trash2 size={16} />
@@ -178,10 +239,9 @@ const Employees = () => {
                 <div className="form-group">
                     <label className="form-label">입사일</label>
                     <input type="date" className="form-input" value={newItem.joinDate} onChange={(e) => setNewItem({ ...newItem, joinDate: e.target.value })} />
-                </div>
-                <div className="form-group">
-                    <label className="form-label">부여 연차 (일)</label>
-                    <input type="number" className="form-input" value={newItem.totalLeave} onChange={(e) => setNewItem({ ...newItem, totalLeave: parseInt(e.target.value) || 0 })} />
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                        연차는 입사일 기준으로 자동 계산됩니다 (1년 미만: 월 비례, 1년 이상: 15일 + 매년 1일 추가, 최대 25일)
+                    </p>
                 </div>
 
                 <div className="modal-actions">
@@ -209,6 +269,70 @@ const Employees = () => {
                 </div>
             </Modal>
 
+            {/* Leave Usage Modal */}
+            <Modal title={`연차 사용 처리 - ${leaveUsage.employeeName}`} isOpen={isLeaveModalOpen} onClose={() => setIsLeaveModalOpen(false)}>
+                {leaveUsage.employeeId && (() => {
+                    const emp = employees.find(e => e.id === leaveUsage.employeeId);
+                    const remaining = emp ? emp.total_leave - emp.used_leave : 0;
+                    return (
+                        <>
+                            <div style={{ background: '#eff6ff', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>부여 연차</span>
+                                    <span style={{ fontWeight: 'bold' }}>{emp?.total_leave}일</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>사용 연차</span>
+                                    <span style={{ fontWeight: 'bold', color: '#ef4444' }}>{emp?.used_leave}일</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.5rem', borderTop: '1px solid #bfdbfe' }}>
+                                    <span style={{ fontWeight: '600' }}>잔여 연차</span>
+                                    <span style={{ fontWeight: 'bold', color: 'var(--primary)', fontSize: '1.1rem' }}>{remaining}일</span>
+                                </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">사용 일수</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={leaveUsage.days}
+                                    onChange={(e) => setLeaveUsage({ ...leaveUsage, days: parseInt(e.target.value) || 0 })}
+                                    min="1"
+                                    max={remaining}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">사용 시작일</label>
+                                <input
+                                    type="date"
+                                    className="form-input"
+                                    value={leaveUsage.startDate}
+                                    onChange={(e) => setLeaveUsage({ ...leaveUsage, startDate: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">사유 (선택)</label>
+                                <textarea
+                                    className="form-input"
+                                    value={leaveUsage.reason}
+                                    onChange={(e) => setLeaveUsage({ ...leaveUsage, reason: e.target.value })}
+                                    placeholder="예: 개인 사유, 가족 행사 등"
+                                    rows="3"
+                                />
+                            </div>
+                        </>
+                    );
+                })()}
+
+                <div className="modal-actions">
+                    <button className="btn-cancel" onClick={() => setIsLeaveModalOpen(false)}>취소</button>
+                    <button className="btn-submit" onClick={handleLeaveUsage}>사용 처리</button>
+                </div>
+            </Modal>
+
             <style>{`
                 .page-container { padding: 0 1rem; }
                 .page-header-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
@@ -217,6 +341,7 @@ const Employees = () => {
                 .btn-primary { background: var(--primary); color: white; padding: 0.6rem 1.2rem; border-radius: var(--radius-md); display: flex; align-items: center; gap: 0.5rem; font-weight: 500; }
                 .icon-btn { padding: 0.5rem; border-radius: var(--radius-sm); color: var(--text-muted); transition: all 0.2s; }
                 .icon-btn:hover { background: var(--bg-main); color: var(--primary); }
+                .leave-btn:hover { background: #dcfce7; color: #16a34a; }
                 .delete-btn:hover { background: #fee2e2; color: var(--danger); }
                 
                 .perm-grid {

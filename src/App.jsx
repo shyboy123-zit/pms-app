@@ -10,7 +10,7 @@ import LoadingScreen from './components/LoadingScreen';
 import Dashboard from './pages/Dashboard';
 import Molds from './pages/Molds';
 import Materials from './pages/Materials';
-import Delivery from './pages/Delivery';
+import InventoryInOut from './pages/InventoryInOut';
 import Quality from './pages/Quality';
 import Sales from './pages/Sales';
 import Employees from './pages/Employees';
@@ -40,7 +40,7 @@ function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="molds" element={<Molds />} />
                 <Route path="materials" element={<Materials />} />
-                <Route path="delivery" element={<Delivery />} />
+                <Route path="delivery" element={<InventoryInOut />} />
                 <Route path="quality" element={<Quality />} />
                 <Route path="sales" element={<Sales />} />
                 <Route path="employees" element={<Employees />} />

@@ -21,7 +21,7 @@ const Sidebar = () => {
     { icon: LayoutDashboard, label: '대시보드', path: '/', key: 'dashboard' },
     { icon: Layers, label: '금형관리', path: '/molds', key: 'molds' },
     { icon: Box, label: '원재료관리', path: '/materials', key: 'materials' },
-    { icon: Truck, label: '납품관리', path: '/delivery', key: 'delivery' },
+    { icon: Truck, label: '입출고관리', path: '/delivery', key: 'delivery' },
     { icon: ClipboardCheck, label: '품질관리', path: '/quality', key: 'quality' },
     { icon: DollarSign, label: '매입매출', path: '/sales', key: 'sales' },
     { icon: EquipmentsIcon, label: '설비관리', path: '/equipments', key: 'equipments' },

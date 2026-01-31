@@ -113,6 +113,10 @@ export const DataProvider = ({ children }) => {
         const { error } = await supabase.from('employees').update(fields).eq('id', id);
         if (!error) setEmployees(employees.map(e => e.id === id ? { ...e, ...fields } : e));
     };
+    const deleteEmployee = async (id) => {
+        const { error } = await supabase.from('employees').delete().eq('id', id);
+        if (!error) setEmployees(employees.filter(e => e.id !== id));
+    };
 
     // --- Image Upload ---
     const uploadImage = async (file) => {
@@ -147,7 +151,7 @@ export const DataProvider = ({ children }) => {
             equipments, addEquipment, updateEquipment,
             eqHistory, addEqHistory,
             inspections, addInspection, updateInspection,
-            employees, addEmployee, updateEmployee,
+            employees, addEmployee, updateEmployee, deleteEmployee,
             uploadImage
         }}>
             {children}

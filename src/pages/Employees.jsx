@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, UserPlus, UserMinus, Shield } from 'lucide-react';
+import { Plus, UserPlus, UserMinus, Shield, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Employees = () => {
     // Consume global data from Supabase via DataContext
-    const { employees, addEmployee, updateEmployee } = useData();
+    const { employees, addEmployee, updateEmployee, deleteEmployee } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isPermModalOpen, setIsPermModalOpen] = useState(false);
@@ -72,6 +72,11 @@ const Employees = () => {
         updateEmployee(id, { status: '퇴사', resign_date: today });
     };
 
+    const handleDelete = (id) => {
+        if (!window.confirm('정말로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+        deleteEmployee(id);
+    };
+
     const openPermModal = (emp) => {
         setSelectedEmp(emp);
         setTempPerms({ ...(emp.permissions || {}) });
@@ -123,6 +128,9 @@ const Employees = () => {
                                 <UserMinus size={16} />
                             </button>
                         )}
+                        <button className="icon-btn delete-btn" onClick={() => handleDelete(row.id)} title="영구 삭제">
+                            <Trash2 size={16} />
+                        </button>
                     </div>
                 )}
             />
@@ -188,6 +196,7 @@ const Employees = () => {
                 .btn-primary { background: var(--primary); color: white; padding: 0.6rem 1.2rem; border-radius: var(--radius-md); display: flex; align-items: center; gap: 0.5rem; font-weight: 500; }
                 .icon-btn { padding: 0.5rem; border-radius: var(--radius-sm); color: var(--text-muted); transition: all 0.2s; }
                 .icon-btn:hover { background: var(--bg-main); color: var(--primary); }
+                .delete-btn:hover { background: #fee2e2; color: var(--danger); }
                 
                 .perm-grid {
                     display: grid;

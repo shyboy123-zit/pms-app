@@ -8,65 +8,58 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // 1. Check active session
-        const checkSession = async () => {
+        // Check active session on mount
+        const initAuth = async () => {
             try {
-                // Timeout promise to prevent hanging
-                const timeout = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Timeout')), 5000)
-                );
-
-                const sessionPromise = supabase.auth.getSession();
-
-                const { data: { session } } = await Promise.race([sessionPromise, timeout]);
+                const { data: { session } } = await supabase.auth.getSession();
 
                 if (session?.user) {
-                    await fetchProfile(session.user);
+                    // Fetch employee profile
+                    const { data: employee } = await supabase
+                        .from('employees')
+                        .select('*')
+                        .eq('auth_user_id', session.user.id)
+                        .single();
+
+                    if (employee) {
+                        setUser({ ...employee, email: session.user.email });
+                    } else {
+                        setUser({ email: session.user.email, role: 'unknown' });
+                    }
                 } else {
-                    setLoading(false);
+                    setUser(null);
                 }
             } catch (error) {
-                console.warn('Auth Check Timeout or Error:', error);
-                setLoading(false); // Force loading end
+                console.error('Session check error:', error);
+                setUser(null);
+            } finally {
+                setLoading(false);
             }
         };
-        checkSession(); // Re-enable session persistence
-        // setLoading(false); // Commented out - let checkSession handle loading
 
-        // 2. Listen for auth changes
+        initAuth();
+
+        // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
-                await fetchProfile(session.user);
+                const { data: employee } = await supabase
+                    .from('employees')
+                    .select('*')
+                    .eq('auth_user_id', session.user.id)
+                    .single();
+
+                if (employee) {
+                    setUser({ ...employee, email: session.user.email });
+                } else {
+                    setUser({ email: session.user.email, role: 'unknown' });
+                }
             } else {
                 setUser(null);
-                setLoading(false);
             }
         });
 
         return () => subscription.unsubscribe();
     }, []);
-
-    const fetchProfile = async (authUser) => {
-        try {
-            // Fetch employee data linked to this auth user
-            const { data, error } = await supabase
-                .from('employees')
-                .select('*')
-                .eq('auth_user_id', authUser.id)
-                .single();
-
-            if (data) {
-                setUser({ ...data, email: authUser.email }); // Combine auth email with employee data
-            } else if (authUser) {
-                // Fallback if employee record missing (shouldn't happen with correct flow)
-                setUser({ email: authUser.email, role: 'unknown' });
-            }
-        } catch (err) {
-            console.error('Error fetching profile:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const login = async (email, password) => {
         const { data, error } = await supabase.auth.signInWithPassword({

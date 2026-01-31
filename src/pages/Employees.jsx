@@ -14,6 +14,12 @@ const Employees = () => {
     const [newItem, setNewItem] = useState({ name: '', department: '생산팀', position: '사원', joinDate: '', totalLeave: 15 });
     const [selectedEmp, setSelectedEmp] = useState(null);
     const [tempPerms, setTempPerms] = useState({});
+    const [viewMode, setViewMode] = useState('재직'); // '재직' or '퇴사'
+
+    const filteredEmployees = employees.filter(e => {
+        if (viewMode === '전체') return true;
+        return e.status === viewMode;
+    });
 
     const columns = [
         { header: '사원번호', accessor: 'emp_id' }, // Changed to match DB column name somewhat, or we map it? DB has emp_id
@@ -114,10 +120,27 @@ const Employees = () => {
                     <UserPlus size={18} /> 직원 등록
                 </button>
             </div>
+        </button>
+            </div >
+
+            <div className="filter-tabs">
+                <button 
+                    className={`filter-tab ${viewMode === '재직' ? 'active' : ''}`} 
+                    onClick={() => setViewMode('재직')}
+                >
+                    재직자 ({employees.filter(e => e.status === '재직').length})
+                </button>
+                <button 
+                    className={`filter-tab ${viewMode === '퇴사' ? 'active' : ''}`} 
+                    onClick={() => setViewMode('퇴사')}
+                >
+                    퇴사자 ({employees.filter(e => e.status === '퇴사').length})
+                </button>
+            </div>
 
             <Table
                 columns={columns}
-                data={employees || []}
+                data={filteredEmployees}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="icon-btn" onClick={() => openPermModal(row)} title="접근 권한 설정">
@@ -135,41 +158,41 @@ const Employees = () => {
                 )}
             />
 
-            {/* Add Employee Modal */}
-            <Modal title="신규 직원 등록" isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-                <div className="form-group">
-                    <label className="form-label">이름</label>
-                    <input className="form-input" value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} placeholder="직원 이름" />
-                </div>
-                <div className="form-group">
-                    <label className="form-label">부서</label>
-                    <select className="form-input" value={newItem.department} onChange={(e) => setNewItem({ ...newItem, department: e.target.value })}>
-                        <option value="생산팀">생산팀</option>
-                        <option value="품질팀">품질팀</option>
-                        <option value="영업팀">영업팀</option>
-                        <option value="경영지원팀">경영지원팀</option>
-                    </select>
-                </div>
-                <div className="form-group">
-                    <label className="form-label">직급</label>
-                    <input className="form-input" value={newItem.position} onChange={(e) => setNewItem({ ...newItem, position: e.target.value })} placeholder="예: 사원, 대리" />
-                </div>
-                <div className="form-group">
-                    <label className="form-label">입사일</label>
-                    <input type="date" className="form-input" value={newItem.joinDate} onChange={(e) => setNewItem({ ...newItem, joinDate: e.target.value })} />
-                </div>
-                <div className="form-group">
-                    <label className="form-label">부여 연차 (일)</label>
-                    <input type="number" className="form-input" value={newItem.totalLeave} onChange={(e) => setNewItem({ ...newItem, totalLeave: parseInt(e.target.value) || 0 })} />
-                </div>
+{/* Add Employee Modal */ }
+<Modal title="신규 직원 등록" isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+    <div className="form-group">
+        <label className="form-label">이름</label>
+        <input className="form-input" value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} placeholder="직원 이름" />
+    </div>
+    <div className="form-group">
+        <label className="form-label">부서</label>
+        <select className="form-input" value={newItem.department} onChange={(e) => setNewItem({ ...newItem, department: e.target.value })}>
+            <option value="생산팀">생산팀</option>
+            <option value="품질팀">품질팀</option>
+            <option value="영업팀">영업팀</option>
+            <option value="경영지원팀">경영지원팀</option>
+        </select>
+    </div>
+    <div className="form-group">
+        <label className="form-label">직급</label>
+        <input className="form-input" value={newItem.position} onChange={(e) => setNewItem({ ...newItem, position: e.target.value })} placeholder="예: 사원, 대리" />
+    </div>
+    <div className="form-group">
+        <label className="form-label">입사일</label>
+        <input type="date" className="form-input" value={newItem.joinDate} onChange={(e) => setNewItem({ ...newItem, joinDate: e.target.value })} />
+    </div>
+    <div className="form-group">
+        <label className="form-label">부여 연차 (일)</label>
+        <input type="number" className="form-input" value={newItem.totalLeave} onChange={(e) => setNewItem({ ...newItem, totalLeave: parseInt(e.target.value) || 0 })} />
+    </div>
 
-                <div className="modal-actions">
-                    <button className="btn-cancel" onClick={() => setIsModalOpen(false)}>취소</button>
-                    <button className="btn-submit" onClick={handleSave}>등록</button>
-                </div>
-            </Modal>
+    <div className="modal-actions">
+        <button className="btn-cancel" onClick={() => setIsModalOpen(false)}>취소</button>
+        <button className="btn-submit" onClick={handleSave}>등록</button>
+    </div>
+</Modal>
 
-            {/* Permission Modal */}
+{/* Permission Modal */ }
             <Modal title={`접근 권한 설정 - ${selectedEmp?.name}`} isOpen={isPermModalOpen} onClose={() => setIsPermModalOpen(false)}>
                 <div className="perm-grid">
                     {Object.keys(permissionLabels).map(key => (
@@ -216,13 +239,26 @@ const Employees = () => {
                 .perm-item:hover {
                     background: var(--bg-main);
                 }
-                .perm-item input {
-                    cursor: pointer;
                     width: 16px;
                     height: 16px;
                 }
+
+                .filter-tabs { display: flex; gap: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0px; }
+                .filter-tab { 
+                    padding: 0.75rem 1.5rem; 
+                    background: transparent; 
+                    border: none; 
+                    border-bottom: 2px solid transparent; 
+                    color: var(--text-muted); 
+                    font-weight: 600; 
+                    cursor: pointer; 
+                }
+                .filter-tab.active { 
+                    border-bottom-color: var(--primary); 
+                    color: var(--primary); 
+                }
             `}</style>
-        </div>
+        </div >
     );
 };
 

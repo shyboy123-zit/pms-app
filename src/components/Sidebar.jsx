@@ -202,7 +202,16 @@ const Sidebar = () => {
         .logout-btn:hover {
           background: rgba(239, 68, 68, 0.1);
         }
+
+        .version-text {
+          text-align: center;
+          font-size: 0.7rem;
+          color: var(--text-muted);
+          margin-top: 1rem;
+          opacity: 0.7;
+        }
       `}</style>
+      <div className="version-text">v1.2.0 (Final)</div>
     </aside>
   );
 };

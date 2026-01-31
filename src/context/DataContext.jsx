@@ -15,6 +15,7 @@ export const DataProvider = ({ children }) => {
     const [employees, setEmployees] = useState([]); // Moved employees here
     const [materialUsage, setMaterialUsage] = useState([]);
     const [inventoryTransactions, setInventoryTransactions] = useState([]);
+    const [moldMovement, setMoldMovement] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -46,6 +47,9 @@ export const DataProvider = ({ children }) => {
 
             const { data: trans } = await supabase.from('inventory_transactions').select('*').order('transaction_date', { ascending: false });
             if (trans) setInventoryTransactions(trans);
+
+            const { data: movements } = await supabase.from('mold_movement').select('*').order('outgoing_date', { ascending: false });
+            if (movements) setMoldMovement(movements);
 
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -274,6 +278,79 @@ export const DataProvider = ({ children }) => {
         return stockAtDate;
     };
 
+    // 10. Mold Movement (Outgoing/Incoming)
+    const addMoldOutgoing = async (item) => {
+        // Check if mold is already out
+        const existingOutgoing = moldMovement.find(
+            m => m.mold_id === item.mold_id && m.status === '출고중'
+        );
+
+        if (existingOutgoing) {
+            alert('이미 출고 중인 금형입니다.');
+            return { data: null, error: 'Already outgoing' };
+        }
+
+        const { data, error } = await supabase.from('mold_movement').insert([{
+            mold_id: item.mold_id,
+            movement_type: '출고',
+            outgoing_date: item.outgoing_date,
+            destination: item.destination,
+            repair_vendor: item.repair_vendor,
+            expected_return_date: item.expected_return_date,
+            outgoing_reason: item.outgoing_reason,
+            responsible_person: item.responsible_person,
+            status: '출고중',
+            notes: item.notes
+        }]).select();
+
+        if (!error && data) {
+            setMoldMovement([data[0], ...moldMovement]);
+
+            // Update mold status to '출고중'
+            await updateMold(item.mold_id, { status: '출고중' });
+        }
+
+        return { data, error };
+    };
+
+    const processMoldIncoming = async (movementId, incomingData) => {
+        const { error } = await supabase.from('mold_movement').update({
+            incoming_date: incomingData.incoming_date,
+            actual_cost: incomingData.actual_cost,
+            repair_result: incomingData.repair_result,
+            incoming_notes: incomingData.incoming_notes,
+            status: '입고완료'
+        }).eq('id', movementId);
+
+        if (!error) {
+            const movement = moldMovement.find(m => m.id === movementId);
+            if (movement) {
+                // Update local state
+                setMoldMovement(moldMovement.map(m =>
+                    m.id === movementId
+                        ? { ...m, ...incomingData, status: '입고완료' }
+                        : m
+                ));
+
+                // Update mold status based on repair result
+                await updateMold(movement.mold_id, {
+                    status: incomingData.return_status || '사용가능',
+                    last_check: incomingData.incoming_date
+                });
+            }
+        }
+
+        return { error };
+    };
+
+    const getMoldMovements = (moldId) => {
+        return moldMovement.filter(m => m.mold_id === moldId);
+    };
+
+    const getOutgoingMolds = () => {
+        return moldMovement.filter(m => m.status === '출고중');
+    };
+
     // --- Image Upload ---
     const uploadImage = async (file) => {
         if (!file) return null;
@@ -313,6 +390,7 @@ export const DataProvider = ({ children }) => {
             inventoryTransactions, addInventoryTransaction, updateInventoryTransaction,
             deleteInventoryTransaction, getTransactionsByDateRange,
             getInventorySnapshot, getMaterialStockAtDate,
+            moldMovement, addMoldOutgoing, processMoldIncoming, getMoldMovements, getOutgoingMolds,
             uploadImage
         }}>
             {children}

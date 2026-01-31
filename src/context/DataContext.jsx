@@ -114,6 +114,29 @@ export const DataProvider = ({ children }) => {
         if (!error) setEmployees(employees.map(e => e.id === id ? { ...e, ...fields } : e));
     };
 
+    // --- Image Upload ---
+    const uploadImage = async (file) => {
+        if (!file) return null;
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+            const filePath = `${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('pms-images')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage.from('pms-images').getPublicUrl(filePath);
+            return data.publicUrl;
+        } catch (error) {
+            console.error('Image upload failed:', error);
+            alert('사진 업로드에 실패했습니다. (저장소 설정을 확인하세요)');
+            return null;
+        }
+    };
+
 
     return (
         <DataContext.Provider value={{
@@ -124,7 +147,8 @@ export const DataProvider = ({ children }) => {
             equipments, addEquipment, updateEquipment,
             eqHistory, addEqHistory,
             inspections, addInspection, updateInspection,
-            employees, addEmployee, updateEmployee
+            employees, addEmployee, updateEmployee,
+            uploadImage
         }}>
             {children}
         </DataContext.Provider>

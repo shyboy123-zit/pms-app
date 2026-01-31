@@ -1,22 +1,34 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, Settings, Activity, Power, History, Wrench } from 'lucide-react';
+import { Plus, Settings, Activity, Power, History, Wrench, Image as ImageIcon } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Equipments = () => {
-    const { equipments, eqHistory, addEquipment, updateEquipment, addEqHistory } = useData();
+    const { equipments, eqHistory, addEquipment, updateEquipment, addEqHistory, uploadImage } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [isRepairOpen, setIsRepairOpen] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
 
-    const [newItem, setNewItem] = useState({ name: '', model: '', status: '대기', operator: '' });
+    // New Equipment State
+    const [newItem, setNewItem] = useState({ name: '', model: '', status: '대기', operator: '', file: null });
+    // Selected Equipment
     const [selectedEq, setSelectedEq] = useState(null);
-    const [newHistory, setNewHistory] = useState({ date: '', type: '정기점검', note: '', worker: '' });
+    // New Repair History State
+    const [newHistory, setNewHistory] = useState({ date: '', type: '정기점검', note: '', worker: '', file: null });
 
     const columns = [
-        { header: '설비번호', accessor: 'eq_code' }, // DB Column name
+        { header: '설비번호', accessor: 'eq_code' },
+        {
+            header: '설비사진', accessor: 'image_url', render: (row) => (
+                row.image_url ?
+                    <a href={row.image_url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
+                        <ImageIcon size={16} /> 보기
+                    </a> : ''
+            )
+        },
         { header: '설비명', accessor: 'name' },
         { header: '모델명', accessor: 'model' },
         {
@@ -31,11 +43,16 @@ const Equipments = () => {
         },
         { header: '담당자', accessor: 'operator' },
         { header: '온도(℃)', accessor: 'temperature', render: (row) => row.status === '가동중' ? `${row.temperature}℃` : '-' },
-        { header: 'Cycle(s)', accessor: 'cycle_time', render: (row) => row.status === '가동중' ? `${row.cycle_time}s` : '-' }, // DB Column name
     ];
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!newItem.name) return alert('설비명을 입력해주세요.');
+
+        setIsUploading(true);
+        let imageUrl = null;
+        if (newItem.file) {
+            imageUrl = await uploadImage(newItem.file);
+        }
 
         const count = equipments.length + 1;
         const newCode = `EQ-NJ-${String(count).padStart(3, '0')}`;
@@ -47,12 +64,14 @@ const Equipments = () => {
             status: newItem.status,
             operator: newItem.operator,
             temperature: 0,
-            cycle_time: 0
+            cycle_time: 0,
+            image_url: imageUrl
         };
 
-        addEquipment(itemToAdd);
+        await addEquipment(itemToAdd);
+        setIsUploading(false);
         setIsModalOpen(false);
-        setNewItem({ name: '', model: '', status: '대기', operator: '' });
+        setNewItem({ name: '', model: '', status: '대기', operator: '', file: null });
     };
 
     const toggleStatus = (row) => {
@@ -70,25 +89,33 @@ const Equipments = () => {
         setIsHistoryOpen(true);
     };
 
-    const handleHistorySave = () => {
+    const handleHistorySave = async () => {
         if (!newHistory.date || !newHistory.note) return alert('필수 항목을 입력해주세요.');
+
+        setIsUploading(true);
+        let imageUrl = null;
+        if (newHistory.file) {
+            imageUrl = await uploadImage(newHistory.file);
+        }
 
         const itemToAdd = {
             eq_id: selectedEq.id,
             date: newHistory.date,
             type: newHistory.type,
             note: newHistory.note,
-            worker: newHistory.worker
+            worker: newHistory.worker,
+            image_url: imageUrl
         };
 
-        addEqHistory(itemToAdd);
+        await addEqHistory(itemToAdd);
+        setIsUploading(false);
         setIsRepairOpen(false);
-        setNewHistory({ date: '', type: '정기점검', note: '', worker: '' });
+        setNewHistory({ date: '', type: '정기점검', note: '', worker: '', file: null });
     };
 
     const getEqHistory = () => {
         if (!selectedEq) return [];
-        return eqHistory.filter(h => h.eq_id === selectedEq.id); // DB uses eq_id (uuid)
+        return eqHistory.filter(h => h.eq_id === selectedEq.id);
     };
 
     return (
@@ -96,7 +123,7 @@ const Equipments = () => {
             <div className="page-header-row">
                 <div>
                     <h2 className="page-subtitle">기계 설비 관리</h2>
-                    <p className="page-description">사출성형기 등 주요 설비의 가동 현황과 보수 이력을 관리합니다.</p>
+                    <p className="page-description">주요 설비 사진 및 정비 완료 사진을 첨부하여 이력을 관리합니다.</p>
                 </div>
                 <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
                     <Plus size={18} /> 설비 등록
@@ -165,10 +192,16 @@ const Equipments = () => {
                     <label className="form-label">담당자</label>
                     <input className="form-input" value={newItem.operator} onChange={(e) => setNewItem({ ...newItem, operator: e.target.value })} placeholder="담당 작업자" />
                 </div>
+                <div className="form-group">
+                    <label className="form-label">설비 사진</label>
+                    <input type="file" accept="image/*" className="form-input" onChange={(e) => setNewItem({ ...newItem, file: e.target.files[0] })} />
+                </div>
 
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={() => setIsModalOpen(false)}>취소</button>
-                    <button className="btn-submit" onClick={handleSave}>등록</button>
+                    <button className="btn-submit" onClick={handleSave} disabled={isUploading}>
+                        {isUploading ? '업로드 중...' : '등록'}
+                    </button>
                 </div>
             </Modal>
 
@@ -189,6 +222,13 @@ const Equipments = () => {
                                     <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{item.date} · {item.worker}</span>
                                 </div>
                                 <p style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>{item.note}</p>
+                                {item.image_url && (
+                                    <div style={{ marginTop: '0.5rem' }}>
+                                        <a href={item.image_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <ImageIcon size={14} /> 첨부 사진 보기
+                                        </a>
+                                    </div>
+                                )}
                             </div>
                         ))
                     ) : (
@@ -226,9 +266,16 @@ const Equipments = () => {
                         placeholder="보수/점검 내용을 입력하세요"
                     />
                 </div>
+                <div className="form-group">
+                    <label className="form-label">완료 사진</label>
+                    <input type="file" accept="image/*" className="form-input" onChange={(e) => setNewHistory({ ...newHistory, file: e.target.files[0] })} />
+                </div>
+
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={() => setIsRepairOpen(false)}>취소</button>
-                    <button className="btn-submit" onClick={handleHistorySave}>등록</button>
+                    <button className="btn-submit" onClick={handleHistorySave} disabled={isUploading}>
+                        {isUploading ? '업로드 중...' : '등록'}
+                    </button>
                 </div>
             </Modal>
 

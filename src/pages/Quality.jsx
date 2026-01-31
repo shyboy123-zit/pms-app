@@ -1,28 +1,30 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Quality = () => {
-    const { inspections, addInspection } = useData();
+    const { inspections, addInspection, uploadImage } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    // Initial state for new item
+    // Initial state for new item including file
     const [newItem, setNewItem] = useState({
         date: new Date().toISOString().split('T')[0],
         product: '',
         checkItem: '외관 검사',
         result: 'OK',
         ngType: '',
-        action: ''
+        action: '',
+        file: null // For file input
     });
+    const [isUploading, setIsUploading] = useState(false);
 
     const columns = [
-        { header: '검사ID', accessor: 'id' },
+        { header: '검사ID', accessor: 'qc_code' },
         { header: '검사일자', accessor: 'date' },
         { header: '품목명', accessor: 'product' },
-        { header: '검사항목', accessor: 'checkItem' },
+        { header: '검사항목', accessor: 'check_item' }, // Mapped to DB check_item
         {
             header: '판정', accessor: 'result', render: (row) => (
                 <span className={`status-badge ${row.result === 'OK' ? 'status-active' : 'status-danger'
@@ -33,37 +35,56 @@ const Quality = () => {
             )
         },
         {
-            header: '불량유형(NG)', accessor: 'ngType', render: (row) =>
-                row.result === 'NG' ? <span style={{ color: 'var(--danger)', fontWeight: 500 }}>{row.ngType}</span> : '-'
+            header: '사진', accessor: 'image_url', render: (row) => (
+                row.image_url ?
+                    <a href={row.image_url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
+                        <ImageIcon size={16} /> 보기
+                    </a> : '-'
+            )
         },
         {
-            header: '조치내용(조건수정)', accessor: 'action', render: (row) => {
+            header: '불량유형(NG)', accessor: 'ng_type', render: (row) =>
+                row.result === 'NG' ? <span style={{ color: 'var(--danger)', fontWeight: 500 }}>{row.ng_type}</span> : '-'
+        },
+        {
+            header: '조치내용', accessor: 'action', render: (row) => {
                 if (row.result !== 'NG') return '-';
                 return row.action ? (
                     <span style={{ color: 'var(--success)', fontWeight: 600 }}>{row.action}</span>
                 ) : (
-                    <span className="blink-red" style={{ color: 'var(--danger)', fontWeight: 700 }}>조치 필요 (미입력)</span>
+                    <span className="blink-red" style={{ color: 'var(--danger)', fontWeight: 700 }}>조치 필요</span>
                 );
             }
         },
     ];
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!newItem.product) return alert('품목명을 입력하세요.');
         if (newItem.result === 'NG' && !newItem.ngType) return alert('NG 판정 시 불량유형은 필수입니다.');
 
-        const dateStr = newItem.date.replace(/-/g, '').slice(2); // YYMMDD
-        // Simple random ID to avoid collision in basic mock
-        const newId = `QC-${dateStr}-${Math.floor(1000 + Math.random() * 9000)}`;
+        setIsUploading(true);
+        let imageUrl = null;
+        if (newItem.file) {
+            imageUrl = await uploadImage(newItem.file);
+        }
+
+        const dateStr = newItem.date.replace(/-/g, '').slice(2);
+        const rand = Math.floor(1000 + Math.random() * 9000);
+        const newCode = `QC-${dateStr}-${rand}`;
 
         const itemToAdd = {
-            id: newId,
-            ...newItem,
-            ngType: newItem.result === 'OK' ? '-' : newItem.ngType,
-            action: newItem.result === 'OK' ? '-' : newItem.action // Allow empty action for NG
+            qc_code: newCode,
+            date: newItem.date,
+            product: newItem.product,
+            check_item: newItem.checkItem,
+            result: newItem.result,
+            ng_type: newItem.result === 'OK' ? '-' : newItem.ngType,
+            action: newItem.result === 'OK' ? '-' : newItem.action,
+            image_url: imageUrl
         };
 
-        addInspection(itemToAdd);
+        await addInspection(itemToAdd);
+        setIsUploading(false);
         setIsModalOpen(false);
         setNewItem({
             date: newItem.date,
@@ -71,7 +92,8 @@ const Quality = () => {
             checkItem: '외관 검사',
             result: 'OK',
             ngType: '',
-            action: ''
+            action: '',
+            file: null
         });
     };
 
@@ -80,33 +102,14 @@ const Quality = () => {
             <div className="page-header-row">
                 <div>
                     <h2 className="page-subtitle">품질 관리 (일일 검사)</h2>
-                    <p className="page-description">제품 스펙 검사 결과(OK/NG) 관리. 조치가 되지 않은 건은 대시보드에 긴급 알림이 표시됩니다.</p>
+                    <p className="page-description">제품 스펙 검사 결과 및 불량 사진을 등록합니다.</p>
                 </div>
                 <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
                     <ClipboardCheck size={18} /> 검사 결과 등록
                 </button>
             </div>
 
-            <div className="stats-row">
-                <div className="glass-panel simple-stat">
-                    <span className="label">금일 검사 건수</span>
-                    <span className="value">{inspections.filter(i => i.date === new Date().toISOString().split('T')[0]).length}건</span>
-                </div>
-                <div className="glass-panel simple-stat">
-                    <span className="label">금일 불량(NG)</span>
-                    <span className="value" style={{ color: 'var(--danger)' }}>
-                        {inspections.filter(i => i.date === new Date().toISOString().split('T')[0] && i.result === 'NG').length}건
-                    </span>
-                </div>
-                <div className="glass-panel simple-stat">
-                    <span className="label">미조치 건수</span>
-                    <span className="value" style={{ color: 'var(--danger)' }}>
-                        {inspections.filter(i => i.result === 'NG' && !i.action).length}건
-                    </span>
-                </div>
-            </div>
-
-            <Table columns={columns} data={inspections} />
+            <Table columns={columns} data={inspections || []} />
 
             <Modal title="일일 품질 검사 등록" isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
                 <div className="form-group">
@@ -154,6 +157,17 @@ const Quality = () => {
                     </div>
                 </div>
 
+                <div className="form-group">
+                    <label className="form-label">현장 사진 첨부</label>
+                    <input
+                        type="file"
+                        accept="image/*"
+                        className="form-input"
+                        onChange={(e) => setNewItem({ ...newItem, file: e.target.files[0] })}
+                    />
+                    {newItem.file && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>선택됨: {newItem.file.name}</p>}
+                </div>
+
                 {newItem.result === 'NG' && (
                     <div className="ng-section" style={{ background: '#fef2f2', padding: '1rem', borderRadius: '8px', border: '1px solid #fee2e2' }}>
                         <div className="form-group">
@@ -173,7 +187,7 @@ const Quality = () => {
                                 rows="2"
                                 value={newItem.action}
                                 onChange={(e) => setNewItem({ ...newItem, action: e.target.value })}
-                                placeholder="조치 사항이 있으면 입력하세요. (미입력 시 대시보드에 긴급 알림 뜸)"
+                                placeholder="조치 사항이 있으면 입력하세요."
                                 style={{ borderColor: '#fca5a5' }}
                             />
                         </div>
@@ -182,7 +196,9 @@ const Quality = () => {
 
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={() => setIsModalOpen(false)}>취소</button>
-                    <button className="btn-submit" onClick={handleSave}>등록</button>
+                    <button className="btn-submit" onClick={handleSave} disabled={isUploading}>
+                        {isUploading ? '업로드 중...' : '등록'}
+                    </button>
                 </div>
             </Modal>
 
@@ -192,10 +208,6 @@ const Quality = () => {
                 .page-subtitle { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; }
                 .page-description { color: var(--text-muted); font-size: 0.9rem; }
                 .btn-primary { background: var(--primary); color: white; padding: 0.6rem 1.2rem; border-radius: var(--radius-md); display: flex; align-items: center; gap: 0.5rem; font-weight: 500; }
-                .stats-row { display: flex; gap: 1rem; margin-bottom: 2rem; }
-                .simple-stat { padding: 1rem 1.5rem; display: flex; flex-direction: column; flex: 1; }
-                .simple-stat .label { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; }
-                .simple-stat .value { font-size: 1.5rem; font-weight: 700; color: var(--text-main); }
                 
                 @keyframes blink { 50% { opacity: 0.5; } }
                 .blink-red { animation: blink 1.5s infinite; }

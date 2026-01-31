@@ -58,6 +58,15 @@ const Sidebar = () => {
       </nav>
 
       <div className="sidebar-footer">
+        {user && (
+          <div className="user-profile">
+            <div className="user-avatar">{user.name[0]}</div>
+            <div className="user-info">
+              <span className="user-name">{user.name}</span>
+              <span className="user-role">{user.position}</span>
+            </div>
+          </div>
+        )}
         <button onClick={logout} className="logout-btn">
           <LogOut size={18} />
           <span>로그아웃</span>
@@ -134,6 +143,46 @@ const Sidebar = () => {
         .sidebar-footer {
           padding: 1.5rem;
           border-top: 1px solid rgba(0,0,0,0.05);
+        }
+
+        }
+
+        .user-profile {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin-bottom: 1rem;
+          padding: 0.75rem;
+          background: rgba(0,0,0,0.03);
+          border-radius: var(--radius-md);
+        }
+        
+        .user-avatar {
+          width: 36px;
+          height: 36px;
+          background: var(--text-main);
+          color: white;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 600;
+        }
+
+        .user-info {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .user-name {
+          font-weight: 600;
+          font-size: 0.95rem;
+        }
+
+        .user-role {
+          font-size: 0.8rem;
+          color: var(--primary);
+          font-weight: 500;
         }
 
         .logout-btn {

@@ -6,6 +6,7 @@ import Signup from './pages/Signup';
 import DashboardLayout from './layouts/DashboardLayout';
 import AuthLayout from './layouts/AuthLayout';
 import DebugOverlay from './components/DebugOverlay';
+import LoadingScreen from './components/LoadingScreen';
 
 import Dashboard from './pages/Dashboard';
 import Molds from './pages/Molds';
@@ -18,7 +19,7 @@ import Equipments from './pages/Equipments';
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <LoadingScreen />;
   return user ? <Outlet /> : <Navigate to="/login" replace />;
 };
 

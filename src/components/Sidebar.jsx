@@ -47,6 +47,7 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
         { icon: Box, label: '원재료관리', path: '/materials', key: 'materials' },
         { icon: EquipmentsIcon, label: '설비관리', path: '/equipments', key: 'equipments' },
         { icon: ClipboardList, label: '작업지시', path: '/work-orders', key: 'work_orders' },
+        { icon: Calendar, label: '일일작업현황', path: '/daily-production', key: 'daily_production' },
         { icon: Package, label: '제품관리', path: '/products', key: 'products' }
       ]
     },

@@ -1,0 +1,237 @@
+import React, { useState } from 'react';
+import Table from '../components/Table';
+import Modal from '../components/Modal';
+import { Plus, Calendar, TrendingUp } from 'lucide-react';
+import { useData } from '../context/DataContext';
+
+const DailyProduction = () => {
+    const { workOrders, equipments, products, updateWorkOrder } = useData();
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [dailyQuantity, setDailyQuantity] = useState(0);
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+    // 진행중인 작업지시만 필터
+    const activeOrders = workOrders.filter(wo => wo.status === '진행중');
+
+    const columns = [
+        { header: '설비명', accessor: 'equipment_name' },
+        {
+            header: '제품명',
+            accessor: 'product_name',
+            render: (row) => {
+                const product = products.find(p => p.id === row.product_id);
+                return product?.name || '-';
+            }
+        },
+        {
+            header: '진행률',
+            accessor: 'progress',
+            render: (row) => {
+                const progress = row.target_quantity > 0
+                    ? Math.round((row.produced_quantity / row.target_quantity) * 100)
+                    : 0;
+                return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{
+                            width: '100px',
+                            height: '8px',
+                            background: '#e5e7eb',
+                            borderRadius: '4px',
+                            overflow: 'hidden'
+                        }}>
+                            <div style={{
+                                width: `${progress}%`,
+                                height: '100%',
+                                background: progress >= 100 ? '#10b981' : '#4f46e5',
+                                transition: 'width 0.3s'
+                            }} />
+                        </div>
+                        <span style={{ fontWeight: 600, color: progress >= 100 ? '#10b981' : '#4f46e5' }}>
+                            {progress}%
+                        </span>
+                    </div>
+                );
+            }
+        },
+        {
+            header: '생산수량/목표',
+            accessor: 'quantities',
+            render: (row) => `${row.produced_quantity} / ${row.target_quantity}`
+        },
+        { header: '지시일', accessor: 'order_date' }
+    ];
+
+    const handleOpenModal = (order) => {
+        setSelectedOrder(order);
+        setDailyQuantity(0);
+        setIsModalOpen(true);
+    };
+
+    const handleAddDailyProduction = async () => {
+        if (!selectedOrder || dailyQuantity <= 0) {
+            return alert('수량을 입력해주세요.');
+        }
+
+        const newProducedQuantity = selectedOrder.produced_quantity + dailyQuantity;
+
+        await updateWorkOrder(selectedOrder.id, {
+            produced_quantity: newProducedQuantity
+        });
+
+        // 100% 도달 시 자동 완료 처리
+        if (newProducedQuantity >= selectedOrder.target_quantity) {
+            alert(`🎉 작업지시가 완료되었습니다!\n설비: ${getEquipmentName(selectedOrder.equipment_id)}\n제품: ${getProductName(selectedOrder.product_id)}`);
+        }
+
+        setIsModalOpen(false);
+        setSelectedOrder(null);
+        setDailyQuantity(0);
+    };
+
+    const getEquipmentName = (equipmentId) => {
+        const equipment = equipments.find(eq => eq.id === equipmentId);
+        return equipment?.name || '-';
+    };
+
+    const getProductName = (productId) => {
+        const product = products.find(p => p.id === productId);
+        return product?.name || '-';
+    };
+
+    // 테이블 데이터 준비
+    const tableData = activeOrders.map(order => ({
+        ...order,
+        equipment_name: getEquipmentName(order.equipment_id),
+        product_name: getProductName(order.product_id)
+    }));
+
+    return (
+        <div className="page-container">
+            <div className="page-header-row">
+                <div>
+                    <h2 className="page-subtitle">일일 작업현황</h2>
+                    <p className="page-description">날짜별 생산 수량을 기록하고 작업 진행률을 관리합니다.</p>
+                </div>
+            </div>
+
+            <div className="stats-row">
+                <div className="glass-panel simple-stat">
+                    <span className="label">진행중 작업</span>
+                    <span className="value">{activeOrders.length}건</span>
+                </div>
+                <div className="glass-panel simple-stat">
+                    <span className="label">완료 임박</span>
+                    <span className="value" style={{ color: 'var(--warning)' }}>
+                        {activeOrders.filter(wo => {
+                            const progress = wo.target_quantity > 0
+                                ? (wo.produced_quantity / wo.target_quantity) * 100
+                                : 0;
+                            return progress >= 90 && progress < 100;
+                        }).length}건
+                    </span>
+                </div>
+                <div className="glass-panel simple-stat">
+                    <span className="label">오늘 날짜</span>
+                    <span className="value" style={{ fontSize: '1rem', color: 'var(--text-main)' }}>
+                        {new Date().toLocaleDateString('ko-KR')}
+                    </span>
+                </div>
+            </div>
+
+            <Table
+                columns={columns}
+                data={tableData}
+                actions={(row) => (
+                    <button
+                        className="btn-action"
+                        onClick={() => handleOpenModal(row)}
+                        title="수량 추가"
+                    >
+                        <Plus size={16} />
+                        수량 기록
+                    </button>
+                )}
+            />
+
+            {/* 일일 생산 수량 입력 모달 */}
+            <Modal
+                title="일일 생산 수량 기록"
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+            >
+                {selectedOrder && (
+                    <>
+                        <div className="form-group">
+                            <label className="form-label">설비</label>
+                            <input
+                                className="form-input"
+                                value={getEquipmentName(selectedOrder.equipment_id)}
+                                disabled
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">제품</label>
+                            <input
+                                className="form-input"
+                                value={getProductName(selectedOrder.product_id)}
+                                disabled
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">현재 생산량</label>
+                            <input
+                                className="form-input"
+                                value={`${selectedOrder.produced_quantity} / ${selectedOrder.target_quantity}`}
+                                disabled
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">날짜</label>
+                            <input
+                                type="date"
+                                className="form-input"
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">금일 생산 수량 *</label>
+                            <input
+                                type="number"
+                                className="form-input"
+                                value={dailyQuantity}
+                                onChange={(e) => setDailyQuantity(parseInt(e.target.value) || 0)}
+                                placeholder="오늘 생산한 수량 입력"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">예상 누적 생산량</label>
+                            <input
+                                className="form-input"
+                                value={selectedOrder.produced_quantity + dailyQuantity}
+                                disabled
+                                style={{
+                                    fontWeight: 600,
+                                    color: (selectedOrder.produced_quantity + dailyQuantity) >= selectedOrder.target_quantity
+                                        ? '#10b981'
+                                        : '#4f46e5'
+                                }}
+                            />
+                        </div>
+
+                        <div className="modal-actions">
+                            <button className="btn-cancel" onClick={() => setIsModalOpen(false)}>취소</button>
+                            <button className="btn-submit" onClick={handleAddDailyProduction}>
+                                기록
+                            </button>
+                        </div>
+                    </>
+                )}
+            </Modal>
+        </div>
+    );
+};
+
+export default DailyProduction;

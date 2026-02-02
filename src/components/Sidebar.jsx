@@ -12,6 +12,7 @@ import {
   Settings as EquipmentsIcon,
   Package,
   ClipboardList,
+  Calendar,
   ChevronDown,
   ChevronRight,
   Menu,

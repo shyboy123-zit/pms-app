@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, PenTool, History, Wrench, LogOut, LogIn, PackageX } from 'lucide-react';
+import { Plus, PenTool, History, Wrench, LogOut, LogIn, PackageX, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Molds = () => {
@@ -18,6 +18,8 @@ const Molds = () => {
 
     const [selectedMold, setSelectedMold] = useState(null);
     const [selectedMovement, setSelectedMovement] = useState(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingId, setEditingId] = useState(null);
     const [newItem, setNewItem] = useState({ name: '', code: '', cycle: 0, status: '사용가능' });
     const [newRepair, setNewRepair] = useState({ date: '', type: '정기점검', note: '', cost: 0 });
     const [outgoingData, setOutgoingData] = useState({
@@ -59,21 +61,34 @@ const Molds = () => {
     };
 
     const handleSave = () => {
-        // 관리분류코드 자동 생성 (미입력 시)
-        let moldCode = newItem.code.trim();
-        if (!moldCode) {
-            const nextNumber = molds.length + 1;
-            moldCode = `MOLD-${String(nextNumber).padStart(3, '0')}`;
-        }
+        if (isEditing) {
+            // 수정 모드
+            const itemToUpdate = {
+                name: newItem.name,
+                code: newItem.code,
+                cycle_count: newItem.cycle,
+                status: newItem.status
+            };
+            updateMold(editingId, itemToUpdate);
+            setIsEditing(false);
+            setEditingId(null);
+        } else {
+            // 신규 등록 모드
+            let moldCode = newItem.code.trim();
+            if (!moldCode) {
+                const nextNumber = molds.length + 1;
+                moldCode = `MOLD-${String(nextNumber).padStart(3, '0')}`;
+            }
 
-        const itemToAdd = {
-            name: newItem.name,
-            code: moldCode,
-            cycle_count: newItem.cycle,
-            status: newItem.status,
-            last_check: new Date().toISOString().split('T')[0]
-        };
-        addMold(itemToAdd);
+            const itemToAdd = {
+                name: newItem.name,
+                code: moldCode,
+                cycle_count: newItem.cycle,
+                status: newItem.status,
+                last_check: new Date().toISOString().split('T')[0]
+            };
+            addMold(itemToAdd);
+        }
         setIsModalOpen(false);
         setNewItem({ name: '', code: '', cycle: 0, status: '사용가능' });
     };
@@ -134,6 +149,18 @@ const Molds = () => {
         }
     };
 
+    const handleEdit = (mold) => {
+        setIsEditing(true);
+        setEditingId(mold.id);
+        setNewItem({
+            name: mold.name,
+            code: mold.code,
+            cycle: mold.cycle_count || 0,
+            status: mold.status
+        });
+        setIsModalOpen(true);
+    };
+
     const handleOpenIncoming = (movement) => {
         setSelectedMovement(movement);
         setIncomingData({
@@ -180,6 +207,9 @@ const Molds = () => {
 
                     return (
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button className="icon-btn" onClick={() => handleEdit(row)} title="수정">
+                                <Edit size={16} />
+                            </button>
                             <button className="icon-btn" onClick={() => handleHistory(row)} title="수리/점검 이력">
                                 <History size={16} />
                             </button>
@@ -201,7 +231,12 @@ const Molds = () => {
                 }}
             />
 
-            <Modal title="신규 금형 등록" isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+            <Modal title={isEditing ? "금형 정보 수정" : "신규 금형 등록"} isOpen={isModalOpen} onClose={() => {
+                setIsModalOpen(false);
+                setIsEditing(false);
+                setEditingId(null);
+                setNewItem({ name: '', code: '', cycle: 0, status: '사용가능' });
+            }}>
                 <div className="form-group">
                     <label className="form-label">금형명</label>
                     <input className="form-input" value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} placeholder="금형 이름" />

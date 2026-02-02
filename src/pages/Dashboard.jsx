@@ -1,202 +1,802 @@
 import React from 'react';
-import { useData } from '../context/DataContext'; // Import global data
+import { useData } from '../context/DataContext';
 import {
-    LayoutDashboard,
-    AlertTriangle,
-    CheckCircle,
     Activity,
-    ClipboardList,
+    AlertTriangle,
+    Package,
+    TrendingUp,
+    AlertCircle,
+    CheckCircle2,
+    XCircle
 } from 'lucide-react';
 
 const Dashboard = () => {
-    // Consume global data
-    const { inspections, equipments, materials } = useData();
+    const { equipments, materials, inspections, products, workOrders } = useData();
 
-    // Logic: Quality Action Status
-    const unresolvedissues = inspections.filter(i => i.result === 'NG' && (!i.action || i.action === '-'));
-    const resolvedIssues = inspections.filter(i => i.result === 'NG' && i.action && i.action !== '-');
+    // 오늘 날짜
+    const today = new Date().toISOString().split('T')[0];
 
-    // Logic: Equipment Status
-    const activeEquipments = equipments.filter(e => e.status === '가동중').length;
-    const alertEquipments = equipments.filter(e => e.status === '점검중' || e.status === '고장').length;
+    // 1. 호기별 작업 현황
+    const runningEquipments = equipments.filter(e => e.status === '가동중' && e.current_work_order_id);
 
-    // Logic: Low Stock
-    const lowStockMaterials = materials.filter(m => m.stock < m.minStock).length;
+    // 2. 안전재고 미달 원재료
+    const lowStockMaterials = materials.filter(m => m.stock < m.min_stock);
+
+    // 3. 일일 불량 현황
+    const todayInspections = inspections.filter(i => i.date === today);
+    const todayDefects = todayInspections.filter(i => i.result === 'NG');
+    const defectRate = todayInspections.length > 0
+        ? ((todayDefects.length / todayInspections.length) * 100).toFixed(1)
+        : 0;
 
     return (
         <div className="dashboard-container">
-            <h2 className="page-title">대시보드</h2>
-            <p className="page-date">{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}</p>
+            <div className="dashboard-header">
+                <div>
+                    <h2 className="page-title">생산 관리 대시보드</h2>
+                    <p className="page-date">
+                        {new Date().toLocaleDateString('ko-KR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            weekday: 'long'
+                        })}
+                    </p>
+                </div>
+            </div>
 
-            {/* Top Stat Cards */}
+            {/* 핵심 통계 카드 */}
             <div className="stats-grid">
-                <div className="stat-card glass-panel gradient-border">
-                    <div className="stat-icon-wrapper" style={{ background: 'var(--primary-light)' }}>
-                        <Activity size={24} color="var(--primary)" />
+                <div className="stat-card running">
+                    <div className="stat-icon">
+                        <Activity />
                     </div>
-                    <div>
-                        <p className="stat-label">설비 가동률</p>
-                        <h3 className="stat-value">{((activeEquipments / equipments.length) * 100).toFixed(1)}%</h3>
-                        <p className="stat-desc">총 {equipments.length}대 중 {activeEquipments}대 가동</p>
-                    </div>
-                </div>
-
-                <div className="stat-card glass-panel" style={lowStockMaterials > 0 ? { border: '1px solid var(--danger)' } : {}}>
-                    <div className="stat-icon-wrapper" style={{ background: lowStockMaterials > 0 ? '#fee2e2' : '#f1f5f9' }}>
-                        <AlertTriangle size={24} color={lowStockMaterials > 0 ? 'var(--danger)' : 'var(--text-muted)'} />
-                    </div>
-                    <div>
-                        <p className="stat-label">부족 자재</p>
-                        <h3 className="stat-value" style={{ color: lowStockMaterials > 0 ? 'var(--danger)' : 'inherit' }}>{lowStockMaterials}건</h3>
-                        <p className="stat-desc">안전재고 미달 품목 수</p>
+                    <div className="stat-content">
+                        <p className="stat-label">가동중인 설비</p>
+                        <h3 className="stat-value">{runningEquipments.length}대</h3>
+                        <p className="stat-desc">전체 {equipments.length}대</p>
                     </div>
                 </div>
 
-                <div className="stat-card glass-panel">
-                    <div className="stat-icon-wrapper" style={{ background: '#dbeafe' }}>
-                        <ClipboardList size={24} color="#2563eb" />
+                <div className={`stat-card stock ${lowStockMaterials.length > 0 ? 'alert' : ''}`}>
+                    <div className="stat-icon">
+                        <AlertTriangle />
                     </div>
-                    <div>
-                        <p className="stat-label">금일 검사</p>
-                        <h3 className="stat-value">{inspections.filter(i => i.date === new Date().toISOString().split('T')[0]).length}건</h3>
-                        <p className="stat-desc">전일 대비 +12%</p>
+                    <div className="stat-content">
+                        <p className="stat-label">재고 부족</p>
+                        <h3 className="stat-value">{lowStockMaterials.length}건</h3>
+                        <p className="stat-desc">안전재고 미달</p>
+                    </div>
+                </div>
+
+                <div className={`stat-card defect ${todayDefects.length > 0 ? 'warning' : 'good'}`}>
+                    <div className="stat-icon">
+                        <AlertCircle />
+                    </div>
+                    <div className="stat-content">
+                        <p className="stat-label">금일 불량률</p>
+                        <h3 className="stat-value">{defectRate}%</h3>
+                        <p className="stat-desc">{todayDefects.length}/{todayInspections.length} 불량</p>
                     </div>
                 </div>
             </div>
 
-            {/* Quality Action Section - Main Feature Requested */}
-            <div className="dashboard-row">
-                <div className="dashboard-col glass-panel" style={{ flex: 1.5 }}>
-                    <div className="panel-header">
-                        <h3>⚡ 품질 불량 조치 현황</h3>
-                        <span className="badge-pill">Real-time</span>
+            {/* 메인 위젯 그리드 */}
+            <div className="widgets-grid">
+                {/* 1. 호기별 작업 현황 */}
+                <div className="widget glass-panel production-status">
+                    <div className="widget-header">
+                        <h3>
+                            <Activity size={20} />
+                            호기별 작업 현황
+                        </h3>
+                        <span className="badge-live">LIVE</span>
                     </div>
+                    <div className="widget-content">
+                        {runningEquipments.length > 0 ? (
+                            <div className="equipment-list">
+                                {runningEquipments.map(eq => {
+                                    const workOrder = workOrders.find(wo => wo.id === eq.current_work_order_id);
+                                    const product = workOrder ? products.find(p => p.id === workOrder.product_id) : null;
+                                    const progress = workOrder && workOrder.target_quantity > 0
+                                        ? Math.round((workOrder.produced_quantity / workOrder.target_quantity) * 100)
+                                        : 0;
 
-                    <div className="quality-action-board">
-                        {/* Urgent Action Required Column */}
-                        <div className="qb-column urgent">
-                            <div className="qb-header">
-                                <AlertTriangle size={18} />
-                                <span>긴급 조치 요망</span>
-                                <span className="count-badge">{unresolvedissues.length}</span>
-                            </div>
-                            <div className="qb-list">
-                                {unresolvedissues.length > 0 ? (
-                                    unresolvedissues.map(item => (
-                                        <div key={item.id} className="qb-card warning-card">
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                                <span className="card-title">{item.product}</span>
-                                                <span className="card-date">{item.date}</span>
+                                    return (
+                                        <div key={eq.id} className="equipment-item">
+                                            <div className="eq-header">
+                                                <div className="eq-name-section">
+                                                    <div className="status-dot active"></div>
+                                                    <div>
+                                                        <span className="eq-name">{eq.name}</span>
+                                                        <span className="eq-temp">{eq.temperature}℃ · {eq.cycle_time}초/사이클</span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <p className="card-reason">NG: {item.ngType}</p>
-                                            <div className="card-footer">
-                                                <span className="blink-text">조치 미완료</span>
+                                            <div className="eq-product">
+                                                <Package size={16} />
+                                                <span className="product-name">{product?.name || '제품 정보 없음'}</span>
+                                            </div>
+                                            <div className="eq-progress">
+                                                <div className="progress-bar">
+                                                    <div className="progress-fill" style={{ width: `${progress}%` }}></div>
+                                                </div>
+                                                <span className="progress-text">
+                                                    {workOrder?.produced_quantity || 0} / {workOrder?.target_quantity || 0} ({progress}%)
+                                                </span>
                                             </div>
                                         </div>
-                                    ))
-                                ) : (
-                                    <div className="empty-state">
-                                        <CheckCircle size={32} color="var(--success)" style={{ opacity: 0.5 }} />
-                                        <p>모든 불량 건이 조치되었습니다.</p>
-                                    </div>
-                                )}
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="empty-state">
+                                <Activity size={48} color="#cbd5e1" />
+                                <p>현재 가동중인 설비가 없습니다</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* 2. 안전재고 경고 */}
+                <div className="widget glass-panel low-stock-alert">
+                    <div className="widget-header">
+                        <h3>
+                            <AlertTriangle size={20} />
+                            안전재고 경고
+                        </h3>
+                        {lowStockMaterials.length > 0 && (
+                            <span className="badge-alert">{lowStockMaterials.length}건</span>
+                        )}
+                    </div>
+                    <div className="widget-content">
+                        {lowStockMaterials.length > 0 ? (
+                            <div className="stock-alert-list">
+                                {lowStockMaterials.map(material => {
+                                    const shortage = material.min_stock - material.stock;
+                                    const severity = material.stock === 0 ? 'critical' :
+                                        material.stock < (material.min_stock * 0.3) ? 'high' : 'medium';
+
+                                    return (
+                                        <div key={material.id} className={`stock-alert-item ${severity}`}>
+                                            <div className="alert-header">
+                                                <span className="material-name">{material.name}</span>
+                                                <span className={`severity-badge ${severity}`}>
+                                                    {severity === 'critical' ? '재고 없음' : severity === 'high' ? '긴급' : '주의'}
+                                                </span>
+                                            </div>
+                                            <div className="stock-info">
+                                                <div className="stock-numbers">
+                                                    <span className="current-stock">
+                                                        현재: <strong>{material.stock.toLocaleString()}</strong> {material.unit}
+                                                    </span>
+                                                    <span className="min-stock">
+                                                        안전: {material.min_stock.toLocaleString()} {material.unit}
+                                                    </span>
+                                                </div>
+                                                <div className="shortage">
+                                                    부족량: <strong className="shortage-value">▼ {shortage.toLocaleString()} {material.unit}</strong>
+                                                </div>
+                                            </div>
+                                            <div className="stock-progress-bar">
+                                                <div
+                                                    className="stock-progress-fill"
+                                                    style={{
+                                                        width: `${Math.min((material.stock / material.min_stock) * 100, 100)}%`,
+                                                        background: severity === 'critical' ? '#dc2626' :
+                                                            severity === 'high' ? '#ea580c' : '#f59e0b'
+                                                    }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="empty-state success">
+                                <CheckCircle2 size={48} color="#10b981" />
+                                <p>모든 원재료 재고가 안전 수준입니다</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* 3. 일일 불량 현황 */}
+                <div className="widget glass-panel daily-defects">
+                    <div className="widget-header">
+                        <h3>
+                            <XCircle size={20} />
+                            금일 불량 현황
+                        </h3>
+                        <span className="defect-rate-badge">
+                            {defectRate}%
+                        </span>
+                    </div>
+                    <div className="widget-content">
+                        <div className="defect-summary">
+                            <div className="defect-stat">
+                                <span className="defect-label">총 검사</span>
+                                <span className="defect-value">{todayInspections.length}건</span>
+                            </div>
+                            <div className="defect-stat danger">
+                                <span className="defect-label">불량</span>
+                                <span className="defect-value">{todayDefects.length}건</span>
+                            </div>
+                            <div className="defect-stat success">
+                                <span className="defect-label">합격</span>
+                                <span className="defect-value">{todayInspections.length - todayDefects.length}건</span>
                             </div>
                         </div>
 
-                        {/* Action Completed Column */}
-                        <div className="qb-column completed">
-                            <div className="qb-header">
-                                <CheckCircle size={18} />
-                                <span>조치 완료 (양산 가능)</span>
-                                <span className="count-badge success">{resolvedIssues.length}</span>
-                            </div>
-                            <div className="qb-list">
-                                {resolvedIssues.slice(0, 5).map(item => (
-                                    <div key={item.id} className="qb-card success-card">
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                            <span className="card-title">{item.product}</span>
-                                            <span className="card-date">{item.date}</span>
+                        {todayDefects.length > 0 && (
+                            <div className="defect-list">
+                                <div className="defect-list-header">불량 상세</div>
+                                {todayDefects.map(defect => (
+                                    <div key={defect.id} className="defect-item">
+                                        <div className="defect-info">
+                                            <span className="defect-product">{defect.product}</span>
+                                            <span className="defect-type">{defect.ngType}</span>
                                         </div>
-                                        <p className="card-reason">NG: {item.ngType}</p>
-                                        <div className="card-footer">
-                                            <span style={{ color: 'var(--success)', fontWeight: 600 }}>✓ 조치: {item.action}</span>
+                                        <div className="defect-action">
+                                            {defect.action && defect.action !== '-' ? (
+                                                <span className="action-done">✓ 조치완료</span>
+                                            ) : (
+                                                <span className="action-pending">조치 필요</span>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                        </div>
-                    </div>
-                </div>
+                        )}
 
-                <div className="dashboard-col glass-panel" style={{ flex: 1 }}>
-                    <div className="panel-header">
-                        <h3>설비 모니터링</h3>
-                    </div>
-                    <div className="equip-mini-list">
-                        {equipments.slice(0, 6).map(eq => (
-                            <div key={eq.id} className="mini-eq-item">
-                                <div className={`status-dot ${eq.status === '가동중' ? 'active' : eq.status === '대기' ? 'warning' : 'danger'}`}></div>
-                                <div className="eq-info">
-                                    <span className="eq-name">{eq.name}</span>
-                                    <span className="eq-status">{eq.status} {eq.status === '가동중' && `(${eq.temperature}℃)`}</span>
-                                </div>
+                        {todayDefects.length === 0 && todayInspections.length > 0 && (
+                            <div className="empty-state success">
+                                <CheckCircle2 size={48} color="#10b981" />
+                                <p>오늘은 불량이 발생하지 않았습니다!</p>
                             </div>
-                        ))}
+                        )}
+
+                        {todayInspections.length === 0 && (
+                            <div className="empty-state">
+                                <XCircle size={48} color="#cbd5e1" />
+                                <p>오늘 검사 기록이 없습니다</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
 
             <style>{`
-                .dashboard-container { padding: 0 1rem; }
-                .page-title { font-size: 1.75rem; font-weight: 800; margin-bottom: 0.25rem; }
-                .page-date { color: var(--text-muted); margin-bottom: 2rem; }
-                
-                .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-                .stat-card { padding: 1.5rem; display: flex; align-items: center; gap: 1.25rem; }
-                .stat-icon-wrapper { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
-                .stat-label { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.25rem; }
-                .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--text-main); line-height: 1.2; }
-                .stat-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
-                
-                .dashboard-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
-                .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-                .panel-header h3 { font-size: 1.1rem; font-weight: 700; color: var(--text-main); }
-                .badge-pill { background: #fee2e2; color: var(--danger); font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 20px; font-weight: 600; }
-                
-                .quality-action-board { display: flex; gap: 1.5rem; height: 400px; }
-                .qb-column { flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.5); border-radius: 12px; padding: 1rem; }
-                .qb-column.urgent { background: #fff5f5; border: 1px solid #fee2e2; }
-                .qb-column.completed { background: #f0fdf4; border: 1px solid #dcfce7; }
-                
-                .qb-header { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-main); }
-                .urgent .qb-header { color: var(--danger); }
-                .completed .qb-header { color: var(--success); }
-                .count-badge { background: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-                
-                .qb-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; }
-                .qb-card { background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); border-left: 4px solid transparent; }
-                .warning-card { border-left-color: var(--danger); }
-                .success-card { border-left-color: var(--success); }
-                
-                .card-title { font-weight: 600; font-size: 0.95rem; }
-                .card-date { font-size: 0.8rem; color: var(--text-muted); }
-                .card-reason { font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--text-main); }
-                .card-footer { font-size: 0.85rem; text-align: right; }
-                
-                .blink-text { color: var(--danger); font-weight: 700; animation: blink 1.5s infinite; }
-                @keyframes blink { 50% { opacity: 0.5; } }
-                
-                .empty-state { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); gap: 0.5rem; font-size: 0.9rem; }
-                
-                .equip-mini-list { display: flex; flex-direction: column; gap: 0.5rem; }
-                .mini-eq-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: white; border-radius: 8px; }
-                .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #e2e8f0; }
-                .status-dot.active { background: var(--success); box-shadow: 0 0 8px #86efac; }
-                .status-dot.warning { background: var(--warning); }
-                .status-dot.danger { background: var(--danger); }
-                .eq-info { display: flex; flex-direction: column; }
-                .eq-name { font-weight: 600; font-size: 0.9rem; }
-                .eq-status { font-size: 0.8rem; color: var(--text-muted); }
+                .dashboard-container {
+                    padding: 0 1.5rem;
+                    max-width: 1800px;
+                    margin: 0 auto;
+                }
+
+                .dashboard-header {
+                    margin-bottom: 2rem;
+                    padding-bottom: 1rem;
+                    border-bottom: 2px solid var(--border);
+                }
+
+                .page-title {
+                    font-size: 2rem;
+                    font-weight: 800;
+                    margin-bottom: 0.25rem;
+                    background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                }
+
+                .page-date {
+                    color: var(--text-muted);
+                    font-size: 0.9rem;
+                    font-weight: 500;
+                }
+
+                /* 통계 카드 */
+                .stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+                    gap: 1.5rem;
+                    margin-bottom: 2rem;
+                }
+
+                .stat-card {
+                    display: flex;
+                    align-items: center;
+                    gap: 1.25rem;
+                    padding: 1.75rem;
+                    border-radius: 12px;
+                    background: white;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+                    border: 1px solid var(--border);
+                    transition: all 0.2s;
+                }
+
+                .stat-card:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+                }
+
+                .stat-card.running .stat-icon {
+                    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+                    color: #1e40af;
+                }
+
+                .stat-card.stock .stat-icon {
+                    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+                    color: #92400e;
+                }
+
+                .stat-card.stock.alert .stat-icon {
+                    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+                    color: #991b1b;
+                }
+
+                .stat-card.defect .stat-icon {
+                    background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+                    color: #3730a3;
+                }
+
+                .stat-card.defect.warning .stat-icon {
+                    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+                    color: #991b1b;
+                }
+
+                .stat-card.defect.good .stat-icon {
+                    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+                    color: #065f46;
+                }
+
+                .stat-icon {
+                    width: 56px;
+                    height: 56px;
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+
+                .stat-content {
+                    flex: 1;
+                }
+
+                .stat-label {
+                    font-size: 0.85rem;
+                    color: var(--text-muted);
+                    margin-bottom: 0.25rem;
+                    font-weight: 600;
+                }
+
+                .stat-value {
+                    font-size: 2rem;
+                    font-weight: 800;
+                    color: var(--text-main);
+                    line-height: 1;
+                    margin-bottom: 0.25rem;
+                }
+
+                .stat-desc {
+                    font-size: 0.8rem;
+                    color: var(--text-muted);
+                }
+
+                /* 위젯 그리드 */
+                .widgets-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+                    gap: 1.5rem;
+                    margin-bottom: 2rem;
+                }
+
+                .widget {
+                    padding: 1.75rem;
+                    border-radius: 12px;
+                }
+
+                .widget-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 1.5rem;
+                    padding-bottom: 1rem;
+                    border-bottom: 2px solid var(--border);
+                }
+
+                .widget-header h3 {
+                    font-size: 1.15rem;
+                    font-weight: 700;
+                    color: var(--text-main);
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+
+                .badge-live {
+                    background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+                    color: white;
+                    font-size: 0.7rem;
+                    padding: 0.25rem 0.75rem;
+                    border-radius: 12px;
+                    font-weight: 700;
+                    letter-spacing: 0.5px;
+                    animation: pulse 2s infinite;
+                }
+
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.7; }
+                }
+
+                .badge-alert {
+                    background: #dc2626;
+                    color: white;
+                    font-size: 0.75rem;
+                    padding: 0.25rem 0.75rem;
+                    border-radius: 12px;
+                    font-weight: 700;
+                }
+
+                .defect-rate-badge {
+                    background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+                    color: #3730a3;
+                    font-size: 1rem;
+                    padding: 0.5rem 1rem;
+                    border-radius: 12px;
+                    font-weight: 800;
+                }
+
+                /* 호기별 작업 현황 */
+                .equipment-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1rem;
+                }
+
+                .equipment-item {
+                    background: #f8fafc;
+                    padding: 1.25rem;
+                    border-radius: 10px;
+                    border: 1px solid #e2e8f0;
+                    transition: all 0.2s;
+                }
+
+                .equipment-item:hover {
+                    background: white;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                    transform: translateX(4px);
+                }
+
+                .eq-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 0.75rem;
+                }
+
+                .eq-name-section {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.75rem;
+                }
+
+                .status-dot {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                    background: #cbd5e1;
+                }
+
+                .status-dot.active {
+                    background: #10b981;
+                    box-shadow: 0 0 10px #10b981;
+                    animation: pulse-green 2s infinite;
+                }
+
+                @keyframes pulse-green {
+                    0%, 100% { box-shadow: 0 0 10px #10b981; }
+                    50% { box-shadow: 0 0 20px #10b981; }
+                }
+
+                .eq-name {
+                    font-weight: 700;
+                    font-size: 1rem;
+                    color: var(--text-main);
+                    display: block;
+                }
+
+                .eq-temp {
+                    font-size: 0.8rem;
+                    color: var(--text-muted);
+                    display: block;
+                }
+
+                .eq-product {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    margin-bottom: 0.75rem;
+                    padding: 0.5rem;
+                    background: white;
+                    border-radius: 6px;
+                }
+
+                .product-name {
+                    font-weight: 600;
+                    color: var(--primary);
+                    font-size: 0.9rem;
+                }
+
+                .eq-progress {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                }
+
+                .progress-bar {
+                    height: 8px;
+                    background: #e2e8f0;
+                    border-radius: 4px;
+                    overflow: hidden;
+                }
+
+                .progress-fill {
+                    height: 100%;
+                    background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+                    transition: width 0.3s;
+                }
+
+                .progress-text {
+                    font-size: 0.85rem;
+                    color: var(--text-muted);
+                    text-align: right;
+                    font-weight: 600;
+                }
+
+                /* 안전재고 경고 */
+                .stock-alert-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1rem;
+                }
+
+                .stock-alert-item {
+                    background: white;
+                    padding: 1rem;
+                    border-radius: 10px;
+                    border-left: 4px solid #f59e0b;
+                }
+
+                .stock-alert-item.high {
+                    border-left-color: #ea580c;
+                    background: #fff7ed;
+                }
+
+                .stock-alert-item.critical {
+                    border-left-color: #dc2626;
+                    background: #fef2f2;
+                }
+
+                .alert-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 0.75rem;
+                }
+
+                .material-name {
+                    font-weight: 700;
+                    font-size: 1rem;
+                    color: var(--text-main);
+                }
+
+                .severity-badge {
+                    font-size: 0.7rem;
+                    padding: 0.25rem 0.75rem;
+                    border-radius: 10px;
+                    font-weight: 700;
+                }
+
+                .severity-badge.medium {
+                    background: #fef3c7;
+                    color: #92400e;
+                }
+
+                .severity-badge.high {
+                    background: #fed7aa;
+                    color: #7c2d12;
+                }
+
+                .severity-badge.critical {
+                    background: #fee2e2;
+                    color: #991b1b;
+                }
+
+                .stock-info {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                    margin-bottom: 0.75rem;
+                }
+
+                .stock-numbers {
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 0.85rem;
+                }
+
+                .current-stock {
+                    color: var(--text-muted);
+                }
+
+                .current-stock strong {
+                    color: var(--danger);
+                    font-size: 1rem;
+                }
+
+                .min-stock {
+                    color: var(--text-muted);
+                }
+
+                .shortage {
+                    font-size: 0.85rem;
+                    color: var(--text-muted);
+                    text-align: right;
+                }
+
+                .shortage-value {
+                    color: #dc2626;
+                    font-weight: 700;
+                }
+
+                .stock-progress-bar {
+                    height: 6px;
+                    background: #e2e8f0;
+                    border-radius: 3px;
+                    overflow: hidden;
+                }
+
+                .stock-progress-fill {
+                    height: 100%;
+                    transition: width 0.3s;
+                }
+
+                /* 일일 불량 현황 */
+                .defect-summary {
+                    display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 1rem;
+                    margin-bottom: 1.5rem;
+                }
+
+                .defect-stat {
+                    background: #f8fafc;
+                    padding: 1rem;
+                    border-radius: 8px;
+                    text-align: center;
+                    border: 2px solid #e2e8f0;
+                }
+
+                .defect-stat.danger {
+                    background: #fef2f2;
+                    border-color: #fecaca;
+                }
+
+                .defect-stat.success {
+                    background: #f0fdf4;
+                    border-color: #bbf7d0;
+                }
+
+                .defect-label {
+                    display: block;
+                    font-size: 0.8rem;
+                    color: var(--text-muted);
+                    margin-bottom: 0.25rem;
+                    font-weight: 600;
+                }
+
+                .defect-value {
+                    display: block;
+                    font-size: 1.75rem;
+                    font-weight: 800;
+                    color: var(--text-main);
+                }
+
+                .defect-stat.danger .defect-value {
+                    color: #dc2626;
+                }
+
+                .defect-stat.success .defect-value {
+                    color: #16a34a;
+                }
+
+                .defect-list-header {
+                    font-size: 0.875rem;
+                    font-weight: 700;
+                    color: var(--text-muted);
+                    margin-bottom: 0.75rem;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+
+                .defect-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.75rem;
+                }
+
+                .defect-item {
+                    background: white;
+                    padding: 0.875rem;
+                    border-radius: 8px;
+                    border: 1px solid #e2e8f0;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+
+                .defect-info {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.25rem;
+                }
+
+                .defect-product {
+                    font-weight: 600;
+                    font-size: 0.95rem;
+                    color: var(--text-main);
+                }
+
+                .defect-type {
+                    font-size: 0.8rem;
+                    color: #dc2626;
+                    font-weight: 600;
+                }
+
+                .action-done {
+                    background: #d1fae5;
+                    color: #065f46;
+                    padding: 0.25rem 0.75rem;
+                    border-radius: 12px;
+                    font-size: 0.75rem;
+                    font-weight: 700;
+                }
+
+                .action-pending {
+                    background: #fee2e2;
+                    color: #991b1b;
+                    padding: 0.25rem 0.75rem;
+                    border-radius: 12px;
+                    font-size: 0.75rem;
+                    font-weight: 700;
+                    animation: blink 1.5s infinite;
+                }
+
+                @keyframes blink {
+                    50% { opacity: 0.5; }
+                }
+
+                /* Empty State */
+                .empty-state {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 3rem 1rem;
+                    color: var(--text-muted);
+                    gap: 1rem;
+                }
+
+                .empty-state p {
+                    font-size: 0.95rem;
+                    font-weight: 500;
+                }
+
+                .empty-state.success {
+                    color: #16a34a;
+                }
             `}</style>
         </div>
     );

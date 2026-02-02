@@ -19,9 +19,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const Sidebar = () => {
+const Sidebar = ({ isMobileOpen, onClose }) => {
   const { logout, user } = useAuth();
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState({
     production: true,
     salesLogistics: false,
@@ -85,10 +84,6 @@ const Sidebar = () => {
     }));
   };
 
-  const closeMobileSidebar = () => {
-    setIsMobileOpen(false);
-  };
-
   // 권한 체크
   const hasPermission = (key) => {
     if (!user || !user.permissions) return true;
@@ -97,20 +92,15 @@ const Sidebar = () => {
 
   return (
     <>
-      {/* 햄버거 메뉴 버튼 (모바일만) */}
-      <button className="hamburger-btn" onClick={() => setIsMobileOpen(true)}>
-        <Menu size={24} />
-      </button>
-
       {/* 오버레이 (모바일만) */}
       {isMobileOpen && (
-        <div className="sidebar-overlay" onClick={closeMobileSidebar} />
+        <div className="sidebar-overlay" onClick={onClose} />
       )}
 
       {/* 사이드바 */}
       <aside className={`sidebar glass-panel ${isMobileOpen ? 'mobile-open' : ''}`}>
         {/* 모바일 닫기 버튼 */}
-        <button className="mobile-close-btn" onClick={closeMobileSidebar}>
+        <button className="mobile-close-btn" onClick={onClose}>
           <X size={24} />
         </button>
 
@@ -129,7 +119,7 @@ const Sidebar = () => {
                   key={category.path}
                   to={category.path}
                   className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                  onClick={closeMobileSidebar}
+                  onClick={onClose}
                 >
                   <category.icon size={20} />
                   <span>{category.label}</span>
@@ -162,7 +152,7 @@ const Sidebar = () => {
                       key={item.path}
                       to={item.path}
                       className={({ isActive }) => `nav-item sub-item ${isActive ? 'active' : ''}`}
-                      onClick={closeMobileSidebar}
+                      onClick={onClose}
                     >
                       <item.icon size={18} />
                       <span>{item.label}</span>
@@ -193,26 +183,6 @@ const Sidebar = () => {
         </div>
 
         <style>{`
-          /* 햄버거 버튼 (모바일만) */
-          .hamburger-btn {
-            display: none;
-            position: fixed;
-            top: 1rem;
-            left: 1rem;
-            z-index: 1001;
-            background: var(--primary);
-            color: white;
-            padding: 0.5rem;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            transition: all 0.2s;
-          }
-
-          .hamburger-btn:hover {
-            background: #5046e5;
-            transform: scale(1.05);
-          }
-
           /* 모바일 닫기 버튼 */
           .mobile-close-btn {
             display: none;
@@ -417,10 +387,6 @@ const Sidebar = () => {
 
           /* 모바일 반응형 */
           @media (max-width: 768px) {
-            .hamburger-btn {
-              display: block;
-            }
-
             .mobile-close-btn {
               display: block;
             }

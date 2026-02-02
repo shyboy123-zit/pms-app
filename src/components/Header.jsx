@@ -1,9 +1,9 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Bell, Search, User } from 'lucide-react';
+import { Bell, Search, User, Menu } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
-const Header = () => {
+const Header = ({ onToggleSidebar }) => {
     const { user } = useAuth();
     const location = useLocation();
 
@@ -15,12 +15,21 @@ const Header = () => {
             case '/delivery': return '납품관리';
             case '/quality': return '품질관리';
             case '/sales': return '매입매출관리';
+            case '/employees': return '직원관리';
+            case '/equipments': return '설비관리';
+            case '/products': return '제품관리';
+            case '/work-orders': return '작업지시';
             default: return 'PMS App';
         }
     };
 
     return (
         <header className="header glass-panel">
+            {/* 햄버거 메뉴 버튼 (모바일만) */}
+            <button className="hamburger-menu-btn" onClick={onToggleSidebar}>
+                <Menu size={22} />
+            </button>
+
             <h1 className="page-title">{getPageTitle()}</h1>
 
             <div className="header-actions">
@@ -53,6 +62,32 @@ const Header = () => {
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
+                    position: relative;
+                }
+
+                /* 햄버거 메뉴 버튼 */
+                .hamburger-menu-btn {
+                    display: none; /* 기본적으로 숨김 */
+                    align-items: center;
+                    justify-content: center;
+                    background: var(--primary);
+                    color: white;
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+                    transition: all 0.2s;
+                    position: absolute;
+                    left: 1rem;
+                }
+
+                .hamburger-menu-btn:hover {
+                    background: var(--primary-hover);
+                    transform: scale(1.05);
+                }
+
+                .hamburger-menu-btn:active {
+                    transform: scale(0.95);
                 }
 
                 .page-title {
@@ -159,10 +194,14 @@ const Header = () => {
 
                 /* 모바일 반응형 */
                 @media (max-width: 768px) {
+                    .hamburger-menu-btn {
+                        display: flex; /* 모바일에서만 표시 */
+                    }
+
                     .header {
                         height: 60px;
                         margin: 0;
-                        padding: 0 1rem 0 4rem; /* 햄버거 버튼 공간 확보 */
+                        padding: 0 1rem 0 3.5rem; /* 햄버거 버튼 공간 */
                     }
 
                     .page-title {
@@ -170,7 +209,7 @@ const Header = () => {
                     }
 
                     .search-bar {
-                        display: none; /* 모바일에서 검색창 숨김 */
+                        display: none;
                     }
 
                     .action-btn {
@@ -183,7 +222,7 @@ const Header = () => {
                     }
 
                     .user-info {
-                        display: none; /* 모바일에서 사용자 정보 텍스트 숨김 */
+                        display: none;
                     }
 
                     .avatar {

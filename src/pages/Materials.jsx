@@ -111,9 +111,56 @@ const Materials = () => {
 
     const confirmOrder = () => {
         if (!orderItem) return;
-        alert(`[긴급] '${orderItem.name}'에 대한 생산(발주) 지시가 내려졌습니다.\n수량: ${orderItem.orderQuantity} ${orderItem.unit}\n공급사: ${orderItem.supplier}`);
+        alert(`📢 [긴급 발주 지시]\n\n자재명: ${orderItem.name}\n발주 수량: ${orderItem.orderQuantity} ${orderItem.unit}\n공급사: ${orderItem.supplier}\n\n✓ 구매담당자에게 알림이 전송되었습니다.`);
         setIsOrderModalOpen(false);
         setOrderItem(null);
+    };
+
+    // 원재료 입고 등록
+    const [isIncomingModalOpen, setIsIncomingModalOpen] = useState(false);
+    const [incomingData, setIncomingData] = useState({
+        materialId: null,
+        materialName: '',
+        quantity: 0,
+        unit: 'kg',
+        incoming_date: new Date().toISOString().split('T')[0],
+        notes: ''
+    });
+
+    const handleIncoming = (material) => {
+        setIncomingData({
+            materialId: material.id,
+            materialName: material.name,
+            quantity: 0,
+            unit: material.unit,
+            incoming_date: new Date().toISOString().split('T')[0],
+            notes: ''
+        });
+        setIsIncomingModalOpen(true);
+    };
+
+    const confirmIncoming = async () => {
+        if (!incomingData.materialId || incomingData.quantity <= 0) {
+            return alert('입고 수량을 입력해주세요.');
+        }
+
+        // Update material stock directly
+        const material = materials.find(m => m.id === incomingData.materialId);
+        if (material) {
+            const newStock = material.stock + parseFloat(incomingData.quantity);
+            await updateMaterial(incomingData.materialId, { stock: newStock });
+            alert(`✓ ${incomingData.materialName} ${incomingData.quantity}${incomingData.unit} 입고 처리되었습니다.\n현재 재고: ${newStock}${incomingData.unit}`);
+        }
+
+        setIsIncomingModalOpen(false);
+        setIncomingData({
+            materialId: null,
+            materialName: '',
+            quantity: 0,
+            unit: 'kg',
+            incoming_date: new Date().toISOString().split('T')[0],
+            notes: ''
+        });
     };
 
     const handleRecordUsage = (row) => {
@@ -257,6 +304,13 @@ const Materials = () => {
                             title="작업 투입량 기록"
                         >
                             <ShoppingCart size={16} /> 사용 등록
+                        </button>
+                        <button
+                            className="incoming-btn"
+                            onClick={() => handleIncoming(row)}
+                            title="원재료 입고 등록"
+                        >
+                            <Plus size={16} /> 입고 등록
                         </button>
                         {row.stock < row.min_stock && (
                             <button className="alert-btn" onClick={() => handleProductionInstruction(row)}>
@@ -422,6 +476,58 @@ const Materials = () => {
                     <button className="btn-submit" onClick={confirmUsage}>
                         <PlayCircle size={16} style={{ marginRight: '0.5rem' }} />
                         {isEditingUsage ? '수정' : '등록'}
+                    </button>
+                </div>
+            </Modal>
+
+            {/* 원재료 입고 등록 모달 */}
+            <Modal
+                title="원재료 입고 등록"
+                isOpen={isIncomingModalOpen}
+                onClose={() => setIsIncomingModalOpen(false)}
+            >
+                <div className="form-group">
+                    <label className="form-label">자재명</label>
+                    <input className="form-input" value={incomingData.materialName} disabled />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">입고 수량</label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={incomingData.quantity}
+                            onChange={(e) => setIncomingData({ ...incomingData, quantity: parseFloat(e.target.value) || 0 })}
+                            placeholder="입고 수량"
+                        />
+                        <input className="form-input" style={{ width: '80px' }} value={incomingData.unit} disabled />
+                    </div>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">입고일</label>
+                    <input
+                        type="date"
+                        className="form-input"
+                        value={incomingData.incoming_date}
+                        onChange={(e) => setIncomingData({ ...incomingData, incoming_date: e.target.value })}
+                    />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">비고 (선택)</label>
+                    <textarea
+                        className="form-input"
+                        value={incomingData.notes}
+                        onChange={(e) => setIncomingData({ ...incomingData, notes: e.target.value })}
+                        placeholder="입고 관련 메모"
+                        rows="3"
+                    />
+                </div>
+
+                <div className="modal-actions">
+                    <button className="btn-cancel" onClick={() => setIsIncomingModalOpen(false)}>취소</button>
+                    <button className="btn-submit" onClick={confirmIncoming}>
+                        <Plus size={16} style={{ marginRight: '0.5rem' }} />
+                        입고 처리
                     </button>
                 </div>
             </Modal>
@@ -662,6 +768,27 @@ const Materials = () => {
                     background: #f8fafc !important;
                     transform: scale(1.002);
                     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+                }
+
+                .incoming-btn {
+                    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                    color: white;
+                    padding: 0.4rem 0.75rem;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.3rem;
+                    transition: all 0.2s;
+                }
+
+                .incoming-btn:hover {
+                    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+                    transform: translateY(-1px);
+                    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
                 }
             `}</style>
         </div>

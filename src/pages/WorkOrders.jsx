@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, Play, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Play, CheckCircle, XCircle, Edit } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const WorkOrders = () => {
@@ -12,6 +12,7 @@ const WorkOrders = () => {
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
     const [currentOrder, setCurrentOrder] = useState(null);
     const [filterStatus, setFilterStatus] = useState('전체');
 
@@ -116,6 +117,32 @@ const WorkOrders = () => {
         setCurrentOrder(null);
     };
 
+    const handleEdit = (order) => {
+        setIsEditing(true);
+        setCurrentOrder(order);
+        setFormData({
+            product_id: order.product_id,
+            equipment_id: order.equipment_id,
+            target_quantity: order.target_quantity,
+            order_date: order.order_date,
+            notes: order.notes || ''
+        });
+        setIsModalOpen(true);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!currentOrder) return;
+        if (!formData.product_id || !formData.equipment_id) {
+            return alert('제품과 설비를 선택해주세요.');
+        }
+        if (formData.target_quantity <= 0) {
+            return alert('목표 수량을 입력해주세요.');
+        }
+
+        await updateWorkOrder(currentOrder.id, formData);
+        resetForm();
+    };
+
     const resetForm = () => {
         setFormData({
             product_id: '',
@@ -125,6 +152,8 @@ const WorkOrders = () => {
             notes: ''
         });
         setIsModalOpen(false);
+        setIsEditing(false);
+        setCurrentOrder(null);
     };
 
     return (
@@ -181,6 +210,13 @@ const WorkOrders = () => {
                 data={filteredOrders || []}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {/* Edit 버튼 (완료/취소 아닌 경우) */}
+                        {row.status !== '완료' && row.status !== '취소' && (
+                            <button className="icon-btn" onClick={() => handleEdit(row)} title="작업지시 수정">
+                                <Edit size={16} />
+                            </button>
+                        )}
+
                         {row.status === '대기' && (
                             <button className="icon-btn" onClick={() => handleStart(row)} title="작업 시작">
                                 <Play size={16} />

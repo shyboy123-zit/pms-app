@@ -246,8 +246,12 @@ const WorkOrders = () => {
                 )}
             />
 
-            {/* Add Work Order Modal */}
-            <Modal title="작업지시 생성" isOpen={isModalOpen} onClose={resetForm}>
+            {/* Add/Edit Work Order Modal */}
+            <Modal
+                title={isEditing ? "작업지시 수정" : "작업지시 생성"}
+                isOpen={isModalOpen}
+                onClose={resetForm}
+            >
                 <div className="form-group">
                     <label className="form-label">제품 *</label>
                     <select
@@ -331,7 +335,12 @@ const WorkOrders = () => {
 
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={resetForm}>취소</button>
-                    <button className="btn-submit" onClick={handleSubmit}>생성</button>
+                    <button
+                        className="btn-submit"
+                        onClick={isEditing ? handleSaveEdit : handleSubmit}
+                    >
+                        {isEditing ? '수정' : '생성'}
+                    </button>
                 </div>
             </Modal>
 

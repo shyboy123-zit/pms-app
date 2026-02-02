@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, UserPlus, UserMinus, Shield, Trash2, Calendar } from 'lucide-react';
+import { Plus, UserPlus, UserMinus, Shield, Trash2, Calendar, Edit } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Employees = () => {
@@ -11,7 +11,9 @@ const Employees = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isPermModalOpen, setIsPermModalOpen] = useState(false);
 
-    const [newItem, setNewItem] = useState({ name: '', department: '생산팀', position: '사원', joinDate: '', totalLeave: 15 });
+    const [newItem, setNewItem] = useState({ name: '', phone: '', ssn: '', department: '생산팀', position: '사원', joinDate: '', totalLeave: 15 });
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingId, setEditingId] = useState(null);
     const [selectedEmp, setSelectedEmp] = useState(null);
     const [tempPerms, setTempPerms] = useState({});
     const [viewMode, setViewMode] = useState('재직'); // '재직' or '퇴사'
@@ -24,11 +26,12 @@ const Employees = () => {
     });
 
     const columns = [
-        { header: '사원번호', accessor: 'emp_id' }, // Changed to match DB column name somewhat, or we map it? DB has emp_id
+        { header: '사원번호', accessor: 'emp_id' },
         { header: '이름', accessor: 'name' },
+        { header: '연락처', accessor: 'phone' },
         { header: '부서', accessor: 'department' },
         { header: '직급', accessor: 'position' },
-        { header: '입사일', accessor: 'join_date' }, // DB column
+        { header: '입사일', accessor: 'join_date' },
         {
             header: '연차 (사용/총)', accessor: 'leave', render: (row) => (
                 <div>
@@ -72,29 +75,47 @@ const Employees = () => {
     const handleSave = () => {
         if (!newItem.name || !newItem.joinDate) return alert('필수 항목을 입력해주세요.');
 
-        const count = employees.length + 1;
-        const newId = `EMP-${String(count).padStart(3, '0')}`;
-        const defaultPerms = { dashboard: true, molds: true, materials: true, delivery: true, quality: true, sales: true, employees: false, equipments: true };
+        if (isEditing) {
+            // 수정 모드
+            const itemToUpdate = {
+                name: newItem.name,
+                phone: newItem.phone,
+                ssn: newItem.ssn,
+                department: newItem.department,
+                position: newItem.position,
+                join_date: newItem.joinDate
+            };
+            updateEmployee(editingId, itemToUpdate);
+            setIsEditing(false);
+            setEditingId(null);
+        } else {
+            // 등록 모드
+            const count = employees.length + 1;
+            const newId = `EMP-${String(count).padStart(3, '0')}`;
+            const defaultPerms = { dashboard: true, molds: true, materials: true, delivery: true, quality: true, sales: true, employees: false, equipments: true };
 
-        // Calculate leave automatically based on join date
-        const calculatedLeave = calculateAnnualLeave(newItem.joinDate);
+            // Calculate leave automatically based on join date
+            const calculatedLeave = calculateAnnualLeave(newItem.joinDate);
 
-        const itemToAdd = {
-            emp_id: newId,
-            name: newItem.name,
-            department: newItem.department,
-            position: newItem.position,
-            join_date: newItem.joinDate,
-            total_leave: calculatedLeave,
-            resign_date: null,
-            status: '재직',
-            used_leave: 0,
-            permissions: defaultPerms
-        };
+            const itemToAdd = {
+                emp_id: newId,
+                name: newItem.name,
+                phone: newItem.phone || null,
+                ssn: newItem.ssn || null,
+                department: newItem.department,
+                position: newItem.position,
+                join_date: newItem.joinDate,
+                total_leave: calculatedLeave,
+                resign_date: null,
+                status: '재직',
+                used_leave: 0,
+                permissions: defaultPerms
+            };
 
-        addEmployee(itemToAdd);
+            addEmployee(itemToAdd);
+        }
         setIsModalOpen(false);
-        setNewItem({ name: '', department: '생산팀', position: '사원', joinDate: '', totalLeave: 15 });
+        setNewItem({ name: '', phone: '', ssn: '', department: '생산팀', position: '사원', joinDate: '', totalLeave: 15 });
     };
 
     const openLeaveModal = (emp) => {
@@ -137,6 +158,20 @@ const Employees = () => {
     const handleDelete = (id) => {
         if (!window.confirm('정말로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
         deleteEmployee(id);
+    };
+
+    const handleEdit = (emp) => {
+        setIsEditing(true);
+        setEditingId(emp.id);
+        setNewItem({
+            name: emp.name,
+            phone: emp.phone || '',
+            ssn: emp.ssn || '',
+            department: emp.department,
+            position: emp.position,
+            joinDate: emp.join_date
+        });
+        setIsModalOpen(true);
     };
 
     const openPermModal = (emp) => {
@@ -199,6 +234,9 @@ const Employees = () => {
                 data={filteredEmployees}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="icon-btn" onClick={() => handleEdit(row)} title="정보 수정">
+                            <Edit size={16} />
+                        </button>
                         <button className="icon-btn" onClick={() => openPermModal(row)} title="접근 권한 설정">
                             <Shield size={16} />
                         </button>
@@ -220,10 +258,41 @@ const Employees = () => {
             />
 
             {/* Add Employee Modal */}
-            <Modal title="신규 직원 등록" isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+            <Modal
+                title={isEditing ? "직원 정보 수정" : "신규 직원 등록"}
+                isOpen={isModalOpen}
+                onClose={() => {
+                    setIsModalOpen(false);
+                    setIsEditing(false);
+                    setEditingId(null);
+                    setNewItem({ name: '', phone: '', ssn: '', department: '생산팀', position: '사원', joinDate: '', totalLeave: 15 });
+                }}
+            >
                 <div className="form-group">
                     <label className="form-label">이름</label>
                     <input className="form-input" value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} placeholder="직원 이름" />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">연락처</label>
+                    <input
+                        className="form-input"
+                        value={newItem.phone}
+                        onChange={(e) => setNewItem({ ...newItem, phone: e.target.value })}
+                        placeholder="010-1234-5678"
+                    />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">주민번호 (선택)</label>
+                    <input
+                        className="form-input"
+                        value={newItem.ssn}
+                        onChange={(e) => setNewItem({ ...newItem, ssn: e.target.value })}
+                        placeholder="000000-0000000"
+                        type="password"
+                    />
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                        보안을 위해 마스킹 처리됩니다
+                    </p>
                 </div>
                 <div className="form-group">
                     <label className="form-label">부서</label>
@@ -241,14 +310,21 @@ const Employees = () => {
                 <div className="form-group">
                     <label className="form-label">입사일</label>
                     <input type="date" className="form-input" value={newItem.joinDate} onChange={(e) => setNewItem({ ...newItem, joinDate: e.target.value })} />
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                        연차는 입사일 기준으로 자동 계산됩니다 (1년 미만: 월 비례, 1년 이상: 15일 + 매년 1일 추가, 최대 25일)
-                    </p>
+                    {!isEditing && (
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                            연차는 입사일 기준으로 자동 계산됩니다 (1년 미만: 월 비례, 1년 이상: 15일 + 매년 1일 추가, 최대 25일)
+                        </p>
+                    )}
                 </div>
 
                 <div className="modal-actions">
-                    <button className="btn-cancel" onClick={() => setIsModalOpen(false)}>취소</button>
-                    <button className="btn-submit" onClick={handleSave}>등록</button>
+                    <button className="btn-cancel" onClick={() => {
+                        setIsModalOpen(false);
+                        setIsEditing(false);
+                        setEditingId(null);
+                        setNewItem({ name: '', phone: '', ssn: '', department: '생산팀', position: '사원', joinDate: '', totalLeave: 15 });
+                    }}>취소</button>
+                    <button className="btn-submit" onClick={handleSave}>{isEditing ? '수정' : '등록'}</button>
                 </div>
             </Modal>
 

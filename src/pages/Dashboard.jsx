@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 const Dashboard = () => {
-    const { equipments, materials, inspections, products, workOrders } = useData();
+    const { equipments, materials, inspections, products, workOrders, molds, moldMovement } = useData();
 
     // 오늘 날짜
     const today = new Date().toISOString().split('T')[0];
@@ -28,6 +28,9 @@ const Dashboard = () => {
     const defectRate = todayInspections.length > 0
         ? ((todayDefects.length / todayInspections.length) * 100).toFixed(1)
         : 0;
+
+    // 4. 출고 중인 금형
+    const outgoingMolds = moldMovement.filter(m => m.status === '출고중');
 
     return (
         <div className="dashboard-container">
@@ -260,6 +263,68 @@ const Dashboard = () => {
                             <div className="empty-state">
                                 <XCircle size={48} color="#cbd5e1" />
                                 <p>오늘 검사 기록이 없습니다</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* 4. 출고 중인 금형 */}
+                <div className="widget glass-panel outgoing-molds">
+                    <div className="widget-header">
+                        <h3>
+                            <Package size={20} />
+                            출고 중인 금형
+                        </h3>
+                        {outgoingMolds.length > 0 && (
+                            <span className="badge-alert">{outgoingMolds.length}개</span>
+                        )}
+                    </div>
+                    <div className="widget-content">
+                        {outgoingMolds.length > 0 ? (
+                            <div className="outgoing-list">
+                                {outgoingMolds.map(movement => {
+                                    const mold = molds.find(m => m.id === movement.mold_id);
+                                    const daysOut = Math.floor((new Date() - new Date(movement.outgoing_date)) / (1000 * 60 * 60 * 24));
+                                    const expectedReturn = movement.expected_return_date ? new Date(movement.expected_return_date) : null;
+                                    const isOverdue = expectedReturn && new Date() > expectedReturn;
+
+                                    return (
+                                        <div key={movement.id} className={`outgoing-item ${isOverdue ? 'overdue' : ''}`}>
+                                            <div className="outgoing-header">
+                                                <div className="mold-name-section">
+                                                    <span className="mold-name">{mold?.name || '알 수 없는 금형'}</span>
+                                                    <span className="mold-code">{mold?.code}</span>
+                                                </div>
+                                                {isOverdue && (
+                                                    <span className="overdue-badge">⚠️ 지연</span>
+                                                )}
+                                            </div>
+                                            <div className="outgoing-details">
+                                                <div className="detail-row">
+                                                    <span className="detail-label">목적지:</span>
+                                                    <span className="detail-value">{movement.destination || movement.repair_vendor || '-'}</span>
+                                                </div>
+                                                <div className="detail-row">
+                                                    <span className="detail-label">출고일:</span>
+                                                    <span className="detail-value">{movement.outgoing_date} ({daysOut}일 경과)</span>
+                                                </div>
+                                                {movement.expected_return_date && (
+                                                    <div className="detail-row">
+                                                        <span className="detail-label">예상 반입:</span>
+                                                        <span className={`detail-value ${isOverdue ? 'text-danger' : ''}`}>
+                                                            {movement.expected_return_date}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="empty-state success">
+                                <CheckCircle2 size={48} color="#10b981" />
+                                <p>모든 금형이 정상 보관 중입니다</p>
                             </div>
                         )}
                     </div>
@@ -796,6 +861,92 @@ const Dashboard = () => {
 
                 .empty-state.success {
                     color: #16a34a;
+                }
+
+                /* 출고 금형 위젯 */
+                .outgoing-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1rem;
+                }
+
+                .outgoing-item {
+                    background: white;
+                    padding: 1.25rem;
+                    border-radius: 10px;
+                    border: 1px solid #e2e8f0;
+                    transition: all 0.2s;
+                }
+
+                .outgoing-item:hover {
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                    transform: translateX(2px);
+                }
+
+                .outgoing-item.overdue {
+                    border-left: 4px solid #dc2626;
+                    background: #fef2f2;
+                }
+
+                .outgoing-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 0.75rem;
+                }
+
+                .mold-name-section {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.25rem;
+                }
+
+                .mold-name {
+                    font-weight: 700;
+                    font-size: 1.05rem;
+                    color: var(--text-main);
+                }
+
+                .mold-code {
+                    font-size: 0.8rem;
+                    color: var(--text-muted);
+                    font-weight: 600;
+                }
+
+                .overdue-badge {
+                    background: #fee2e2;
+                    color: #991b1b;
+                    padding: 0.25rem 0.75rem;
+                    border-radius: 12px;
+                    font-size: 0.75rem;
+                    font-weight: 700;
+                }
+
+                .outgoing-details {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                }
+
+                .detail-row {
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 0.9rem;
+                }
+
+                .detail-label {
+                    color: var(--text-muted);
+                    font-weight: 500;
+                }
+
+                .detail-value {
+                    color: var(--text-main);
+                    font-weight: 600;
+                }
+
+                .detail-value.text-danger {
+                    color: #dc2626;
+                    font-weight: 700;
                 }
             `}</style>
         </div>

@@ -266,6 +266,74 @@ const DailyProduction = () => {
                     </>
                 )}
             </Modal>
+
+            {/* 생산량 수정 모달 */}
+            <Modal
+                title="생산량 수정"
+                isOpen={isEditModalOpen}
+                onClose={() => setIsEditModalOpen(false)}
+            >
+                {selectedOrder && (
+                    <>
+                        <div className="form-group">
+                            <label className="form-label">설비</label>
+                            <input
+                                className="form-input"
+                                value={getEquipmentName(selectedOrder.equipment_id)}
+                                disabled
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">제품</label>
+                            <input
+                                className="form-input"
+                                value={getProductName(selectedOrder.product_id)}
+                                disabled
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">목표 수량</label>
+                            <input
+                                className="form-input"
+                                value={selectedOrder.target_quantity}
+                                disabled
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">현재 생산량 *</label>
+                            <input
+                                type="number"
+                                className="form-input"
+                                value={editQuantity}
+                                onChange={(e) => setEditQuantity(parseInt(e.target.value) || 0)}
+                                placeholder="정확한 생산량 입력"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">진행률</label>
+                            <input
+                                className="form-input"
+                                value={`${selectedOrder.target_quantity > 0 ? Math.round((editQuantity / selectedOrder.target_quantity) * 100) : 0}%`}
+                                disabled
+                                style={{
+                                    fontWeight: 600,
+                                    color: editQuantity >= selectedOrder.target_quantity
+                                        ? '#10b981'
+                                        : '#4f46e5'
+                                }}
+                            />
+                        </div>
+
+                        <div className="modal-actions">
+                            <button className="btn-cancel" onClick={() => setIsEditModalOpen(false)}>취소</button>
+                            <button className="btn-submit" onClick={handleSaveEdit}>
+                                저장
+                            </button>
+                        </div>
+                    </>
+                )}
+            </Modal>
         </div>
     );
 };

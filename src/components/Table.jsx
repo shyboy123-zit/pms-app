@@ -7,7 +7,7 @@ const Table = ({ columns, data, actions }) => {
                 <thead>
                     <tr>
                         {columns.map((col, idx) => (
-                            <th key={idx} style={{ width: col.width }} className={idx < 3 ? 'sticky-col' : ''} data-col-index={idx}>
+                            <th key={idx} style={{ width: col.width }} className={idx < 1 ? 'sticky-col' : ''} data-col-index={idx}>
                                 {col.header}
                             </th>
                         ))}
@@ -19,7 +19,7 @@ const Table = ({ columns, data, actions }) => {
                         data.map((row, rowIdx) => (
                             <tr key={row.id || rowIdx}>
                                 {columns.map((col, colIdx) => (
-                                    <td key={colIdx} className={colIdx < 3 ? 'sticky-col' : ''} data-col-index={colIdx}>
+                                    <td key={colIdx} className={colIdx < 1 ? 'sticky-col' : ''} data-col-index={colIdx}>
                                         {col.render ? col.render(row) : row[col.accessor]}
                                     </td>
                                 ))}
@@ -94,7 +94,7 @@ const Table = ({ columns, data, actions }) => {
         .status-warning { background: #fef3c7; color: #92400e; }
         .status-danger { background: #fee2e2; color: #991b1b; }
 
-        /* 모바일: 1~3열 고정 */
+        /* 모바일: 1열만 고정 */
         @media (max-width: 768px) {
             .table-container {
                 max-width: 100vw;
@@ -111,16 +111,6 @@ const Table = ({ columns, data, actions }) => {
             .custom-table th.sticky-col[data-col-index="0"],
             .custom-table td.sticky-col[data-col-index="0"] {
                 left: 0;
-            }
-
-            .custom-table th.sticky-col[data-col-index="1"],
-            .custom-table td.sticky-col[data-col-index="1"] {
-                left: 100px;
-            }
-
-            .custom-table th.sticky-col[data-col-index="2"],
-            .custom-table td.sticky-col[data-col-index="2"] {
-                left: 200px;
             }
 
             .custom-table th,

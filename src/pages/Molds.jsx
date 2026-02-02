@@ -59,15 +59,23 @@ const Molds = () => {
     };
 
     const handleSave = () => {
+        // 관리분류코드 자동 생성 (미입력 시)
+        let moldCode = newItem.code.trim();
+        if (!moldCode) {
+            const nextNumber = molds.length + 1;
+            moldCode = `MOLD-${String(nextNumber).padStart(3, '0')}`;
+        }
+
         const itemToAdd = {
             name: newItem.name,
-            code: newItem.code,
+            code: moldCode,
             cycle_count: newItem.cycle,
             status: newItem.status,
             last_check: new Date().toISOString().split('T')[0]
         };
         addMold(itemToAdd);
         setIsModalOpen(false);
+        setNewItem({ name: '', code: '', cycle: 0, status: '사용가능' });
     };
 
     const handleRepairSave = () => {
@@ -199,8 +207,16 @@ const Molds = () => {
                     <input className="form-input" value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} placeholder="금형 이름" />
                 </div>
                 <div className="form-group">
-                    <label className="form-label">관리코드</label>
-                    <input className="form-input" value={newItem.code} onChange={(e) => setNewItem({ ...newItem, code: e.target.value })} placeholder="예: MD-2023-001" />
+                    <label className="form-label">관리코드 (선택사항)</label>
+                    <input
+                        className="form-input"
+                        value={newItem.code}
+                        onChange={(e) => setNewItem({ ...newItem, code: e.target.value })}
+                        placeholder="비워두면 자동 생성 (MOLD-001, MOLD-002...)"
+                    />
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                        💡 미입력 시 자동으로 생성됩니다
+                    </div>
                 </div>
                 <div className="form-group">
                     <label className="form-label">현재 타수</label>

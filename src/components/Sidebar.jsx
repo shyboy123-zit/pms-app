@@ -9,7 +9,9 @@ import {
   DollarSign,
   LogOut,
   Users,
-  Settings as EquipmentsIcon
+  Settings as EquipmentsIcon,
+  Package,
+  ClipboardList
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -25,6 +27,8 @@ const Sidebar = () => {
     { icon: ClipboardCheck, label: '품질관리', path: '/quality', key: 'quality' },
     { icon: DollarSign, label: '매입매출', path: '/sales', key: 'sales' },
     { icon: EquipmentsIcon, label: '설비관리', path: '/equipments', key: 'equipments' },
+    { icon: Package, label: '제품관리', path: '/products', key: 'products' },
+    { icon: ClipboardList, label: '작업지시', path: '/work-orders', key: 'work_orders' },
     { icon: Users, label: '직원관리', path: '/employees', key: 'employees' },
   ];
 

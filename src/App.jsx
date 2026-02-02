@@ -15,6 +15,8 @@ import Quality from './pages/Quality';
 import Sales from './pages/Sales';
 import Employees from './pages/Employees';
 import Equipments from './pages/Equipments';
+import Products from './pages/Products';
+import WorkOrders from './pages/WorkOrders';
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();
@@ -45,6 +47,8 @@ function App() {
                 <Route path="sales" element={<Sales />} />
                 <Route path="employees" element={<Employees />} />
                 <Route path="equipments" element={<Equipments />} />
+                <Route path="products" element={<Products />} />
+                <Route path="work-orders" element={<WorkOrders />} />
               </Route>
             </Route>
 

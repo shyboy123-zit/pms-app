@@ -5,7 +5,7 @@ import { Plus, Settings, Activity, Power, History, Wrench, Image as ImageIcon } 
 import { useData } from '../context/DataContext';
 
 const Equipments = () => {
-    const { equipments, eqHistory, addEquipment, updateEquipment, addEqHistory, uploadImage } = useData();
+    const { equipments, eqHistory, workOrders, products, addEquipment, updateEquipment, addEqHistory, uploadImage } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -34,6 +34,28 @@ const Equipments = () => {
         },
         { header: '설비명', accessor: 'name' },
         { header: '모델명', accessor: 'model' },
+        {
+            header: '현재 작업',
+            render: (row) => {
+                if (!row.current_work_order_id) return '-';
+                const workOrder = workOrders.find(wo => wo.id === row.current_work_order_id);
+                if (!workOrder) return '-';
+                const product = products.find(p => p.id === workOrder.product_id);
+                const progress = workOrder.target_quantity > 0
+                    ? Math.round((workOrder.produced_quantity / workOrder.target_quantity) * 100)
+                    : 0;
+                return (
+                    <div style={{ fontSize: '0.9rem' }}>
+                        <div style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
+                            {product?.name || '?'}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {workOrder.produced_quantity}/{workOrder.target_quantity} ({progress}%)
+                        </div>
+                    </div>
+                );
+            }
+        },
         {
             header: '상태', accessor: 'status', render: (row) => (
                 <span className={`status-badge ${row.status === '가동중' ? 'status-active' :

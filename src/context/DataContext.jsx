@@ -16,6 +16,8 @@ export const DataProvider = ({ children }) => {
     const [materialUsage, setMaterialUsage] = useState([]);
     const [inventoryTransactions, setInventoryTransactions] = useState([]);
     const [moldMovement, setMoldMovement] = useState([]);
+    const [products, setProducts] = useState([]);
+    const [workOrders, setWorkOrders] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -62,6 +64,20 @@ export const DataProvider = ({ children }) => {
                 if (movements) setMoldMovement(movements);
             } catch (e) {
                 console.warn('mold_movement table not available:', e.message);
+            }
+
+            try {
+                const { data: prods } = await supabase.from('products').select('*').order('created_at', { ascending: true });
+                if (prods) setProducts(prods);
+            } catch (e) {
+                console.warn('products table not available:', e.message);
+            }
+
+            try {
+                const { data: orders } = await supabase.from('work_orders').select('*').order('created_at', { ascending: false });
+                if (orders) setWorkOrders(orders);
+            } catch (e) {
+                console.warn('work_orders table not available:', e.message);
             }
 
         } catch (error) {
@@ -364,6 +380,120 @@ export const DataProvider = ({ children }) => {
         return moldMovement.filter(m => m.status === '출고중');
     };
 
+    // --- Products Management ---
+    const addProduct = async (item) => {
+        const count = products.length + 1;
+        const productCode = `PRD-${String(count).padStart(4, '0')}`;
+
+        const { data, error } = await supabase.from('products').insert([{
+            product_code: productCode,
+            name: item.name,
+            model: item.model || '',
+            unit: item.unit || 'EA',
+            standard_cycle_time: item.standard_cycle_time || 30,
+            status: item.status || '생산중'
+        }]).select();
+
+        if (error) {
+            console.error('Error adding product:', error);
+            alert('제품 등록에 실패했습니다.');
+            return;
+        }
+        if (data) setProducts([...products, ...data]);
+    };
+
+    const updateProduct = async (id, updates) => {
+        const { data, error } = await supabase.from('products').update(updates).eq('id', id).select();
+        if (error) console.error('Error updating product:', error);
+        if (data) setProducts(products.map(p => p.id === id ? data[0] : p));
+    };
+
+    const deleteProduct = async (id) => {
+        const { error } = await supabase.from('products').delete().eq('id', id);
+        if (error) {
+            console.error('Error deleting product:', error);
+            alert('제품 삭제에 실패했습니다.');
+            return;
+        }
+        setProducts(products.filter(p => p.id !== id));
+    };
+
+    // --- Work Orders Management ---
+    const addWorkOrder = async (order) => {
+        const count = workOrders.length + 1;
+        const orderCode = `WO-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${String(count).padStart(3, '0')}`;
+
+        const { data, error } = await supabase.from('work_orders').insert([{
+            order_code: orderCode,
+            product_id: order.product_id,
+            equipment_id: order.equipment_id,
+            target_quantity: order.target_quantity,
+            produced_quantity: 0,
+            order_date: order.order_date || new Date().toISOString().split('T')[0],
+            status: '대기',
+            notes: order.notes || ''
+        }]).select();
+
+        if (error) {
+            console.error('Error adding work order:', error);
+            alert('작업지시 등록에 실패했습니다.');
+            return;
+        }
+        if (data) setWorkOrders([...workOrders, ...data]);
+    };
+
+    const updateWorkOrder = async (id, updates) => {
+        const { data, error } = await supabase.from('work_orders').update(updates).eq('id', id).select();
+        if (error) console.error('Error updating work order:', error);
+        if (data) setWorkOrders(workOrders.map(wo => wo.id === id ? data[0] : wo));
+    };
+
+    const startWork = async (orderId) => {
+        const order = workOrders.find(o => o.id === orderId);
+        if (!order) return;
+
+        // Update work order status and start time
+        await updateWorkOrder(orderId, {
+            status: '진행중',
+            start_time: new Date().toISOString()
+        });
+
+        // Update equipment status and link to work order
+        if (order.equipment_id) {
+            await updateEquipment(order.equipment_id, {
+                status: '가동중',
+                current_work_order_id: orderId,
+                temperature: 220,
+                cycle_time: 38
+            });
+        }
+    };
+
+    const completeWork = async (orderId) => {
+        const order = workOrders.find(o => o.id === orderId);
+        if (!order) return;
+
+        // Update work order status and end time
+        await updateWorkOrder(orderId, {
+            status: '완료',
+            end_time: new Date().toISOString()
+        });
+
+        // Update equipment status
+        if (order.equipment_id) {
+            await updateEquipment(order.equipment_id, {
+                status: '대기',
+                current_work_order_id: null,
+                temperature: 0,
+                cycle_time: 0
+            });
+        }
+    };
+
+    const getActiveWorkOrders = () => {
+        return workOrders.filter(wo => wo.status === '진행중' || wo.status === '대기');
+    };
+
     // --- Image Upload ---
     const uploadImage = async (file) => {
         if (!file) return null;
@@ -404,6 +534,8 @@ export const DataProvider = ({ children }) => {
             deleteInventoryTransaction, getTransactionsByDateRange,
             getInventorySnapshot, getMaterialStockAtDate,
             moldMovement, addMoldOutgoing, processMoldIncoming, getMoldMovements, getOutgoingMolds,
+            products, addProduct, updateProduct, deleteProduct,
+            workOrders, addWorkOrder, updateWorkOrder, startWork, completeWork, getActiveWorkOrders,
             uploadImage
         }}>
             {children}

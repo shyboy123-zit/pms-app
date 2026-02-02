@@ -7,7 +7,9 @@ const Table = ({ columns, data, actions }) => {
                 <thead>
                     <tr>
                         {columns.map((col, idx) => (
-                            <th key={idx} style={{ width: col.width }}>{col.header}</th>
+                            <th key={idx} style={{ width: col.width }} className={idx < 3 ? 'sticky-col' : ''} data-col-index={idx}>
+                                {col.header}
+                            </th>
                         ))}
                         {actions && <th style={{ width: '100px' }}>관리</th>}
                     </tr>
@@ -17,7 +19,7 @@ const Table = ({ columns, data, actions }) => {
                         data.map((row, rowIdx) => (
                             <tr key={row.id || rowIdx}>
                                 {columns.map((col, colIdx) => (
-                                    <td key={colIdx}>
+                                    <td key={colIdx} className={colIdx < 3 ? 'sticky-col' : ''} data-col-index={colIdx}>
                                         {col.render ? col.render(row) : row[col.accessor]}
                                     </td>
                                 ))}
@@ -42,6 +44,7 @@ const Table = ({ columns, data, actions }) => {
         .table-container {
             overflow-x: auto;
             padding: 1rem;
+            position: relative;
         }
         
         .custom-table {
@@ -56,15 +59,17 @@ const Table = ({ columns, data, actions }) => {
             border-bottom: 2px solid var(--border);
             color: var(--text-muted);
             font-weight: 600;
+            background: rgba(255, 255, 255, 0.9);
         }
 
         .custom-table td {
             padding: 1rem;
             border-bottom: 1px solid var(--border);
             color: var(--text-main);
+            background: white;
         }
 
-        .custom-table tr:hover {
+        .custom-table tr:hover td {
             background: rgba(255,255,255,0.5);
         }
 
@@ -88,6 +93,42 @@ const Table = ({ columns, data, actions }) => {
         .status-active { background: #d1fae5; color: #065f46; }
         .status-warning { background: #fef3c7; color: #92400e; }
         .status-danger { background: #fee2e2; color: #991b1b; }
+
+        /* 모바일: 1~3열 고정 */
+        @media (max-width: 768px) {
+            .table-container {
+                max-width: 100vw;
+            }
+
+            .custom-table th.sticky-col,
+            .custom-table td.sticky-col {
+                position: sticky;
+                background: rgba(255, 255, 255, 0.98);
+                z-index: 10;
+                box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+            }
+
+            .custom-table th.sticky-col[data-col-index="0"],
+            .custom-table td.sticky-col[data-col-index="0"] {
+                left: 0;
+            }
+
+            .custom-table th.sticky-col[data-col-index="1"],
+            .custom-table td.sticky-col[data-col-index="1"] {
+                left: 100px;
+            }
+
+            .custom-table th.sticky-col[data-col-index="2"],
+            .custom-table td.sticky-col[data-col-index="2"] {
+                left: 200px;
+            }
+
+            .custom-table th,
+            .custom-table td {
+                min-width: 100px;
+                white-space: nowrap;
+            }
+        }
       `}</style>
         </div>
     );

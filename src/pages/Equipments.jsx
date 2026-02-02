@@ -8,12 +8,15 @@ const Equipments = () => {
     const { equipments, eqHistory, addEquipment, updateEquipment, addEqHistory, uploadImage } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [isRepairOpen, setIsRepairOpen] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
 
     // New Equipment State
     const [newItem, setNewItem] = useState({ name: '', model: '', status: '대기', operator: '', file: null });
+    // Edit Equipment State
+    const [editItem, setEditItem] = useState({ id: null, name: '', model: '', operator: '' });
     // Selected Equipment
     const [selectedEq, setSelectedEq] = useState(null);
     // New Repair History State
@@ -34,7 +37,7 @@ const Equipments = () => {
         {
             header: '상태', accessor: 'status', render: (row) => (
                 <span className={`status-badge ${row.status === '가동중' ? 'status-active' :
-                        row.status === '대기' ? 'status-warning' : 'status-danger'
+                    row.status === '대기' ? 'status-warning' : 'status-danger'
                     }`}>
                     {row.status === '가동중' && <Activity size={12} style={{ marginRight: 4 }} className="spin-slow" />}
                     {row.status}
@@ -72,6 +75,29 @@ const Equipments = () => {
         setIsUploading(false);
         setIsModalOpen(false);
         setNewItem({ name: '', model: '', status: '대기', operator: '', file: null });
+    };
+
+    const openEditModal = (row) => {
+        setEditItem({
+            id: row.id,
+            name: row.name,
+            model: row.model,
+            operator: row.operator
+        });
+        setIsEditModalOpen(true);
+    };
+
+    const handleEditSave = () => {
+        if (!editItem.name) return alert('설비명을 입력해주세요.');
+
+        updateEquipment(editItem.id, {
+            name: editItem.name,
+            model: editItem.model,
+            operator: editItem.operator
+        });
+
+        setIsEditModalOpen(false);
+        setEditItem({ id: null, name: '', model: '', operator: '' });
     };
 
     const toggleStatus = (row) => {
@@ -154,6 +180,9 @@ const Equipments = () => {
                 data={equipments || []}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="icon-btn" onClick={() => openEditModal(row)} title="설비 정보 수정">
+                            <Settings size={16} />
+                        </button>
                         <button className="icon-btn" onClick={() => openHistory(row)} title="수리/보수 이력">
                             <History size={16} />
                         </button>
@@ -202,6 +231,27 @@ const Equipments = () => {
                     <button className="btn-submit" onClick={handleSave} disabled={isUploading}>
                         {isUploading ? '업로드 중...' : '등록'}
                     </button>
+                </div>
+            </Modal>
+
+            {/* Edit Equipment Modal */}
+            <Modal title="설비 정보 수정" isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)}>
+                <div className="form-group">
+                    <label className="form-label">설비명</label>
+                    <input className="form-input" value={editItem.name} onChange={(e) => setEditItem({ ...editItem, name: e.target.value })} placeholder="예: 사출성형기 #16" />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">모델명</label>
+                    <input className="form-input" value={editItem.model} onChange={(e) => setEditItem({ ...editItem, model: e.target.value })} placeholder="예: MODEL-250T" />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">담당자</label>
+                    <input className="form-input" value={editItem.operator} onChange={(e) => setEditItem({ ...editItem, operator: e.target.value })} placeholder="담당 작업자" />
+                </div>
+
+                <div className="modal-actions">
+                    <button className="btn-cancel" onClick={() => setIsEditModalOpen(false)}>취소</button>
+                    <button className="btn-submit" onClick={handleEditSave}>저장</button>
                 </div>
             </Modal>
 

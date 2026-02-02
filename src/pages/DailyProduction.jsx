@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, Calendar, TrendingUp } from 'lucide-react';
+import { Plus, Calendar, TrendingUp, Edit } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const DailyProduction = () => {
     const { workOrders, equipments, products, updateWorkOrder } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [dailyQuantity, setDailyQuantity] = useState(0);
+    const [editQuantity, setEditQuantity] = useState(0);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
     // 진행중인 작업지시만 필터
@@ -89,6 +91,31 @@ const DailyProduction = () => {
         setDailyQuantity(0);
     };
 
+    const handleOpenEditModal = (order) => {
+        setSelectedOrder(order);
+        setEditQuantity(order.produced_quantity);
+        setIsEditModalOpen(true);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!selectedOrder || editQuantity < 0) {
+            return alert('올바른 수량을 입력해주세요.');
+        }
+
+        await updateWorkOrder(selectedOrder.id, {
+            produced_quantity: editQuantity
+        });
+
+        // 100% 도달 시 자동 완료 알림
+        if (editQuantity >= selectedOrder.target_quantity) {
+            alert(`🎉 작업지시가 완료되었습니다!\n설비: ${getEquipmentName(selectedOrder.equipment_id)}\n제품: ${getProductName(selectedOrder.product_id)}`);
+        }
+
+        setIsEditModalOpen(false);
+        setSelectedOrder(null);
+        setEditQuantity(0);
+    };
+
     const getEquipmentName = (equipmentId) => {
         const equipment = equipments.find(eq => eq.id === equipmentId);
         return equipment?.name || '-';
@@ -143,14 +170,23 @@ const DailyProduction = () => {
                 columns={columns}
                 data={tableData}
                 actions={(row) => (
-                    <button
-                        className="btn-action"
-                        onClick={() => handleOpenModal(row)}
-                        title="수량 추가"
-                    >
-                        <Plus size={16} />
-                        수량 기록
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                            className="icon-btn"
+                            onClick={() => handleOpenEditModal(row)}
+                            title="생산량 수정"
+                        >
+                            <Edit size={16} />
+                        </button>
+                        <button
+                            className="btn-action"
+                            onClick={() => handleOpenModal(row)}
+                            title="수량 추가"
+                        >
+                            <Plus size={16} />
+                            수량 기록
+                        </button>
+                    </div>
                 )}
             />
 

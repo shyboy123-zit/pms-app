@@ -17,6 +17,7 @@ const Products = () => {
         standard_cycle_time: 30,
         product_weight: 0,
         runner_weight: 0,
+        cavity_count: 1,
         status: '생산중'
     });
 
@@ -25,10 +26,12 @@ const Products = () => {
         { header: '제품명', accessor: 'name' },
         { header: '모델/규격', accessor: 'model' },
         { header: '단위', accessor: 'unit' },
+        { header: 'C/V수', accessor: 'cavity_count', render: (row) => `${row.cavity_count || 1}-C/V` },
         {
             header: '1 Shot 중량(g)',
             render: (row) => {
-                const shotWeight = (row.product_weight || 0) + (row.runner_weight || 0);
+                const cavityCount = row.cavity_count || 1;
+                const shotWeight = ((row.product_weight || 0) * cavityCount) + (row.runner_weight || 0);
                 return shotWeight > 0 ? `${shotWeight.toFixed(1)}g` : '-';
             }
         },
@@ -63,6 +66,7 @@ const Products = () => {
             standard_cycle_time: product.standard_cycle_time,
             product_weight: product.product_weight || 0,
             runner_weight: product.runner_weight || 0,
+            cavity_count: product.cavity_count || 1,
             status: product.status
         });
         setIsEditMode(true);
@@ -82,6 +86,7 @@ const Products = () => {
             standard_cycle_time: 30,
             product_weight: 0,
             runner_weight: 0,
+            cavity_count: 1,
             status: '생산중'
         });
         setCurrentProduct(null);
@@ -202,12 +207,28 @@ const Products = () => {
                         placeholder="예: 10"
                     />
                 </div>
-                {(formData.product_weight > 0 || formData.runner_weight > 0) && (
+                <div className="form-group">
+                    <label className="form-label">Cavity 수</label>
+                    <input
+                        type="number"
+                        className="form-input"
+                        value={formData.cavity_count}
+                        onChange={(e) => setFormData({ ...formData, cavity_count: parseInt(e.target.value) || 1 })}
+                        min="1"
+                        placeholder="예: 2"
+                    />
+                </div>
+                {(formData.product_weight > 0 || formData.runner_weight > 0 || formData.cavity_count > 1) && (
                     <div style={{ padding: '0.75rem', background: '#eff6ff', borderRadius: '6px', marginBottom: '1rem' }}>
                         <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>1 Shot 중량</div>
                         <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--primary)' }}>
-                            {(formData.product_weight + formData.runner_weight).toFixed(1)}g
+                            {((formData.product_weight * formData.cavity_count) + formData.runner_weight).toFixed(1)}g
                         </div>
+                        {formData.cavity_count > 1 && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                ({formData.product_weight}g × {formData.cavity_count} + {formData.runner_weight}g)
+                            </div>
+                        )}
                     </div>
                 )}
                 <div className="form-group">

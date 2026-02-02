@@ -15,6 +15,8 @@ const Products = () => {
         model: '',
         unit: 'EA',
         standard_cycle_time: 30,
+        product_weight: 0,
+        runner_weight: 0,
         status: '생산중'
     });
 
@@ -23,6 +25,13 @@ const Products = () => {
         { header: '제품명', accessor: 'name' },
         { header: '모델/규격', accessor: 'model' },
         { header: '단위', accessor: 'unit' },
+        {
+            header: '1 Shot 중량(g)',
+            render: (row) => {
+                const shotWeight = (row.product_weight || 0) + (row.runner_weight || 0);
+                return shotWeight > 0 ? `${shotWeight.toFixed(1)}g` : '-';
+            }
+        },
         { header: '표준 사이클(초)', accessor: 'standard_cycle_time' },
         {
             header: '상태', accessor: 'status', render: (row) => (
@@ -52,6 +61,8 @@ const Products = () => {
             model: product.model,
             unit: product.unit,
             standard_cycle_time: product.standard_cycle_time,
+            product_weight: product.product_weight || 0,
+            runner_weight: product.runner_weight || 0,
             status: product.status
         });
         setIsEditMode(true);
@@ -69,6 +80,8 @@ const Products = () => {
             model: '',
             unit: 'EA',
             standard_cycle_time: 30,
+            product_weight: 0,
+            runner_weight: 0,
             status: '생산중'
         });
         setCurrentProduct(null);
@@ -165,6 +178,38 @@ const Products = () => {
                         min="1"
                     />
                 </div>
+                <div className="form-group">
+                    <label className="form-label">제품 중량 (g)</label>
+                    <input
+                        type="number"
+                        step="0.1"
+                        className="form-input"
+                        value={formData.product_weight}
+                        onChange={(e) => setFormData({ ...formData, product_weight: parseFloat(e.target.value) || 0 })}
+                        min="0"
+                        placeholder="예: 50"
+                    />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">런너 중량 (g)</label>
+                    <input
+                        type="number"
+                        step="0.1"
+                        className="form-input"
+                        value={formData.runner_weight}
+                        onChange={(e) => setFormData({ ...formData, runner_weight: parseFloat(e.target.value) || 0 })}
+                        min="0"
+                        placeholder="예: 10"
+                    />
+                </div>
+                {(formData.product_weight > 0 || formData.runner_weight > 0) && (
+                    <div style={{ padding: '0.75rem', background: '#eff6ff', borderRadius: '6px', marginBottom: '1rem' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>1 Shot 중량</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                            {(formData.product_weight + formData.runner_weight).toFixed(1)}g
+                        </div>
+                    </div>
+                )}
                 <div className="form-group">
                     <label className="form-label">상태</label>
                     <select

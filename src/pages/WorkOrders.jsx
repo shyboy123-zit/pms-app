@@ -67,8 +67,8 @@ const WorkOrders = () => {
             accessor: 'status',
             render: (row) => (
                 <span className={`status-badge ${row.status === '진행중' ? 'status-active' :
-                        row.status === '완료' ? 'status-success' :
-                            row.status === '취소' ? 'status-danger' : 'status-warning'
+                    row.status === '완료' ? 'status-success' :
+                        row.status === '취소' ? 'status-danger' : 'status-warning'
                     }`}>
                     {row.status}
                 </span>
@@ -257,6 +257,31 @@ const WorkOrders = () => {
                         onChange={(e) => setFormData({ ...formData, order_date: e.target.value })}
                     />
                 </div>
+                {formData.product_id && formData.target_quantity > 0 && (() => {
+                    const product = products.find(p => p.id === formData.product_id);
+                    if (!product || (!product.product_weight && !product.runner_weight)) return null;
+
+                    const shotWeight = (product.product_weight || 0) + (product.runner_weight || 0);
+                    const totalMaterial = (shotWeight * formData.target_quantity) / 1000; // g to kg
+
+                    return (
+                        <div style={{ padding: '1rem', background: '#f0fdf4', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #86efac' }}>
+                            <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                                필요 원재료
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.85rem' }}>
+                                <div>
+                                    <span style={{ color: 'var(--text-muted)' }}>1 Shot:</span>{' '}
+                                    <strong>{shotWeight.toFixed(1)}g</strong>
+                                </div>
+                                <div>
+                                    <span style={{ color: 'var(--text-muted)' }}>총 소요:</span>{' '}
+                                    <strong style={{ color: '#16a34a', fontSize: '1rem' }}>{totalMaterial.toFixed(2)}kg</strong>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
                 <div className="form-group">
                     <label className="form-label">비고</label>
                     <textarea

@@ -161,8 +161,10 @@ const Employees = () => {
         delivery: '입출고관리',
         quality: '품질관리',
         sales: '매입매출',
-        employees: '직원관리',
-        equipments: '설비관리'
+        equipments: '설비관리',
+        products: '제품관리',
+        work_orders: '작업지시',
+        employees: '직원관리'
     };
 
     return (

@@ -18,6 +18,7 @@ export const DataProvider = ({ children }) => {
     const [moldMovement, setMoldMovement] = useState([]);
     const [products, setProducts] = useState([]);
     const [workOrders, setWorkOrders] = useState([]);
+    const [salesRecords, setSalesRecords] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -78,6 +79,13 @@ export const DataProvider = ({ children }) => {
                 if (orders) setWorkOrders(orders);
             } catch (e) {
                 console.warn('work_orders table not available:', e.message);
+            }
+
+            try {
+                const { data: sales } = await supabase.from('sales_records').select('*').order('date', { ascending: false });
+                if (sales) setSalesRecords(sales);
+            } catch (e) {
+                console.warn('sales_records table not available:', e.message);
             }
 
         } catch (error) {
@@ -494,6 +502,18 @@ export const DataProvider = ({ children }) => {
         return workOrders.filter(wo => wo.status === '진행중' || wo.status === '대기');
     };
 
+    // --- Sales Records ---
+    const addSalesRecord = async (record) => {
+        try {
+            const { data, error } = await supabase.from('sales_records').insert([record]).select();
+            if (error) throw error;
+            if (data) setSalesRecords([...salesRecords, ...data]);
+        } catch (e) {
+            console.error('Error adding sales record:', e);
+            // Silently fail if table doesn't exist yet
+        }
+    };
+
     // --- Image Upload ---
     const uploadImage = async (file) => {
         if (!file) return null;
@@ -536,6 +556,7 @@ export const DataProvider = ({ children }) => {
             moldMovement, addMoldOutgoing, processMoldIncoming, getMoldMovements, getOutgoingMolds,
             products, addProduct, updateProduct, deleteProduct,
             workOrders, addWorkOrder, updateWorkOrder, startWork, completeWork, getActiveWorkOrders,
+            salesRecords, addSalesRecord,
             uploadImage
         }}>
             {children}

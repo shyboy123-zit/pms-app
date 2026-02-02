@@ -156,6 +156,41 @@ const Header = () => {
                     font-size: 0.75rem;
                     color: var(--text-muted);
                 }
+
+                /* 모바일 반응형 */
+                @media (max-width: 768px) {
+                    .header {
+                        height: 60px;
+                        margin: 0;
+                        padding: 0 1rem 0 4rem; /* 햄버거 버튼 공간 확보 */
+                    }
+
+                    .page-title {
+                        font-size: 1.1rem;
+                    }
+
+                    .search-bar {
+                        display: none; /* 모바일에서 검색창 숨김 */
+                    }
+
+                    .action-btn {
+                        width: 34px;
+                        height: 34px;
+                    }
+
+                    .header-actions {
+                        gap: 0.75rem;
+                    }
+
+                    .user-info {
+                        display: none; /* 모바일에서 사용자 정보 텍스트 숨김 */
+                    }
+
+                    .avatar {
+                        width: 34px;
+                        height: 34px;
+                    }
+                }
             `}</style>
         </header>
     );

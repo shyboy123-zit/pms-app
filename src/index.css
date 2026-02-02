@@ -122,6 +122,33 @@ button {
   h6 {
     word-break: keep-all;
   }
+
+  /* 테이블 모바일 최적화 */
+  table {
+    font-size: 0.75rem !important;
+  }
+
+  table th {
+    padding: 0.5rem 0.4rem !important;
+    font-size: 0.7rem !important;
+  }
+
+  table td {
+    padding: 0.6rem 0.4rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* 버튼 크기 축소 */
+  .icon-btn,
+  .icon-btn-small {
+    padding: 0.3rem !important;
+  }
+
+  /* 모달 및 폼 최적화 */
+  .form-input,
+  .form-label {
+    font-size: 0.85rem !important;
+  }
 }
 
 /* Auth Page Styles */

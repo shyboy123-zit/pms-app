@@ -67,7 +67,6 @@ const Equipments = () => {
             )
         },
         { header: '담당자', accessor: 'operator' },
-        { header: '온도(℃)', accessor: 'temperature', render: (row) => row.status === '가동중' ? `${row.temperature}℃` : '-' },
     ];
 
     const handleSave = async () => {

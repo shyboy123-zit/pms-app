@@ -112,7 +112,7 @@ const Dashboard = () => {
                                                     <div className="status-dot active"></div>
                                                     <div>
                                                         <span className="eq-name">{eq.name}</span>
-                                                        <span className="eq-temp">{eq.temperature}℃ · {eq.cycle_time}초/사이클</span>
+                                                        <span className="eq-temp">{product?.cycle_time || '-'}초/사이클</span>
                                                     </div>
                                                 </div>
                                             </div>

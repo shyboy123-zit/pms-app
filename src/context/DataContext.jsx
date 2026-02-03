@@ -20,6 +20,7 @@ export const DataProvider = ({ children }) => {
     const [workOrders, setWorkOrders] = useState([]);
     const [salesRecords, setSalesRecords] = useState([]);
     const [notifications, setNotifications] = useState([]);
+    const [injectionConditions, setInjectionConditions] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -94,6 +95,13 @@ export const DataProvider = ({ children }) => {
                 if (notifs) setNotifications(notifs);
             } catch (e) {
                 console.warn('notifications table not available:', e.message);
+            }
+
+            try {
+                const { data: conditions } = await supabase.from('injection_conditions').select('*').order('created_at', { ascending: false });
+                if (conditions) setInjectionConditions(conditions);
+            } catch (e) {
+                console.warn('injection_conditions table not available:', e.message);
             }
 
         } catch (error) {
@@ -609,6 +617,59 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    // --- Injection Conditions Functions ---
+    const addInjectionCondition = async (conditionData) => {
+        try {
+            const { data, error } = await supabase
+                .from('injection_conditions')
+                .insert([conditionData])
+                .select();
+
+            if (error) throw error;
+            if (data) setInjectionConditions(prev => [data[0], ...prev]);
+            return data?.[0];
+        } catch (error) {
+            console.error('Error adding injection condition:', error);
+            alert('사출조건 등록에 실패했습니다.');
+            return null;
+        }
+    };
+
+    const updateInjectionCondition = async (id, updates) => {
+        try {
+            const { error } = await supabase
+                .from('injection_conditions')
+                .update({ ...updates, updated_at: new Date().toISOString() })
+                .eq('id', id);
+
+            if (error) throw error;
+            setInjectionConditions(prev => prev.map(c =>
+                c.id === id ? { ...c, ...updates, updated_at: new Date().toISOString() } : c
+            ));
+        } catch (error) {
+            console.error('Error updating injection condition:', error);
+            alert('사출조건 수정에 실패했습니다.');
+        }
+    };
+
+    const deleteInjectionCondition = async (id) => {
+        try {
+            const { error } = await supabase
+                .from('injection_conditions')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+            setInjectionConditions(prev => prev.filter(c => c.id !== id));
+        } catch (error) {
+            console.error('Error deleting injection condition:', error);
+            alert('사출조건 삭제에 실패했습니다.');
+        }
+    };
+
+    const getConditionByProduct = (productId) => {
+        return injectionConditions.find(c => c.product_id === productId);
+    };
 
     return (
         <DataContext.Provider value={{
@@ -630,7 +691,8 @@ export const DataProvider = ({ children }) => {
             workOrders, addWorkOrder, updateWorkOrder, startWork, completeWork, getActiveWorkOrders,
             salesRecords, addSalesRecord,
             uploadImage,
-            notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification
+            notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification,
+            injectionConditions, addInjectionCondition, updateInjectionCondition, deleteInjectionCondition, getConditionByProduct
         }}>
             {children}
         </DataContext.Provider>

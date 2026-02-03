@@ -35,6 +35,7 @@ const Header = ({ onToggleSidebar }) => {
             case '/work-orders': return '작업지시';
             case '/daily-production': return '일일작업현황';
             case '/work-history': return '작업이력';
+            case '/injection-conditions': return '사출조건표';
             default: return 'PMS App';
         }
     };

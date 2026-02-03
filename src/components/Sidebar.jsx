@@ -50,6 +50,7 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
         { icon: ClipboardList, label: '작업지시', path: '/work-orders', key: 'work_orders' },
         { icon: Calendar, label: '일일작업현황', path: '/daily-production', key: 'daily_production' },
         { icon: Calendar, label: '작업이력', path: '/work-history', key: 'work_history' },
+        { icon: Settings, label: '사출조건표', path: '/injection-conditions', key: 'injection_conditions' },
         { icon: Package, label: '제품관리', path: '/products', key: 'products' }
       ]
     },

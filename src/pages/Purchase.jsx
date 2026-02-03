@@ -3,6 +3,7 @@ import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { Plus, Check, X, Clock, ShoppingBag, Truck, AlertTriangle } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 
 const Purchase = () => {
     const { purchaseRequests, addPurchaseRequest, updatePurchaseRequest, deletePurchaseRequest, suppliers } = useData();
@@ -56,18 +57,28 @@ const Purchase = () => {
         { header: '납기요청일', accessor: 'required_date' },
     ];
 
+    const { logout, user } = useAuth(); // Get current user for requester_id
+
     const handleSubmit = async () => {
         if (!newItem.item_name || newItem.quantity <= 0) return alert('품목명과 수량을 정확히 입력해주세요.');
 
         const requestData = {
             ...newItem,
+            requester_id: user?.id || null,
+            supplier_id: newItem.supplier_id || null, // Convert "" to null for UUID field
             status: '대기',
             created_at: new Date().toISOString()
         };
 
-        await addPurchaseRequest(requestData);
-        alert('구매 요청이 등록되었습니다.');
-        resetForm();
+        const { error } = await addPurchaseRequest(requestData);
+
+        if (error) {
+            console.error('Purchase request error:', error);
+            alert('등록 실패: ' + (error.message || '데이터베이스 오류가 발생했습니다.'));
+        } else {
+            alert('구매 요청이 등록되었습니다.');
+            resetForm();
+        }
     };
 
     const resetForm = () => {

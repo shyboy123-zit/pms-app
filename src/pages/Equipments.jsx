@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, Settings, Activity, Power, History, Wrench, Image as ImageIcon } from 'lucide-react';
+import { Plus, Settings, Activity, Power, History, Wrench, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Equipments = () => {
-    const { equipments, eqHistory, workOrders, products, employees, addEquipment, updateEquipment, addEqHistory, uploadImage, addNotification } = useData();
+    const { equipments, eqHistory, workOrders, products, employees, addEquipment, updateEquipment, deleteEquipment, addEqHistory, deleteEqHistory, uploadImage, addNotification } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -131,6 +131,12 @@ const Equipments = () => {
         updateEquipment(row.id, updates);
     };
 
+    const handleDeleteEquipment = async (id) => {
+        if (!window.confirm('이 설비 정보를 삭제하시겠습니까?')) return;
+        const { error } = await deleteEquipment(id);
+        if (error) alert('삭제 실패: ' + error.message);
+    };
+
     const openHistory = (eq) => {
         setSelectedEq(eq);
         setIsHistoryOpen(true);
@@ -176,6 +182,12 @@ const Equipments = () => {
     const getEqHistory = () => {
         if (!selectedEq) return [];
         return eqHistory.filter(h => h.eq_id === selectedEq.id);
+    };
+
+    const handleDeleteHistory = async (id) => {
+        if (!window.confirm('이 이력을 삭제하시겠습니까?')) return;
+        const { error } = await deleteEqHistory(id);
+        if (error) alert('삭제 실패: ' + error.message);
     };
 
     return (
@@ -227,6 +239,9 @@ const Equipments = () => {
                             style={{ color: row.status === '가동중' ? 'var(--success)' : 'var(--text-muted)' }}
                         >
                             <Power size={16} />
+                        </button>
+                        <button className="icon-btn" onClick={() => handleDeleteEquipment(row.id)} title="설비 삭제" style={{ color: 'var(--danger)' }}>
+                            <Trash2 size={16} />
                         </button>
                     </div>
                 )}
@@ -306,13 +321,30 @@ const Equipments = () => {
                                     <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{item.date} · {item.worker}</span>
                                 </div>
                                 <p style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>{item.note}</p>
-                                {item.image_url && (
-                                    <div style={{ marginTop: '0.5rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <button
+                                        onClick={() => handleDeleteHistory(item.id)}
+                                        className="text-danger"
+                                        style={{
+                                            fontSize: '0.8rem',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            border: '1px solid var(--danger)',
+                                            padding: '4px 8px',
+                                            borderRadius: '4px',
+                                            background: 'rgba(239, 68, 68, 0.1)'
+                                        }}
+                                    >
+                                        <Trash2 size={14} /> 이력 삭제
+                                    </button>
+                                    {item.image_url && (
                                         <a href={item.image_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                             <ImageIcon size={14} /> 첨부 사진 보기
                                         </a>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
                         ))
                     ) : (

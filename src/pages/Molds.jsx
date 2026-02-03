@@ -6,7 +6,7 @@ import { useData } from '../context/DataContext';
 
 const Molds = () => {
     const {
-        molds, repairHistory, addMold, addMoldHistory, updateMold,
+        molds, repairHistory, addMold, addMoldHistory, deleteMoldHistory, updateMold, deleteMold,
         moldMovement, addMoldOutgoing, processMoldIncoming, getMoldMovements
     } = useData();
 
@@ -114,9 +114,24 @@ const Molds = () => {
         setNewRepair({ date: '', type: '정기점검', note: '', cost: 0 });
     };
 
+    const handleDeleteMold = async (id) => {
+        if (!window.confirm('이 금형 정보를 삭제하시겠습니까? 관련 데이터가 모두 삭제될 수 있습니다.')) return;
+        const { error } = await deleteMold(id);
+        if (error) alert('삭제 실패: ' + error.message);
+    };
+
     const getMoldHistory = () => {
         if (!selectedMold) return [];
         return repairHistory.filter(h => h.mold_id === selectedMold.id);
+    };
+
+    const handleDeleteHistory = async (id) => {
+        if (!window.confirm('이 이력을 삭제하시겠습니까?')) return;
+
+        const { error } = await deleteMoldHistory(id);
+        if (error) {
+            alert('삭제 실패: ' + error.message);
+        }
     };
 
     const handleOpenOutgoing = (mold) => {
@@ -226,6 +241,9 @@ const Molds = () => {
                                     <LogIn size={16} />
                                 </button>
                             )}
+                            <button className="icon-btn" onClick={() => handleDeleteMold(row.id)} title="금형 삭제" style={{ color: 'var(--danger)' }}>
+                                <Trash2 size={16} />
+                            </button>
                         </div>
                     );
                 }}
@@ -283,14 +301,31 @@ const Molds = () => {
                 <div className="history-list">
                     {getMoldHistory().length > 0 ? (
                         getMoldHistory().map(item => (
-                            <div key={item.id} className="history-item glass-panel" style={{ marginBottom: '0.75rem', padding: '1rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <div key={item.id} className="history-item glass-panel" style={{ marginBottom: '0.75rem', padding: '1rem', position: 'relative' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', paddingRight: '1.5rem' }}>
                                     <span style={{ fontWeight: '600', color: 'var(--primary)' }}>{item.type}</span>
                                     <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{item.date}</span>
                                 </div>
-                                <p style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>{item.note}</p>
-                                <div style={{ textAlign: 'right', fontSize: '0.9rem', fontWeight: '600' }}>
-                                    비용: {item.cost ? item.cost.toLocaleString() : 0}원
+                                <p style={{ fontSize: '0.95rem', marginBottom: '0.5rem', paddingRight: '1.5rem' }}>{item.note}</p>
+                                <div style={{ textAlign: 'right', fontSize: '0.9rem', fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <button
+                                        onClick={() => handleDeleteHistory(item.id)}
+                                        className="text-danger"
+                                        style={{
+                                            fontSize: '0.8rem',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            border: '1px solid var(--danger)',
+                                            padding: '4px 8px',
+                                            borderRadius: '4px',
+                                            background: 'rgba(239, 68, 68, 0.1)'
+                                        }}
+                                    >
+                                        <Trash2 size={14} /> 이력 삭제
+                                    </button>
+                                    <span>비용: {item.cost ? item.cost.toLocaleString() : 0}원</span>
                                 </div>
                             </div>
                         ))

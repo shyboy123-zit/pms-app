@@ -126,11 +126,24 @@ export const DataProvider = ({ children }) => {
         const { error } = await supabase.from('molds').update(fields).eq('id', id);
         if (!error) setMolds(molds.map(m => m.id === id ? { ...m, ...fields } : m));
     };
+    const deleteMold = async (id) => {
+        const { error } = await supabase.from('molds').delete().eq('id', id);
+        if (!error) setMolds(molds.filter(m => m.id !== id));
+        return { error };
+    };
 
     // 2. Mold History
     const addMoldHistory = async (item) => {
         const { data, error } = await supabase.from('mold_history').insert([item]).select();
         if (!error && data) setRepairHistory([data[0], ...repairHistory]);
+    };
+
+    const deleteMoldHistory = async (id) => {
+        const { error } = await supabase.from('mold_history').delete().eq('id', id);
+        if (!error) {
+            setRepairHistory(repairHistory.filter(h => h.id !== id));
+        }
+        return { error };
     };
 
     // 3. Materials
@@ -156,11 +169,21 @@ export const DataProvider = ({ children }) => {
         const { error } = await supabase.from('equipments').update(fields).eq('id', id);
         if (!error) setEquipments(equipments.map(e => e.id === id ? { ...e, ...fields } : e));
     };
+    const deleteEquipment = async (id) => {
+        const { error } = await supabase.from('equipments').delete().eq('id', id);
+        if (!error) setEquipments(equipments.filter(e => e.id !== id));
+        return { error };
+    };
 
     // 5. Equipment History
     const addEqHistory = async (item) => {
         const { data, error } = await supabase.from('equipment_history').insert([item]).select();
         if (!error && data) setEqHistory([data[0], ...eqHistory]);
+    };
+    const deleteEqHistory = async (id) => {
+        const { error } = await supabase.from('equipment_history').delete().eq('id', id);
+        if (!error) setEqHistory(eqHistory.filter(h => h.id !== id));
+        return { error };
     };
 
     // 6. Inspections (Quality)
@@ -674,11 +697,11 @@ export const DataProvider = ({ children }) => {
     return (
         <DataContext.Provider value={{
             loading,
-            molds, addMold, updateMold,
-            repairHistory, addMoldHistory,
+            molds, addMold, updateMold, deleteMold,
+            repairHistory, addMoldHistory, deleteMoldHistory,
             materials, addMaterial, updateMaterial, deleteMaterial,
-            equipments, addEquipment, updateEquipment,
-            eqHistory, addEqHistory,
+            equipments, addEquipment, updateEquipment, deleteEquipment,
+            eqHistory, addEqHistory, deleteEqHistory,
             inspections, addInspection, updateInspection,
             employees, addEmployee, updateEmployee, deleteEmployee,
             materialUsage, addMaterialUsage, getMaterialUsageHistory,

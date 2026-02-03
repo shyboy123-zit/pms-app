@@ -10,14 +10,12 @@ import {
   DollarSign,
   LogOut,
   Users,
-  Settings, // Added Settings here
-  Settings as EquipmentsIcon,
+  Settings,
   Package,
   ClipboardList,
   Calendar,
   ChevronDown,
   ChevronRight,
-  Menu,
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';

@@ -92,7 +92,18 @@ const Employees = () => {
             // 등록 모드
             const count = employees.length + 1;
             const newId = `EMP-${String(count).padStart(3, '0')}`;
-            const defaultPerms = { dashboard: true, molds: true, materials: true, delivery: true, quality: true, sales: true, employees: false, equipments: true };
+            const defaultPerms = {
+                dashboard: true,
+                molds: true,
+                materials: true,
+                delivery: true,
+                quality: true,
+                sales: true,
+                employees: false,
+                equipments: true,
+                purchase: true,
+                suppliers: true
+            };
 
             // Calculate leave automatically based on join date
             const calculatedLeave = calculateAnnualLeave(newItem.joinDate);
@@ -202,6 +213,8 @@ const Employees = () => {
         daily_production: '일일작업현황',
         work_history: '작업이력',
         injection_conditions: '사출조건표',
+        purchase: '구매관리',
+        suppliers: '거래처관리',
         employees: '직원관리'
     };
 

@@ -20,6 +20,7 @@ const Header = ({ onToggleSidebar }) => {
             case '/products': return '제품관리';
             case '/work-orders': return '작업지시';
             case '/daily-production': return '일일작업현황';
+            case '/work-history': return '작업이력';
             default: return 'PMS App';
         }
     };

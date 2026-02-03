@@ -49,6 +49,7 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
         { icon: EquipmentsIcon, label: '설비관리', path: '/equipments', key: 'equipments' },
         { icon: ClipboardList, label: '작업지시', path: '/work-orders', key: 'work_orders' },
         { icon: Calendar, label: '일일작업현황', path: '/daily-production', key: 'daily_production' },
+        { icon: Calendar, label: '작업이력', path: '/work-history', key: 'work_history' },
         { icon: Package, label: '제품관리', path: '/products', key: 'products' }
       ]
     },
@@ -88,8 +89,12 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
 
   // 권한 체크
   const hasPermission = (key) => {
+    // 권한이 없으면 모든 메뉴 보이기 (기본값)
     if (!user || !user.permissions) return true;
-    return user.permissions[key] !== false;
+
+    // 권한이 설정되어 있으면 해당 키의 권한 확인
+    // permissions[key]가 명시적으로 true인 경우만 허용
+    return user.permissions[key] === true;
   };
 
   return (

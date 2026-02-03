@@ -1,4 +1,4 @@
-```javascript
+
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
@@ -106,7 +106,7 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
       )}
 
       {/* 사이드바 */}
-      <aside className={`sidebar glass - panel ${ isMobileOpen ? 'mobile-open' : '' } `}>
+      <aside className={`sidebar glass - panel ${isMobileOpen ? 'mobile-open' : ''} `}>
         {/* 모바일 닫기 버튼 */}
         <button className="mobile-close-btn" onClick={onClose}>
           <X size={24} />
@@ -126,7 +126,7 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
                 <NavLink
                   key={category.path}
                   to={category.path}
-                  className={({ isActive }) => `nav - item ${ isActive ? 'active' : '' } `}
+                  className={({ isActive }) => `nav - item ${isActive ? 'active' : ''} `}
                   onClick={onClose}
                 >
                   <category.icon size={20} />
@@ -154,12 +154,12 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
                   {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 </div>
 
-                <div className={`category - items ${ isExpanded ? 'expanded' : '' } `}>
+                <div className={`category - items ${isExpanded ? 'expanded' : ''} `}>
                   {visibleItems.map((item) => (
                     <NavLink
                       key={item.path}
                       to={item.path}
-                      className={({ isActive }) => `nav - item sub - item ${ isActive ? 'active' : '' } `}
+                      className={({ isActive }) => `nav - item sub - item ${isActive ? 'active' : ''} `}
                       onClick={onClose}
                     >
                       <item.icon size={18} />

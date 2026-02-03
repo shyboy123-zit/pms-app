@@ -20,18 +20,20 @@ const InjectionConditions = () => {
         nozzle_temp: '',
         mold_temp_fixed: '',
         mold_temp_moving: '',
-        // 압력/속도
+        // 압력/속도/시간 (3단계)
         injection_pressure: '',
         injection_speed: '',
+        injection_time: '',
+        injection_pressure_2: '',
+        injection_speed_2: '',
+        injection_time_2: '',
         holding_pressure: '',
         holding_speed: '',
-        back_pressure: '',
-        // 시간
-        injection_time: '',
         holding_time: '',
+        // 기타 설정
+        back_pressure: '',
         cooling_time: '',
         cycle_time: '',
-        // 기타
         shot_size: '',
         screw_rpm: '',
         cushion: '',
@@ -86,9 +88,10 @@ const InjectionConditions = () => {
             hopper_temp: '', cylinder_temp_zone1: '', cylinder_temp_zone2: '',
             cylinder_temp_zone3: '', cylinder_temp_zone4: '', nozzle_temp: '',
             mold_temp_fixed: '', mold_temp_moving: '',
-            injection_pressure: '', injection_speed: '', holding_pressure: '',
-            holding_speed: '', back_pressure: '',
-            injection_time: '', holding_time: '', cooling_time: '', cycle_time: '',
+            injection_pressure: '', injection_speed: '', injection_time: '',
+            injection_pressure_2: '', injection_speed_2: '', injection_time_2: '',
+            holding_pressure: '', holding_speed: '', holding_time: '',
+            back_pressure: '', cooling_time: '', cycle_time: '',
             shot_size: '', screw_rpm: '', cushion: '', notes: ''
         });
     };
@@ -246,9 +249,9 @@ const InjectionConditions = () => {
                         </div>
                     </div>
 
-                    {/* 압력/속도 */}
-                    <div className="form-section">
-                        <h3 className="section-title">⚡ 압력 & 속도</h3>
+                    {/* 1차 사출 */}
+                    <div className="form-section stage-section">
+                        <h3 className="section-title">1️⃣ 1차 사출 설정</h3>
                         <div className="form-grid">
                             <div className="form-group">
                                 <label className="form-label">1차 압력 (kgf/cm²)</label>
@@ -265,19 +268,75 @@ const InjectionConditions = () => {
                                 />
                             </div>
                             <div className="form-group">
-                                <label className="form-label">2차 압력/보압 (kgf/cm²)</label>
+                                <label className="form-label">1차 시간 (초)</label>
+                                <input type="number" step="0.01" className="form-input"
+                                    value={formData.injection_time}
+                                    onChange={(e) => updateField('injection_time', e.target.value)}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 2차 사출 */}
+                    <div className="form-section stage-section">
+                        <h3 className="section-title">2️⃣ 2차 사출 설정</h3>
+                        <div className="form-grid">
+                            <div className="form-group">
+                                <label className="form-label">2차 압력 (kgf/cm²)</label>
+                                <input type="number" step="0.1" className="form-input"
+                                    value={formData.injection_pressure_2}
+                                    onChange={(e) => updateField('injection_pressure_2', e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">2차 속도 (mm/s)</label>
+                                <input type="number" step="0.1" className="form-input"
+                                    value={formData.injection_speed_2}
+                                    onChange={(e) => updateField('injection_speed_2', e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">2차 시간 (초)</label>
+                                <input type="number" step="0.01" className="form-input"
+                                    value={formData.injection_time_2}
+                                    onChange={(e) => updateField('injection_time_2', e.target.value)}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 보압 사출 */}
+                    <div className="form-section stage-section highlight">
+                        <h3 className="section-title">3️⃣ 보압 설정</h3>
+                        <div className="form-grid">
+                            <div className="form-group">
+                                <label className="form-label">보압 압력 (kgf/cm²)</label>
                                 <input type="number" step="0.1" className="form-input"
                                     value={formData.holding_pressure}
                                     onChange={(e) => updateField('holding_pressure', e.target.value)}
                                 />
                             </div>
                             <div className="form-group">
-                                <label className="form-label">2차 속도 (mm/s)</label>
+                                <label className="form-label">보압 속도 (mm/s)</label>
                                 <input type="number" step="0.1" className="form-input"
                                     value={formData.holding_speed}
                                     onChange={(e) => updateField('holding_speed', e.target.value)}
                                 />
                             </div>
+                            <div className="form-group">
+                                <label className="form-label">보압 시간 (초)</label>
+                                <input type="number" step="0.01" className="form-input"
+                                    value={formData.holding_time}
+                                    onChange={(e) => updateField('holding_time', e.target.value)}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 공통/기타 시간 및 설정 */}
+                    <div className="form-section">
+                        <h3 className="section-title">⚙️ 기타 설정</h3>
+                        <div className="form-grid">
                             <div className="form-group">
                                 <label className="form-label">배압 (kgf/cm²)</label>
                                 <input type="number" step="0.1" className="form-input"
@@ -285,36 +344,15 @@ const InjectionConditions = () => {
                                     onChange={(e) => updateField('back_pressure', e.target.value)}
                                 />
                             </div>
-                        </div>
-                    </div>
-
-                    {/* 시간 설정 */}
-                    <div className="form-section">
-                        <h3 className="section-title">⏱️ 시간 설정 (초)</h3>
-                        <div className="form-grid">
                             <div className="form-group">
-                                <label className="form-label">사출 시간</label>
-                                <input type="number" step="0.01" className="form-input"
-                                    value={formData.injection_time}
-                                    onChange={(e) => updateField('injection_time', e.target.value)}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">보압 시간</label>
-                                <input type="number" step="0.01" className="form-input"
-                                    value={formData.holding_time}
-                                    onChange={(e) => updateField('holding_time', e.target.value)}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">냉각 시간</label>
+                                <label className="form-label">냉각 시간 (초)</label>
                                 <input type="number" step="0.01" className="form-input"
                                     value={formData.cooling_time}
                                     onChange={(e) => updateField('cooling_time', e.target.value)}
                                 />
                             </div>
                             <div className="form-group">
-                                <label className="form-label">사이클 타임</label>
+                                <label className="form-label">사이클 타임 (초)</label>
                                 <input type="number" step="0.01" className="form-input"
                                     value={formData.cycle_time}
                                     onChange={(e) => updateField('cycle_time', e.target.value)}
@@ -379,8 +417,13 @@ const InjectionConditions = () => {
                 .form-section {
                     margin-bottom: 2rem;
                     padding: 1.5rem;
-                    background: #f9fafb;
-                    border-radius: 8px;
+                .stage-section {
+                    background: #f0f7ff;
+                    border-left: 4px solid var(--primary);
+                }
+                .stage-section.highlight {
+                    background: #fdf4ff;
+                    border-left-color: #d946ef;
                 }
 
                 .section-title {

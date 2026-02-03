@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, Check, X, Clock, ShoppingBag, Truck, AlertTriangle } from 'lucide-react';
+import { Plus, Check, X, Clock, ShoppingBag, Truck, AlertTriangle, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 

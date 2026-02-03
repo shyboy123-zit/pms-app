@@ -95,11 +95,13 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
 
   // 권한 체크
   const hasPermission = (key) => {
-    // 권한이 없으면 모든 메뉴 보이기 (기본값)
+    // 1. 관리자(Admin)는 모든 권한 허용
+    if (user?.position === '관리자') return true;
+
+    // 2. 권한 데이터가 없으면 기본적으로 모두 보이기 (기존 호환성)
     if (!user || !user.permissions) return true;
 
-    // 권한이 설정되어 있으면 해당 키의 권한 확인
-    // permissions[key]가 명시적으로 true인 경우만 허용
+    // 3. 권한이 설정되어 있으면 해당 키의 권한 확인
     return user.permissions[key] === true;
   };
 

@@ -113,7 +113,18 @@ export const AuthProvider = ({ children }) => {
             position: '사원',     // Default
             join_date: new Date().toISOString().split('T')[0],
             status: '재직',
-            permissions: { dashboard: true, molds: true, materials: true, delivery: true, quality: true, sales: true, employees: false, equipments: true } // Default permissions
+            permissions: {
+                dashboard: true,
+                molds: true,
+                materials: true,
+                delivery: true,
+                quality: true,
+                sales: true,
+                employees: false,
+                equipments: true,
+                purchase: true,
+                suppliers: true
+            } // Default permissions
         };
 
         const { error: dbError } = await supabase

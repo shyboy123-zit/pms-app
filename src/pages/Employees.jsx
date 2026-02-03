@@ -199,6 +199,9 @@ const Employees = () => {
         equipments: '설비관리',
         products: '제품관리',
         work_orders: '작업지시',
+        daily_production: '일일작업현황',
+        work_history: '작업이력',
+        injection_conditions: '사출조건표',
         employees: '직원관리'
     };
 

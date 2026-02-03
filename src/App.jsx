@@ -20,6 +20,8 @@ import WorkOrders from './pages/WorkOrders';
 import DailyProduction from './pages/DailyProduction';
 import WorkHistory from './pages/WorkHistory';
 import InjectionConditions from './pages/InjectionConditions';
+import Suppliers from './pages/Suppliers';
+import Purchase from './pages/Purchase';
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();
@@ -55,6 +57,8 @@ function App() {
                 <Route path="daily-production" element={<DailyProduction />} />
                 <Route path="work-history" element={<WorkHistory />} />
                 <Route path="injection-conditions" element={<InjectionConditions />} />
+                <Route path="suppliers" element={<Suppliers />} />
+                <Route path="purchase" element={<Purchase />} />
               </Route>
             </Route>
 

@@ -14,6 +14,8 @@ export const DataProvider = ({ children }) => {
     const [inspections, setInspections] = useState([]);
     const [employees, setEmployees] = useState([]); // Moved employees here
     const [materialUsage, setMaterialUsage] = useState([]);
+    const [suppliers, setSuppliers] = useState([]);
+    const [purchaseRequests, setPurchaseRequests] = useState([]);
     const [inventoryTransactions, setInventoryTransactions] = useState([]);
     const [moldMovement, setMoldMovement] = useState([]);
     const [products, setProducts] = useState([]);
@@ -46,6 +48,20 @@ export const DataProvider = ({ children }) => {
 
             const { data: emp } = await supabase.from('employees').select('*').order('created_at', { ascending: true });
             if (emp) setEmployees(emp);
+
+            // Fetch Suppliers
+            const { data: suppliersData } = await supabase
+                .from('suppliers')
+                .select('*')
+                .order('name', { ascending: true });
+            if (suppliersData) setSuppliers(suppliersData);
+
+            // Fetch Purchase Requests
+            const { data: requestsData } = await supabase
+                .from('purchase_requests')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (requestsData) setPurchaseRequests(requestsData);
 
             // Optional tables - fail silently if not exist
             try {
@@ -256,19 +272,16 @@ export const DataProvider = ({ children }) => {
         return { error };
     };
 
-    const deleteMaterialUsage = async (id, materialId, quantity) => {
-        const { error } = await supabase.from('material_usage').delete().eq('id', id);
+    const deleteMaterialUsage = async (usageId, materialId, qty) => {
+        // 1. Restore stock
+        const material = materials.find(m => m.id === materialId);
+        if (material) {
+            await updateMaterial(materialId, { stock: material.stock + parseFloat(qty) });
+        }
+        // 2. Delete usage record
+        const { error } = await supabase.from('material_usage').delete().eq('id', usageId);
         if (!error) {
-            setMaterialUsage(materialUsage.filter(u => u.id !== id));
-
-            // Add back the quantity to material stock
-            if (materialId) {
-                const material = materials.find(m => m.id === materialId);
-                if (material) {
-                    const newStock = material.stock + quantity;
-                    await updateMaterial(materialId, { stock: newStock });
-                }
-            }
+            setMaterialUsage(materialUsage.filter(u => u.id !== usageId));
         }
         return { error };
     };
@@ -425,6 +438,44 @@ export const DataProvider = ({ children }) => {
 
     const getOutgoingMolds = () => {
         return moldMovement.filter(m => m.status === '출고중');
+    };
+
+    // 11. Suppliers
+    const addSupplier = async (item) => {
+        const { data, error } = await supabase.from('suppliers').insert([item]).select();
+        if (!error && data) setSuppliers([...suppliers, data[0]]);
+        return { data, error };
+    };
+
+    const updateSupplier = async (id, fields) => {
+        const { error } = await supabase.from('suppliers').update(fields).eq('id', id);
+        if (!error) setSuppliers(suppliers.map(s => s.id === id ? { ...s, ...fields } : s));
+        return { error };
+    };
+
+    const deleteSupplier = async (id) => {
+        const { error } = await supabase.from('suppliers').delete().eq('id', id);
+        if (!error) setSuppliers(suppliers.filter(s => s.id !== id));
+        return { error };
+    };
+
+    // 12. Purchase Requests
+    const addPurchaseRequest = async (item) => {
+        const { data, error } = await supabase.from('purchase_requests').insert([item]).select();
+        if (!error && data) setPurchaseRequests([data[0], ...purchaseRequests]);
+        return { data, error };
+    };
+
+    const updatePurchaseRequest = async (id, fields) => {
+        const { error } = await supabase.from('purchase_requests').update(fields).eq('id', id);
+        if (!error) setPurchaseRequests(purchaseRequests.map(r => r.id === id ? { ...r, ...fields } : r));
+        return { error };
+    };
+
+    const deletePurchaseRequest = async (id) => {
+        const { error } = await supabase.from('purchase_requests').delete().eq('id', id);
+        if (!error) setPurchaseRequests(purchaseRequests.filter(r => r.id !== id));
+        return { error };
     };
 
     // --- Products Management ---
@@ -715,7 +766,9 @@ export const DataProvider = ({ children }) => {
             salesRecords, addSalesRecord,
             uploadImage,
             notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification,
-            injectionConditions, addInjectionCondition, updateInjectionCondition, deleteInjectionCondition, getConditionByProduct
+            injectionConditions, addInjectionCondition, updateInjectionCondition, deleteInjectionCondition, getConditionByProduct,
+            suppliers, addSupplier, updateSupplier, deleteSupplier,
+            purchaseRequests, addPurchaseRequest, updatePurchaseRequest, deletePurchaseRequest
         }}>
             {children}
         </DataContext.Provider>

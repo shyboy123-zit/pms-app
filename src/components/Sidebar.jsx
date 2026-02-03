@@ -17,7 +17,9 @@ import {
   Calendar,
   ChevronDown,
   ChevronRight,
-  X
+  X,
+  ShoppingBag,
+  Building
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -53,6 +55,15 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
         { icon: Calendar, label: '작업이력', path: '/work-history', key: 'work_history' },
         { icon: Settings, label: '사출조건표', path: '/injection-conditions', key: 'injection_conditions' },
         { icon: Package, label: '제품관리', path: '/products', key: 'products' }
+      ]
+    },
+    {
+      id: 'purchase',
+      label: '구매 관리',
+      icon: ShoppingBag,
+      items: [
+        { icon: ShoppingBag, label: '구매관리', path: '/purchase', key: 'purchase' },
+        { icon: Building, label: '거래처관리', path: '/suppliers', key: 'suppliers' }
       ]
     },
     {

@@ -7,7 +7,8 @@ import { useData } from '../context/DataContext';
 const Materials = () => {
     const {
         materials, addMaterial, updateMaterial, deleteMaterial,
-        materialUsage, addMaterialUsage, updateMaterialUsage, deleteMaterialUsage
+        materialUsage, addMaterialUsage, updateMaterialUsage, deleteMaterialUsage,
+        addPurchaseRequest
     } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -109,9 +110,30 @@ const Materials = () => {
         setIsOrderModalOpen(true);
     };
 
-    const confirmOrder = () => {
+    const confirmOrder = async () => {
         if (!orderItem) return;
-        alert(`📢 [긴급 발주 지시]\n\n자재명: ${orderItem.name}\n발주 수량: ${orderItem.orderQuantity} ${orderItem.unit}\n공급사: ${orderItem.supplier}\n\n✓ 구매담당자에게 알림이 전송되었습니다.`);
+
+        // Create a real purchase request
+        const requestData = {
+            item_name: orderItem.name,
+            quantity: orderItem.orderQuantity,
+            unit: orderItem.unit,
+            supplier_id: null, // Could find supplier ID by name if needed, or leave for manager
+            priority: '긴급',
+            reason: '안전재고 미달로 인한 긴급 발주',
+            required_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Default 3 days later
+            status: '대기',
+            notes: `자동 생성된 요청 (공급사: ${orderItem.supplier})`
+        };
+
+        const { error } = await addPurchaseRequest(requestData);
+
+        if (!error) {
+            alert(`✅ 긴급 발주 요청이 등록되었습니다.\n'구매 관리' 메뉴에서 확인하세요.`);
+        } else {
+            alert('발주 요청 등록 실패');
+        }
+
         setIsOrderModalOpen(false);
         setOrderItem(null);
     };

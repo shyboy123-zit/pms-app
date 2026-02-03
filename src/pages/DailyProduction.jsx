@@ -83,13 +83,17 @@ const DailyProduction = () => {
 
     // 오늘 업데이트 확인 함수
     const isUpdatedToday = (order) => {
-        if (!order.updated_at && !order.last_production_date) return false;
-
+        // last_production_date나 updated_at이 있으면 그것으로 체크
         const updateDate = order.last_production_date || order.updated_at;
-        const today = new Date().toISOString().split('T')[0];
-        const lastUpdate = new Date(updateDate).toISOString().split('T')[0];
 
-        return lastUpdate === today;
+        if (updateDate) {
+            const today = new Date().toISOString().split('T')[0];
+            const lastUpdate = new Date(updateDate).toISOString().split('T')[0];
+            return lastUpdate === today;
+        }
+
+        // 업데이트 기록이 없으면 false (오늘 생산 수량 미기입)
+        return false;
     };
 
     const handleOpenModal = (order) => {

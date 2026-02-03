@@ -11,6 +11,7 @@ import {
   LogOut,
   Users,
   Settings,
+  Cog as EquipmentsIcon,
   Package,
   ClipboardList,
   Calendar,

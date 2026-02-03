@@ -19,6 +19,7 @@ export const DataProvider = ({ children }) => {
     const [products, setProducts] = useState([]);
     const [workOrders, setWorkOrders] = useState([]);
     const [salesRecords, setSalesRecords] = useState([]);
+    const [notifications, setNotifications] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -86,6 +87,13 @@ export const DataProvider = ({ children }) => {
                 if (sales) setSalesRecords(sales);
             } catch (e) {
                 console.warn('sales_records table not available:', e.message);
+            }
+
+            try {
+                const { data: notifs } = await supabase.from('notifications').select('*').order('created_at', { ascending: false });
+                if (notifs) setNotifications(notifs);
+            } catch (e) {
+                console.warn('notifications table not available:', e.message);
             }
 
         } catch (error) {
@@ -537,6 +545,70 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    // --- Notification Functions ---
+    const addNotification = async (userId, title, message, type, relatedId = null) => {
+        try {
+            const { data, error } = await supabase
+                .from('notifications')
+                .insert([{ user_id: userId, title, message, type, related_id: relatedId }])
+                .select();
+
+            if (error) throw error;
+            if (data) setNotifications(prev => [data[0], ...prev]);
+            return data?.[0];
+        } catch (error) {
+            console.error('Error adding notification:', error);
+            return null;
+        }
+    };
+
+    const markNotificationAsRead = async (notificationId) => {
+        try {
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('id', notificationId);
+
+            if (error) throw error;
+            setNotifications(prev => prev.map(n =>
+                n.id === notificationId ? { ...n, is_read: true } : n
+            ));
+        } catch (error) {
+            console.error('Error marking notification as read:', error);
+        }
+    };
+
+    const markAllNotificationsAsRead = async (userId) => {
+        try {
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('user_id', userId)
+                .eq('is_read', false);
+
+            if (error) throw error;
+            setNotifications(prev => prev.map(n =>
+                n.user_id === userId ? { ...n, is_read: true } : n
+            ));
+        } catch (error) {
+            console.error('Error marking all notifications as read:', error);
+        }
+    };
+
+    const deleteNotification = async (notificationId) => {
+        try {
+            const { error } = await supabase
+                .from('notifications')
+                .delete()
+                .eq('id', notificationId);
+
+            if (error) throw error;
+            setNotifications(prev => prev.filter(n => n.id !== notificationId));
+        } catch (error) {
+            console.error('Error deleting notification:', error);
+        }
+    };
+
 
     return (
         <DataContext.Provider value={{
@@ -557,7 +629,8 @@ export const DataProvider = ({ children }) => {
             products, addProduct, updateProduct, deleteProduct,
             workOrders, addWorkOrder, updateWorkOrder, startWork, completeWork, getActiveWorkOrders,
             salesRecords, addSalesRecord,
-            uploadImage
+            uploadImage,
+            notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification
         }}>
             {children}
         </DataContext.Provider>

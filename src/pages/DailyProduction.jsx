@@ -17,7 +17,24 @@ const DailyProduction = () => {
     const activeOrders = workOrders.filter(wo => wo.status === '진행중');
 
     const columns = [
-        { header: '설비명', accessor: 'equipment_name' },
+        {
+            header: '설비명',
+            accessor: 'equipment_name',
+            render: (row) => {
+                const equipment = equipments.find(eq => eq.id === row.equipment_id);
+                const isTodayMissing = !isUpdatedToday(row);
+                return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>{equipment?.name || '-'}</span>
+                        {isTodayMissing && (
+                            <span className="missing-badge">
+                                금일수량기입누락
+                            </span>
+                        )}
+                    </div>
+                );
+            }
+        },
         {
             header: '제품명',
             accessor: 'product_name',
@@ -64,6 +81,17 @@ const DailyProduction = () => {
         { header: '지시일', accessor: 'order_date' }
     ];
 
+    // 오늘 업데이트 확인 함수
+    const isUpdatedToday = (order) => {
+        if (!order.updated_at && !order.last_production_date) return false;
+
+        const updateDate = order.last_production_date || order.updated_at;
+        const today = new Date().toISOString().split('T')[0];
+        const lastUpdate = new Date(updateDate).toISOString().split('T')[0];
+
+        return lastUpdate === today;
+    };
+
     const handleOpenModal = (order) => {
         setSelectedOrder(order);
         setDailyQuantity(0);
@@ -78,7 +106,8 @@ const DailyProduction = () => {
         const newProducedQuantity = selectedOrder.produced_quantity + dailyQuantity;
 
         await updateWorkOrder(selectedOrder.id, {
-            produced_quantity: newProducedQuantity
+            produced_quantity: newProducedQuantity,
+            last_production_date: new Date().toISOString()
         });
 
         // 관리자에게 알림 전송
@@ -355,6 +384,24 @@ const DailyProduction = () => {
                     </>
                 )}
             </Modal>
+
+            <style>{`
+                .missing-badge {
+                    background: #fee2e2;
+                    color: #991b1b;
+                    padding: 0.25rem 0.5rem;
+                    border-radius: 4px;
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    animation: blink-warning 1.5s infinite;
+                    white-space: nowrap;
+                }
+
+                @keyframes blink-warning {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
+                }
+            `}</style>
         </div>
     );
 };

@@ -5,7 +5,7 @@ import { Plus, Calendar, TrendingUp, Edit } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const DailyProduction = () => {
-    const { workOrders, equipments, products, updateWorkOrder } = useData();
+    const { workOrders, equipments, products, employees, updateWorkOrder, addNotification } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -81,8 +81,29 @@ const DailyProduction = () => {
             produced_quantity: newProducedQuantity
         });
 
-        // 100% 도달 시 자동 완료 처리
+        // 관리자에게 알림 전송
+        const managers = employees.filter(emp => emp.position === '관리자' || emp.position === '대표');
+        for (const manager of managers) {
+            await addNotification(
+                manager.id,
+                '일일 작업수량 기록',
+                `${getEquipmentName(selectedOrder.equipment_id)}에서 ${getProductName(selectedOrder.product_id)} ${dailyQuantity.toLocaleString()}개 생산 기록`,
+                'production',
+                selectedOrder.id
+            );
+        }
+
+        // 100% 도달 시 완료 알림
         if (newProducedQuantity >= selectedOrder.target_quantity) {
+            for (const manager of managers) {
+                await addNotification(
+                    manager.id,
+                    '작업지시 완료',
+                    `${getEquipmentName(selectedOrder.equipment_id)} - ${getProductName(selectedOrder.product_id)} 작업 완료 (${newProducedQuantity.toLocaleString()}/${selectedOrder.target_quantity.toLocaleString()})`,
+                    'completion',
+                    selectedOrder.id
+                );
+            }
             alert(`🎉 작업지시가 완료되었습니다!\n설비: ${getEquipmentName(selectedOrder.equipment_id)}\n제품: ${getProductName(selectedOrder.product_id)}`);
         }
 

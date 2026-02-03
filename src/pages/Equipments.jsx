@@ -5,7 +5,7 @@ import { Plus, Settings, Activity, Power, History, Wrench, Image as ImageIcon } 
 import { useData } from '../context/DataContext';
 
 const Equipments = () => {
-    const { equipments, eqHistory, workOrders, products, addEquipment, updateEquipment, addEqHistory, uploadImage } = useData();
+    const { equipments, eqHistory, workOrders, products, employees, addEquipment, updateEquipment, addEqHistory, uploadImage, addNotification } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -155,6 +155,19 @@ const Equipments = () => {
         };
 
         await addEqHistory(itemToAdd);
+
+        // 관리자에게 알림
+        const managers = employees.filter(emp => emp.position === '관리자' || emp.position === '대표');
+        for (const manager of managers) {
+            await addNotification(
+                manager.id,
+                '설비 정비 기록',
+                `${selectedEq.name} - ${newHistory.type}: ${newHistory.note}`,
+                'equipment',
+                selectedEq.id
+            );
+        }
+
         setIsUploading(false);
         setIsRepairOpen(false);
         setNewHistory({ date: '', type: '정기점검', note: '', worker: '', file: null });

@@ -5,7 +5,7 @@ import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon
 import { useData } from '../context/DataContext';
 
 const Quality = () => {
-    const { inspections, addInspection, uploadImage } = useData();
+    const { inspections, employees, addInspection, uploadImage, addNotification } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Initial state for new item including file
@@ -84,6 +84,24 @@ const Quality = () => {
         };
 
         await addInspection(itemToAdd);
+
+        // 관리자에게 알림 (특히 NG인 경우)
+        const managers = employees.filter(emp => emp.position === '관리자' || emp.position === '대표');
+        for (const manager of managers) {
+            const notifTitle = newItem.result === 'NG' ? '⚠️ 품질 불량 발생' : '품질 검사 완료';
+            const notifMessage = newItem.result === 'NG'
+                ? `${newItem.product} - ${newItem.checkItem}: ${newItem.ngType || 'NG'}`
+                : `${newItem.product} - ${newItem.checkItem}: OK`;
+
+            await addNotification(
+                manager.id,
+                notifTitle,
+                notifMessage,
+                'quality',
+                null
+            );
+        }
+
         setIsUploading(false);
         setIsModalOpen(false);
         setNewItem({

@@ -58,20 +58,13 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
       ]
     },
     {
-      id: 'purchase',
-      label: '구매 관리',
-      icon: ShoppingBag,
-      items: [
-        { icon: ShoppingBag, label: '구매관리', path: '/purchase', key: 'purchase' },
-        { icon: Building, label: '거래처관리', path: '/suppliers', key: 'suppliers' }
-      ]
-    },
-    {
       id: 'salesLogistics',
       label: '영업/물류',
       icon: Truck,
       items: [
         { icon: Truck, label: '입출고관리', path: '/delivery', key: 'delivery' },
+        { icon: ShoppingBag, label: '구매관리', path: '/purchase', key: 'purchase' },
+        { icon: Building, label: '거래처관리', path: '/suppliers', key: 'suppliers' },
         { icon: DollarSign, label: '매입매출', path: '/sales', key: 'sales' }
       ]
     },

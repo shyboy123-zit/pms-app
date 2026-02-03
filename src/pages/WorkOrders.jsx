@@ -29,7 +29,7 @@ const WorkOrders = () => {
     });
 
     const filteredOrders = filterStatus === '전체'
-        ? workOrders
+        ? workOrders.filter(wo => wo.status !== '완료' && wo.status !== '취소')
         : workOrders.filter(wo => wo.status === filterStatus);
 
     const getProductName = (productId) => {

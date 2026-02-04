@@ -24,9 +24,11 @@ const InjectionConditions = () => {
         injection_pressure: '',
         injection_speed: '',
         injection_time: '',
+        dosing_position_1: '',
         injection_pressure_2: '',
         injection_speed_2: '',
         injection_time_2: '',
+        dosing_position_2: '',
         holding_pressure: '',
         holding_speed: '',
         holding_time: '',
@@ -88,8 +90,8 @@ const InjectionConditions = () => {
             hopper_temp: '', cylinder_temp_zone1: '', cylinder_temp_zone2: '',
             cylinder_temp_zone3: '', cylinder_temp_zone4: '', nozzle_temp: '',
             mold_temp_fixed: '', mold_temp_moving: '',
-            injection_pressure: '', injection_speed: '', injection_time: '',
-            injection_pressure_2: '', injection_speed_2: '', injection_time_2: '',
+            injection_pressure: '', injection_speed: '', injection_time: '', dosing_position_1: '',
+            injection_pressure_2: '', injection_speed_2: '', injection_time_2: '', dosing_position_2: '',
             holding_pressure: '', holding_speed: '', holding_time: '',
             back_pressure: '', cooling_time: '', cycle_time: '',
             shot_size: '', screw_rpm: '', cushion: '', notes: ''
@@ -142,7 +144,11 @@ const InjectionConditions = () => {
     ];
 
     const updateField = (field, value) => {
-        setFormData(prev => ({ ...prev, [field]: value === '' ? '' : parseFloat(value) || value }));
+        // Convert empty string to null for numeric fields to prevent database errors
+        setFormData(prev => ({
+            ...prev,
+            [field]: value === '' ? null : (isNaN(parseFloat(value)) ? value : parseFloat(value))
+        }));
     };
 
     return (
@@ -270,8 +276,15 @@ const InjectionConditions = () => {
                             <div className="form-group">
                                 <label className="form-label">1차 시간 (초)</label>
                                 <input type="number" step="0.01" className="form-input"
-                                    value={formData.injection_time}
+                                    value={formData.injection_time || ''}
                                     onChange={(e) => updateField('injection_time', e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">1차 계량 위치 (mm)</label>
+                                <input type="number" step="0.01" className="form-input"
+                                    value={formData.dosing_position_1 || ''}
+                                    onChange={(e) => updateField('dosing_position_1', e.target.value)}
                                 />
                             </div>
                         </div>
@@ -284,22 +297,29 @@ const InjectionConditions = () => {
                             <div className="form-group">
                                 <label className="form-label">2차 압력 (kgf/cm²)</label>
                                 <input type="number" step="0.1" className="form-input"
-                                    value={formData.injection_pressure_2}
+                                    value={formData.injection_pressure_2 || ''}
                                     onChange={(e) => updateField('injection_pressure_2', e.target.value)}
                                 />
                             </div>
                             <div className="form-group">
                                 <label className="form-label">2차 속도 (mm/s)</label>
                                 <input type="number" step="0.1" className="form-input"
-                                    value={formData.injection_speed_2}
+                                    value={formData.injection_speed_2 || ''}
                                     onChange={(e) => updateField('injection_speed_2', e.target.value)}
                                 />
                             </div>
                             <div className="form-group">
                                 <label className="form-label">2차 시간 (초)</label>
                                 <input type="number" step="0.01" className="form-input"
-                                    value={formData.injection_time_2}
+                                    value={formData.injection_time_2 || ''}
                                     onChange={(e) => updateField('injection_time_2', e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">2차 계량 위치 (mm)</label>
+                                <input type="number" step="0.01" className="form-input"
+                                    value={formData.dosing_position_2 || ''}
+                                    onChange={(e) => updateField('dosing_position_2', e.target.value)}
                                 />
                             </div>
                         </div>

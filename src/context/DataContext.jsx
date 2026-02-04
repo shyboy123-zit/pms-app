@@ -704,25 +704,32 @@ export const DataProvider = ({ children }) => {
             return data?.[0];
         } catch (error) {
             console.error('Error adding injection condition:', error);
-            alert('사출조건 등록에 실패했습니다.');
-            return null;
+            const msg = error.message || '사출조건 등록에 실패했습니다.';
+            alert(`등록 실패: ${msg}`);
+            return { error };
         }
     };
 
     const updateInjectionCondition = async (id, updates) => {
         try {
+            // Remove non-schema fields if any (id, product_name etc should not be in updates)
+            const { id: _, created_at: __, product_name: ___, ...cleanUpdates } = updates;
+
             const { error } = await supabase
                 .from('injection_conditions')
-                .update({ ...updates, updated_at: new Date().toISOString() })
+                .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
                 .eq('id', id);
 
             if (error) throw error;
             setInjectionConditions(prev => prev.map(c =>
-                c.id === id ? { ...c, ...updates, updated_at: new Date().toISOString() } : c
+                c.id === id ? { ...c, ...cleanUpdates, updated_at: new Date().toISOString() } : c
             ));
+            return { success: true };
         } catch (error) {
             console.error('Error updating injection condition:', error);
-            alert('사출조건 수정에 실패했습니다.');
+            const msg = error.message || '사출조건 수정에 실패했습니다.';
+            alert(`수정 실패: ${msg}`);
+            return { error };
         }
     };
 

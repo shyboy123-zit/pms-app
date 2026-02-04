@@ -128,20 +128,16 @@ const InjectionConditions = () => {
         }
     };
 
-    const actions = [
-        {
-            label: '수정',
-            icon: Edit,
-            onClick: (row) => handleOpenModal(row),
-            className: 'btn-secondary'
-        },
-        {
-            label: '삭제',
-            icon: Trash2,
-            onClick: (row) => handleDelete(row.id),
-            className: 'btn-danger'
-        }
-    ];
+    const renderActions = (row) => (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="icon-btn" onClick={() => handleOpenModal(row)} title="수정">
+                <Edit size={16} />
+            </button>
+            <button className="icon-btn" onClick={() => handleDelete(row.id)} title="삭제" style={{ color: 'var(--danger)' }}>
+                <Trash2 size={16} />
+            </button>
+        </div>
+    );
 
     const updateField = (field, value) => {
         // Convert empty string to null for numeric fields to prevent database errors
@@ -164,7 +160,7 @@ const InjectionConditions = () => {
                 </button>
             </div>
 
-            <Table columns={columns} data={injectionConditions} actions={actions} />
+            <Table columns={columns} data={injectionConditions} actions={renderActions} />
 
             <Modal
                 title={editingCondition ? '사출조건 수정' : '사출조건 등록'}
@@ -437,6 +433,9 @@ const InjectionConditions = () => {
                 .form-section {
                     margin-bottom: 2rem;
                     padding: 1.5rem;
+                    background: #f9fafb;
+                    border-radius: 8px;
+                }
                 .stage-section {
                     background: #f0f7ff;
                     border-left: 4px solid var(--primary);

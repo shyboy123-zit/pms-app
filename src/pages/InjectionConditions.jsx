@@ -11,20 +11,14 @@ const InjectionConditions = () => {
 
     const [formData, setFormData] = useState({
         product_id: '',
-        injection_pressure_2: '',
-        injection_speed_2: '',
-        injection_time_2: '',
-        dosing_position_2: '',
-        holding_pressure: '',
-        holding_speed: '',
-        holding_time: '',
-        // 기타 설정
-        back_pressure: '',
-        cooling_time: '',
-        cycle_time: '',
-        shot_size: '',
-        screw_rpm: '',
-        cushion: '',
+        hopper_temp: null, cylinder_temp_zone1: null, cylinder_temp_zone2: null,
+        cylinder_temp_zone3: null, cylinder_temp_zone4: null, nozzle_temp: null,
+        mold_temp_fixed: null, mold_temp_moving: null,
+        injection_pressure: null, injection_speed: null, injection_time: null, dosing_position_1: null,
+        injection_pressure_2: null, injection_speed_2: null, injection_time_2: null, dosing_position_2: null,
+        holding_pressure: null, holding_speed: null, holding_time: null,
+        back_pressure: null, cooling_time: null, cycle_time: null,
+        shot_size: null, screw_rpm: null, cushion: null,
         notes: ''
     });
 
@@ -134,11 +128,23 @@ const InjectionConditions = () => {
     );
 
     const updateField = (field, value) => {
-        // Convert empty string to null for numeric fields to prevent database errors
-        setFormData(prev => ({
-            ...prev,
-            [field]: value === '' ? null : (isNaN(parseFloat(value)) ? value : parseFloat(value))
-        }));
+        setFormData(prev => {
+            let newValue = value;
+
+            // 빈 문자열 처리를 null로 일관되게 함 (DB 호환성)
+            if (value === '') {
+                newValue = null;
+            } else if (field !== 'product_id' && field !== 'notes' && !isNaN(parseFloat(value))) {
+                // 제품 ID나 비고가 아닌 경우에만 숫자로 변환 시도
+                // parseFloat는 UUID가 숫자로 시작할 때 오작동할 수 있으므로 주의 필요
+                newValue = parseFloat(value);
+            }
+
+            return {
+                ...prev,
+                [field]: newValue
+            };
+        });
     };
 
     return (

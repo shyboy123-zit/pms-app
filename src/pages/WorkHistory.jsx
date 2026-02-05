@@ -77,7 +77,31 @@ const WorkHistory = () => {
             }
         },
         {
+            header: '원재료 소모량',
+            accessor: 'material_consumption',
+            render: (row) => {
+                const product = products.find(p => p.id === row.product_id);
+                if (!product) return '-';
+
+                const shotWeight = (product.product_weight || 0) + (product.runner_weight || 0);
+                const totalWeightG = shotWeight * (row.produced_quantity || 0);
+                const totalWeightKg = totalWeightG / 1000;
+
+                if (totalWeightKg === 0) return '-';
+
+                return (
+                    <span style={{
+                        fontWeight: 600,
+                        color: totalWeightKg >= 1 ? '#059669' : '#64748b'
+                    }} title={`제품: ${product.product_weight || 0}g, 런너: ${product.runner_weight || 0}g, 생산: ${row.produced_quantity}개`}>
+                        {totalWeightKg.toFixed(2)} kg
+                    </span>
+                );
+            }
+        },
+        {
             header: '상태',
+
             accessor: 'status',
             render: (row) => (
                 <span className="status-badge status-active">
@@ -183,6 +207,18 @@ const WorkHistory = () => {
                                 return sum + rate;
                             }, 0) / filteredHistory.length)
                             : 0}%
+                    </span>
+                </div>
+                <div className="glass-panel simple-stat">
+                    <span className="label">총 원재료 소모량</span>
+                    <span className="value" style={{ color: '#059669' }}>
+                        {filteredHistory.reduce((sum, order) => {
+                            const product = products.find(p => p.id === order.product_id);
+                            if (!product) return sum;
+                            const shotWeight = (product.product_weight || 0) + (product.runner_weight || 0);
+                            const totalWeightKg = (shotWeight * order.produced_quantity) / 1000;
+                            return sum + totalWeightKg;
+                        }, 0).toFixed(2)} kg
                     </span>
                 </div>
             </div>

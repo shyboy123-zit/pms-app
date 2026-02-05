@@ -553,6 +553,9 @@ const Dashboard = () => {
                     transition: all 0.2s;
                 }
 
+                .equipment-item.clickable * {
+    pointer-events: none;
+}
                 .equipment-item:hover {
                     background: white;
                     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);

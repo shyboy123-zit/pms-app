@@ -5,12 +5,17 @@ import { Settings, Plus, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const InjectionConditions = () => {
-    const { injectionConditions, products, addInjectionCondition, updateInjectionCondition, deleteInjectionCondition } = useData();
+    const { injectionConditions, products, equipments, addInjectionCondition, updateInjectionCondition, deleteInjectionCondition } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCondition, setEditingCondition] = useState(null);
 
+    // 필터 상태
+    const [filterProduct, setFilterProduct] = useState('');
+    const [filterEquipment, setFilterEquipment] = useState('');
+
     const [formData, setFormData] = useState({
         product_id: '',
+        equipment_id: '',
         hopper_temp: null, cylinder_temp_zone1: null, cylinder_temp_zone2: null,
         cylinder_temp_zone3: null, cylinder_temp_zone4: null, nozzle_temp: null,
         mold_temp_fixed: null, mold_temp_moving: null,
@@ -29,6 +34,14 @@ const InjectionConditions = () => {
             render: (row) => {
                 const product = products.find(p => p.id === row.product_id);
                 return product?.name || '-';
+            }
+        },
+        {
+            header: '호기',
+            accessor: 'equipment_name',
+            render: (row) => {
+                const equipment = equipments.find(e => e.id === row.equipment_id);
+                return equipment ? `${equipment.name}` : '-';
             }
         },
         {
@@ -67,6 +80,7 @@ const InjectionConditions = () => {
     const resetForm = () => {
         setFormData({
             product_id: '',
+            equipment_id: '',
             hopper_temp: null, cylinder_temp_zone1: null, cylinder_temp_zone2: null,
             cylinder_temp_zone3: null, cylinder_temp_zone4: null, nozzle_temp: null,
             mold_temp_fixed: null, mold_temp_moving: null,
@@ -83,11 +97,19 @@ const InjectionConditions = () => {
             return alert('제품을 선택해주세요.');
         }
 
+        if (!formData.equipment_id) {
+            return alert('호기를 선택해주세요.');
+        }
+
         // 중복 체크 (편집이 아닐 때만)
         if (!editingCondition) {
-            const existingCondition = injectionConditions.find(c => c.product_id === formData.product_id);
+            const existingCondition = injectionConditions.find(
+                c => c.product_id === formData.product_id && c.equipment_id === formData.equipment_id
+            );
             if (existingCondition) {
-                return alert('해당 제품의 사출조건이 이미 등록되어 있습니다.');
+                const product = products.find(p => p.id === formData.product_id);
+                const equipment = equipments.find(e => e.id === formData.equipment_id);
+                return alert(`${product?.name} - ${equipment?.name}의 사출조건이 이미 등록되어 있습니다.`);
             }
         }
 
@@ -134,8 +156,8 @@ const InjectionConditions = () => {
             // 빈 문자열 처리를 null로 일관되게 함 (DB 호환성)
             if (value === '') {
                 newValue = null;
-            } else if (field !== 'product_id' && field !== 'notes' && !isNaN(parseFloat(value))) {
-                // 제품 ID나 비고가 아닌 경우에만 숫자로 변환 시도
+            } else if (field !== 'product_id' && field !== 'equipment_id' && field !== 'notes' && !isNaN(parseFloat(value))) {
+                // 제품 ID, 호기 ID, 비고가 아닌 경우에만 숫자로 변환 시도
                 // parseFloat는 UUID가 숫자로 시작할 때 오작동할 수 있으므로 주의 필요
                 newValue = parseFloat(value);
             }
@@ -160,7 +182,49 @@ const InjectionConditions = () => {
                 </button>
             </div>
 
-            <Table columns={columns} data={injectionConditions} actions={renderActions} />
+            {/* 필터 */}
+            <div className="filter-row">
+                <select
+                    className="filter-select"
+                    value={filterProduct}
+                    onChange={(e) => setFilterProduct(e.target.value)}
+                >
+                    <option value="">전체 제품</option>
+                    {products.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                </select>
+
+                <select
+                    className="filter-select"
+                    value={filterEquipment}
+                    onChange={(e) => setFilterEquipment(e.target.value)}
+                >
+                    <option value="">전체 호기</option>
+                    {equipments && equipments.map(eq => (
+                        <option key={eq.id} value={eq.id}>{eq.name}</option>
+                    ))}
+                </select>
+
+                {(filterProduct || filterEquipment) && (
+                    <button
+                        className="btn-cancel"
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                        onClick={() => {
+                            setFilterProduct('');
+                            setFilterEquipment('');
+                        }}
+                    >
+                        필터 초기화
+                    </button>
+                )}
+            </div>
+
+            <Table columns={columns} data={injectionConditions.filter(row => {
+                if (filterProduct && row.product_id !== filterProduct) return false;
+                if (filterEquipment && row.equipment_id !== filterEquipment) return false;
+                return true;
+            })} actions={renderActions} />
 
             <Modal
                 title={editingCondition ? '사출조건 수정' : '사출조건 등록'}
@@ -172,19 +236,35 @@ const InjectionConditions = () => {
                     {/* 제품 선택 */}
                     <div className="form-section">
                         <h3 className="section-title">기본 정보</h3>
-                        <div className="form-group">
-                            <label className="form-label">제품 *</label>
-                            <select
-                                className="form-input"
-                                value={formData.product_id}
-                                onChange={(e) => updateField('product_id', e.target.value)}
-                                disabled={editingCondition}
-                            >
-                                <option value="">제품 선택</option>
-                                {products.map(p => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
-                            </select>
+                        <div className="form-grid">
+                            <div className="form-group">
+                                <label className="form-label">제품 *</label>
+                                <select
+                                    className="form-input"
+                                    value={formData.product_id}
+                                    onChange={(e) => updateField('product_id', e.target.value)}
+                                    disabled={editingCondition}
+                                >
+                                    <option value="">제품 선택</option>
+                                    {products.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">호기 (설비) *</label>
+                                <select
+                                    className="form-input"
+                                    value={formData.equipment_id}
+                                    onChange={(e) => updateField('equipment_id', e.target.value)}
+                                    disabled={editingCondition}
+                                >
+                                    <option value="">호기 선택</option>
+                                    {equipments && equipments.map(eq => (
+                                        <option key={eq.id} value={eq.id}>{eq.name} ({eq.eq_code})</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     </div>
 

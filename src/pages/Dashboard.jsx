@@ -15,20 +15,20 @@ import {
 const Dashboard = () => {
     const { equipments, materials, inspections, products, workOrders, molds, moldMovement, injectionConditions } = useData();
 
-    // ?�출조건 모달 ?�태
+    // 사출조건 모달 상태
     const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
     const [selectedCondition, setSelectedCondition] = useState(null);
 
-    // ?�늘 ?�짜
+    // 오늘 날짜
     const today = new Date().toISOString().split('T')[0];
 
-    // 1. ?�기�??�업 ?�황
-    const runningEquipments = equipments.filter(e => e.status === '가?�중' && e.current_work_order_id);
+    // 1. 호기별 작업 현황
+    const runningEquipments = equipments.filter(e => e.status === '가동중' && e.current_work_order_id);
 
-    // 2. ?�전?�고 미달 ?�재�?
+    // 2. 안전재고 미달 원재료
     const lowStockMaterials = materials.filter(m => m.stock < m.min_stock);
 
-    // 3. ?�일 불량 ?�황
+    // 3. 일일 불량 현황
     const todayInspections = inspections.filter(i => i.date === today);
     const todayDefects = todayInspections.filter(i => i.result === 'NG');
     const defectRate = todayInspections.length > 0
@@ -36,13 +36,13 @@ const Dashboard = () => {
         : 0;
 
     // 4. 출고 중인 금형
-    const outgoingMolds = moldMovement.filter(m => m.status === '출고�?);
+    const outgoingMolds = moldMovement.filter(m => m.status === '출고중');
 
     return (
         <div className="dashboard-container">
             <div className="dashboard-header">
                 <div>
-                    <h2 className="page-title">?�산 관�??�?�보??/h2>
+                    <h2 className="page-title">생산 관리 대시보드</h2>
                     <p className="page-date">
                         {new Date().toLocaleDateString('ko-KR', {
                             year: 'numeric',
@@ -54,16 +54,16 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {/* ?�심 ?�계 카드 */}
+            {/* 핵심 통계 카드 */}
             <div className="stats-grid">
                 <div className="stat-card running">
                     <div className="stat-icon">
                         <Activity />
                     </div>
                     <div className="stat-content">
-                        <p className="stat-label">가?�중???�비</p>
-                        <h3 className="stat-value">{runningEquipments.length}?�</h3>
-                        <p className="stat-desc">?�체 {equipments.length}?�</p>
+                        <p className="stat-label">가동중인 설비</p>
+                        <h3 className="stat-value">{runningEquipments.length}대</h3>
+                        <p className="stat-desc">전체 {equipments.length}대</p>
                     </div>
                 </div>
 
@@ -72,9 +72,9 @@ const Dashboard = () => {
                         <AlertTriangle />
                     </div>
                     <div className="stat-content">
-                        <p className="stat-label">?�고 부�?/p>
-                        <h3 className="stat-value">{lowStockMaterials.length}�?/h3>
-                        <p className="stat-desc">?�전?�고 미달</p>
+                        <p className="stat-label">재고 부족</p>
+                        <h3 className="stat-value">{lowStockMaterials.length}건</h3>
+                        <p className="stat-desc">안전재고 미달</p>
                     </div>
                 </div>
 
@@ -83,21 +83,21 @@ const Dashboard = () => {
                         <AlertCircle />
                     </div>
                     <div className="stat-content">
-                        <p className="stat-label">금일 불량�?/p>
+                        <p className="stat-label">금일 불량률</p>
                         <h3 className="stat-value">{defectRate}%</h3>
                         <p className="stat-desc">{todayDefects.length}/{todayInspections.length} 불량</p>
                     </div>
                 </div>
             </div>
 
-            {/* 메인 ?�젯 그리??*/}
+            {/* 메인 위젯 그리드 */}
             <div className="widgets-grid">
-                {/* 1. ?�기�??�업 ?�황 */}
+                {/* 1. 호기별 작업 현황 */}
                 <div className="widget glass-panel production-status">
                     <div className="widget-header">
                         <h3>
                             <Activity size={20} />
-                            ?�기�??�업 ?�황
+                            호기별 작업 현황
                         </h3>
                         <span className="badge-live">LIVE</span>
                     </div>
@@ -116,18 +116,23 @@ const Dashboard = () => {
                                             key={eq.id}
                                             className="equipment-item clickable"
                                             onClick={() => {
-                                                console.log('=== 호기 클릭됨! ===', workOrder, eq);
-                                                const condition = injectionConditions.find(
-                                                    c => c.product_id === workOrder.product_id && c.equipment_id === eq.id
-                                                );
-                                                if (condition) {
-                                                    setSelectedCondition(condition);
-                                                    setIsConditionModalOpen(true);
-                                                } else {
-                                                    alert('?�당 ?�품-?�기 조합???�출조건???�록?��? ?�았?�니??');
-                                                }
-                                            }}
-                                            title="?�릭?�여 ?�출조건 보기"
+    
+    if (!workOrder) return;
+    
+    
+    
+    const condition = injectionConditions.find(
+        c => c.product_id === workOrder.product_id && c.equipment_id === eq.id
+    );
+    
+    if (condition) {
+        setSelectedCondition(condition);
+        setIsConditionModalOpen(true);
+    } else {
+        alert('해당 제품-호기 조합의 사출조건이 등록되지 않았습니다.');
+    }
+}}
+                                            title="클릭하여 사출조건 보기"
                                         >
                                             <div className="eq-header">
                                                 <div className="eq-name-section">
@@ -135,7 +140,7 @@ const Dashboard = () => {
                                                     <div>
                                                         <span className="eq-name">{eq.name}</span>
                                                         {product?.cycle_time && (
-                                                            <span className="eq-temp">{product.cycle_time}�??�이??/span>
+                                                            <span className="eq-temp">{product.cycle_time}초/사이클</span>
                                                         )}
                                                     </div>
                                                 </div>
@@ -143,7 +148,7 @@ const Dashboard = () => {
                                             </div>
                                             <div className="eq-product">
                                                 <Package size={16} />
-                                                <span className="product-name">{product?.name || '?�품 ?�보 ?�음'}</span>
+                                                <span className="product-name">{product?.name || '제품 정보 없음'}</span>
                                             </div>
                                             <div className="eq-progress">
                                                 <div className="progress-bar">
@@ -160,21 +165,21 @@ const Dashboard = () => {
                         ) : (
                             <div className="empty-state">
                                 <Activity size={48} color="#cbd5e1" />
-                                <p>?�재 가?�중???�비가 ?�습?�다</p>
+                                <p>현재 가동중인 설비가 없습니다</p>
                             </div>
                         )}
                     </div>
                 </div>
 
-                {/* 2. ?�전?�고 경고 */}
+                {/* 2. 안전재고 경고 */}
                 <div className="widget glass-panel low-stock-alert">
                     <div className="widget-header">
                         <h3>
                             <AlertTriangle size={20} />
-                            ?�전?�고 경고
+                            안전재고 경고
                         </h3>
                         {lowStockMaterials.length > 0 && (
-                            <span className="badge-alert">{lowStockMaterials.length}�?/span>
+                            <span className="badge-alert">{lowStockMaterials.length}건</span>
                         )}
                     </div>
                     <div className="widget-content">
@@ -190,20 +195,20 @@ const Dashboard = () => {
                                             <div className="alert-header">
                                                 <span className="material-name">{material.name}</span>
                                                 <span className={`severity-badge ${severity}`}>
-                                                    {severity === 'critical' ? '?�고 ?�음' : severity === 'high' ? '긴급' : '주의'}
+                                                    {severity === 'critical' ? '재고 없음' : severity === 'high' ? '긴급' : '주의'}
                                                 </span>
                                             </div>
                                             <div className="stock-info">
                                                 <div className="stock-numbers">
                                                     <span className="current-stock">
-                                                        ?�재: <strong>{material.stock.toLocaleString()}</strong> {material.unit}
+                                                        현재: <strong>{material.stock.toLocaleString()}</strong> {material.unit}
                                                     </span>
                                                     <span className="min-stock">
-                                                        ?�전: {material.min_stock.toLocaleString()} {material.unit}
+                                                        안전: {material.min_stock.toLocaleString()} {material.unit}
                                                     </span>
                                                 </div>
                                                 <div className="shortage">
-                                                    부족량: <strong className="shortage-value">??{shortage.toLocaleString()} {material.unit}</strong>
+                                                    부족량: <strong className="shortage-value">▼ {shortage.toLocaleString()} {material.unit}</strong>
                                                 </div>
                                             </div>
                                             <div className="stock-progress-bar">
@@ -223,18 +228,18 @@ const Dashboard = () => {
                         ) : (
                             <div className="empty-state success">
                                 <CheckCircle2 size={48} color="#10b981" />
-                                <p>모든 ?�재�??�고가 ?�전 ?��??�니??/p>
+                                <p>모든 원재료 재고가 안전 수준입니다</p>
                             </div>
                         )}
                     </div>
                 </div>
 
-                {/* 3. ?�일 불량 ?�황 */}
+                {/* 3. 일일 불량 현황 */}
                 <div className="widget glass-panel daily-defects">
                     <div className="widget-header">
                         <h3>
                             <XCircle size={20} />
-                            금일 불량 ?�황
+                            금일 불량 현황
                         </h3>
                         <span className="defect-rate-badge">
                             {defectRate}%
@@ -243,22 +248,22 @@ const Dashboard = () => {
                     <div className="widget-content">
                         <div className="defect-summary">
                             <div className="defect-stat">
-                                <span className="defect-label">�?검??/span>
-                                <span className="defect-value">{todayInspections.length}�?/span>
+                                <span className="defect-label">총 검사</span>
+                                <span className="defect-value">{todayInspections.length}건</span>
                             </div>
                             <div className="defect-stat danger">
                                 <span className="defect-label">불량</span>
-                                <span className="defect-value">{todayDefects.length}�?/span>
+                                <span className="defect-value">{todayDefects.length}건</span>
                             </div>
                             <div className="defect-stat success">
-                                <span className="defect-label">?�격</span>
-                                <span className="defect-value">{todayInspections.length - todayDefects.length}�?/span>
+                                <span className="defect-label">합격</span>
+                                <span className="defect-value">{todayInspections.length - todayDefects.length}건</span>
                             </div>
                         </div>
 
                         {todayDefects.length > 0 && (
                             <div className="defect-list">
-                                <div className="defect-list-header">불량 ?�세</div>
+                                <div className="defect-list-header">불량 상세</div>
                                 {todayDefects.map(defect => (
                                     <div key={defect.id} className="defect-item">
                                         <div className="defect-info">
@@ -267,9 +272,9 @@ const Dashboard = () => {
                                         </div>
                                         <div className="defect-action">
                                             {defect.action && defect.action !== '-' ? (
-                                                <span className="action-done">??조치?�료</span>
+                                                <span className="action-done">✓ 조치완료</span>
                                             ) : (
-                                                <span className="action-pending">조치 ?�요</span>
+                                                <span className="action-pending">조치 필요</span>
                                             )}
                                         </div>
                                     </div>
@@ -280,14 +285,14 @@ const Dashboard = () => {
                         {todayDefects.length === 0 && todayInspections.length > 0 && (
                             <div className="empty-state success">
                                 <CheckCircle2 size={48} color="#10b981" />
-                                <p>?�늘?� 불량??발생?��? ?�았?�니??</p>
+                                <p>오늘은 불량이 발생하지 않았습니다!</p>
                             </div>
                         )}
 
                         {todayInspections.length === 0 && (
                             <div className="empty-state">
                                 <XCircle size={48} color="#cbd5e1" />
-                                <p>?�늘 검??기록???�습?�다</p>
+                                <p>오늘 검사 기록이 없습니다</p>
                             </div>
                         )}
                     </div>
@@ -301,7 +306,7 @@ const Dashboard = () => {
                             출고 중인 금형
                         </h3>
                         {outgoingMolds.length > 0 && (
-                            <span className="badge-alert">{outgoingMolds.length}�?/span>
+                            <span className="badge-alert">{outgoingMolds.length}개</span>
                         )}
                     </div>
                     <div className="widget-content">
@@ -317,11 +322,11 @@ const Dashboard = () => {
                                         <div key={movement.id} className={`outgoing-item ${isOverdue ? 'overdue' : ''}`}>
                                             <div className="outgoing-header">
                                                 <div className="mold-name-section">
-                                                    <span className="mold-name">{mold?.name || '?????�는 금형'}</span>
+                                                    <span className="mold-name">{mold?.name || '알 수 없는 금형'}</span>
                                                     <span className="mold-code">{mold?.code}</span>
                                                 </div>
                                                 {isOverdue && (
-                                                    <span className="overdue-badge">?�️ 지??/span>
+                                                    <span className="overdue-badge">⚠️ 지연</span>
                                                 )}
                                             </div>
                                             <div className="outgoing-details">
@@ -330,12 +335,12 @@ const Dashboard = () => {
                                                     <span className="detail-value">{movement.destination || movement.repair_vendor || '-'}</span>
                                                 </div>
                                                 <div className="detail-row">
-                                                    <span className="detail-label">출고??</span>
-                                                    <span className="detail-value">{movement.outgoing_date} ({daysOut}??경과)</span>
+                                                    <span className="detail-label">출고일:</span>
+                                                    <span className="detail-value">{movement.outgoing_date} ({daysOut}일 경과)</span>
                                                 </div>
                                                 {movement.expected_return_date && (
                                                     <div className="detail-row">
-                                                        <span className="detail-label">?�상 반입:</span>
+                                                        <span className="detail-label">예상 반입:</span>
                                                         <span className={`detail-value ${isOverdue ? 'text-danger' : ''}`}>
                                                             {movement.expected_return_date}
                                                         </span>
@@ -349,13 +354,77 @@ const Dashboard = () => {
                         ) : (
                             <div className="empty-state success">
                                 <CheckCircle2 size={48} color="#10b981" />
-                                <p>모든 금형???�상 보�? 중입?�다</p>
+                                <p>모든 금형이 정상 보관 중입니다</p>
                             </div>
                         )}
                     </div>
                 </div>
             </div>
 
+            {/* 사출조건 모달 */}
+<Modal
+    title="사출조건 정보"
+    isOpen={isConditionModalOpen}
+    onClose={() => setIsConditionModalOpen(false)}
+>
+    {selectedCondition && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* 온도 설정 */}
+            <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
+                <h4 style={{ marginBottom: '0.75rem', fontWeight: 700, color: '#1e293b' }}>🌡️ 온도 설정</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', fontSize: '0.9rem' }}>
+                    {selectedCondition.hopper_temp && <div><span style={{ color: '#64748b' }}>호퍼:</span> <strong>{selectedCondition.hopper_temp}°C</strong></div>}
+                    {selectedCondition.cylinder_temp_zone1 && <div><span style={{ color: '#64748b' }}>실린더1:</span> <strong>{selectedCondition.cylinder_temp_zone1}°C</strong></div>}
+                    {selectedCondition.cylinder_temp_zone2 && <div><span style={{ color: '#64748b' }}>실린더2:</span> <strong>{selectedCondition.cylinder_temp_zone2}°C</strong></div>}
+                    {selectedCondition.cylinder_temp_zone3 && <div><span style={{ color: '#64748b' }}>실린더3:</span> <strong>{selectedCondition.cylinder_temp_zone3}°C</strong></div>}
+                    {selectedCondition.cylinder_temp_zone4 && <div><span style={{ color: '#64748b' }}>실린더4:</span> <strong>{selectedCondition.cylinder_temp_zone4}°C</strong></div>}
+                    {selectedCondition.nozzle_temp && <div><span style={{ color: '#64748b' }}>노즐:</span> <strong>{selectedCondition.nozzle_temp}°C</strong></div>}
+                    {selectedCondition.mold_temp_fixed && <div><span style={{ color: '#64748b' }}>금형(고정):</span> <strong>{selectedCondition.mold_temp_fixed}°C</strong></div>}
+                    {selectedCondition.mold_temp_moving && <div><span style={{ color: '#64748b' }}>금형(가동):</span> <strong>{selectedCondition.mold_temp_moving}°C</strong></div>}
+                </div>
+            </div>
+
+            {/* 사출 조건 */}
+            <div style={{ background: '#f0fdf4', padding: '1rem', borderRadius: '8px' }}>
+                <h4 style={{ marginBottom: '0.75rem', fontWeight: 700, color: '#166534' }}>💉 사출 조건</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', fontSize: '0.9rem' }}>
+                    {selectedCondition.injection_pressure && <div><span style={{ color: '#64748b' }}>사출압력:</span> <strong>{selectedCondition.injection_pressure} kgf/cm²</strong></div>}
+                    {selectedCondition.injection_speed && <div><span style={{ color: '#64748b' }}>사출속도:</span> <strong>{selectedCondition.injection_speed} mm/s</strong></div>}
+                    {selectedCondition.injection_time && <div><span style={{ color: '#64748b' }}>사출시간:</span> <strong>{selectedCondition.injection_time}초</strong></div>}
+                    {selectedCondition.dosing_position_1 && <div><span style={{ color: '#64748b' }}>계량위치1:</span> <strong>{selectedCondition.dosing_position_1}mm</strong></div>}
+                    {selectedCondition.injection_pressure_2 && <div><span style={{ color: '#64748b' }}>사출압력2:</span> <strong>{selectedCondition.injection_pressure_2} kgf/cm²</strong></div>}
+                    {selectedCondition.injection_speed_2 && <div><span style={{ color: '#64748b' }}>사출속도2:</span> <strong>{selectedCondition.injection_speed_2} mm/s</strong></div>}
+                    {selectedCondition.injection_time_2 && <div><span style={{ color: '#64748b' }}>사출시간2:</span> <strong>{selectedCondition.injection_time_2}초</strong></div>}
+                    {selectedCondition.dosing_position_2 && <div><span style={{ color: '#64748b' }}>계량위치2:</span> <strong>{selectedCondition.dosing_position_2}mm</strong></div>}
+                </div>
+            </div>
+
+            {/* 보압 및 기타 */}
+            <div style={{ background: '#eff6ff', padding: '1rem', borderRadius: '8px' }}>
+                <h4 style={{ marginBottom: '0.75rem', fontWeight: 700, color: '#1e40af' }}>⚙️ 보압 및 기타</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', fontSize: '0.9rem' }}>
+                    {selectedCondition.holding_pressure && <div><span style={{ color: '#64748b' }}>보압:</span> <strong>{selectedCondition.holding_pressure} kgf/cm²</strong></div>}
+                    {selectedCondition.holding_speed && <div><span style={{ color: '#64748b' }}>보압속도:</span> <strong>{selectedCondition.holding_speed} mm/s</strong></div>}
+                    {selectedCondition.holding_time && <div><span style={{ color: '#64748b' }}>보압시간:</span> <strong>{selectedCondition.holding_time}초</strong></div>}
+                    {selectedCondition.back_pressure && <div><span style={{ color: '#64748b' }}>배압:</span> <strong>{selectedCondition.back_pressure} kgf/cm²</strong></div>}
+                    {selectedCondition.cooling_time && <div><span style={{ color: '#64748b' }}>냉각시간:</span> <strong>{selectedCondition.cooling_time}초</strong></div>}
+                    {selectedCondition.cycle_time && <div><span style={{ color: '#64748b' }}>사이클타임:</span> <strong>{selectedCondition.cycle_time}초</strong></div>}
+                    {selectedCondition.shot_size && <div><span style={{ color: '#64748b' }}>샷크기:</span> <strong>{selectedCondition.shot_size}mm</strong></div>}
+                    {selectedCondition.screw_rpm && <div><span style={{ color: '#64748b' }}>스크류RPM:</span> <strong>{selectedCondition.screw_rpm}</strong></div>}
+                    {selectedCondition.cushion && <div><span style={{ color: '#64748b' }}>쿠션:</span> <strong>{selectedCondition.cushion}mm</strong></div>}
+                </div>
+            </div>
+
+            {/* 비고 */}
+            {selectedCondition.notes && (
+                <div style={{ padding: '1rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                    <h4 style={{ marginBottom: '0.5rem', fontWeight: 700 }}>📝 비고</h4>
+                    <p style={{ fontSize: '0.95rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{selectedCondition.notes}</p>
+                </div>
+            )}
+        </div>
+    )}
+</Modal>
             <style>{`
                 .dashboard-container {
                     padding: 0 1.5rem;
@@ -385,7 +454,7 @@ const Dashboard = () => {
                     font-weight: 500;
                 }
 
-                /* ?�계 카드 */
+                /* 통계 카드 */
                 .stats-grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -473,7 +542,7 @@ const Dashboard = () => {
                     color: var(--text-muted);
                 }
 
-                /* ?�젯 그리??*/
+                /* 위젯 그리드 */
                 .widgets-grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -538,7 +607,7 @@ const Dashboard = () => {
                     font-weight: 800;
                 }
 
-                /* ?�기�??�업 ?�황 */
+                /* 호기별 작업 현황 */
                 .equipment-list {
                     display: flex;
                     flex-direction: column;
@@ -553,9 +622,6 @@ const Dashboard = () => {
                     transition: all 0.2s;
                 }
 
-                .equipment-item.clickable * {
-    pointer-events: none;
-}
                 .equipment-item:hover {
                     background: white;
                     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
@@ -648,7 +714,7 @@ const Dashboard = () => {
                     font-weight: 600;
                 }
 
-                /* ?�전?�고 경고 */
+                /* 안전재고 경고 */
                 .stock-alert-list {
                     display: flex;
                     flex-direction: column;
@@ -756,7 +822,7 @@ const Dashboard = () => {
                     transition: width 0.3s;
                 }
 
-                /* ?�일 불량 ?�황 */
+                /* 일일 불량 현황 */
                 .defect-summary {
                     display: grid;
                     grid-template-columns: repeat(3, 1fr);
@@ -891,7 +957,7 @@ const Dashboard = () => {
                     color: #16a34a;
                 }
 
-                /* 출고 금형 ?�젯 */
+                /* 출고 금형 위젯 */
                 .outgoing-list {
                     display: flex;
                     flex-direction: column;
@@ -977,47 +1043,8 @@ const Dashboard = () => {
                     font-weight: 700;
                 }
             `}</style>
-            {/* 사출조건 모달 */}
-<Modal
-    title="사출조건 정보"
-    isOpen={isConditionModalOpen}
-    onClose={() => setIsConditionModalOpen(false)}
-    width="800px"
->
-    {selectedCondition && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
-                <h4 style={{ marginBottom: '0.75rem', fontWeight: 700 }}>사출 조건</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
-                    {selectedCondition.injection_pressure && (
-                        <div>
-                            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>사출압력</div>
-                            <div style={{ fontWeight: 700, color: '#4f46e5' }}>{selectedCondition.injection_pressure} kgf/cm²</div>
-                        </div>
-                    )}
-                    {selectedCondition.cycle_time && (
-                        <div>
-                            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>사이클 타임</div>
-                            <div style={{ fontWeight: 700, color: '#4f46e5' }}>{selectedCondition.cycle_time}초</div>
-                        </div>
-                    )}
-                </div>
-            </div>
-            {selectedCondition.notes && (
-                <div style={{ background: 'white', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                    <h4 style={{ marginBottom: '0.5rem', fontWeight: 700 }}>비고</h4>
-                    <div style={{ fontSize: '0.95rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{selectedCondition.notes}</div>
-                </div>
-            )}
-        </div>
-    )}
-</Modal>
-        </div>
-
-            
         </div>
     );
 };
 
 export default Dashboard;
-

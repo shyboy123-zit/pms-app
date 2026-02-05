@@ -13,8 +13,28 @@ const DailyProduction = () => {
     const [editQuantity, setEditQuantity] = useState(0);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
+    // 날짜 필터 상태
+    const [filterStartDate, setFilterStartDate] = useState('');
+    const [filterEndDate, setFilterEndDate] = useState('');
+    const [showAllOrders, setShowAllOrders] = useState(false);
+
     // 진행중인 작업지시만 필터
     const activeOrders = workOrders.filter(wo => wo.status === '진행중');
+
+    // 필터링된 작업지시
+    const filteredOrders = (showAllOrders ? workOrders : activeOrders).filter(wo => {
+        if (!filterStartDate && !filterEndDate) return true;
+
+        const productionDate = wo.last_production_date || wo.updated_at;
+        if (!productionDate) return false;
+
+        const dateStr = new Date(productionDate).toISOString().split('T')[0];
+
+        if (filterStartDate && dateStr < filterStartDate) return false;
+        if (filterEndDate && dateStr > filterEndDate) return false;
+
+        return true;
+    });
 
     const columns = [
         {
@@ -196,10 +216,55 @@ const DailyProduction = () => {
                 </div>
             </div>
 
+            {/* 날짜 필터 */}
+            <div className="filter-row">
+                <div className="filter-group">
+                    <label className="filter-label">시작일</label>
+                    <input
+                        type="date"
+                        className="filter-date"
+                        value={filterStartDate}
+                        onChange={(e) => setFilterStartDate(e.target.value)}
+                    />
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">종료일</label>
+                    <input
+                        type="date"
+                        className="filter-date"
+                        value={filterEndDate}
+                        onChange={(e) => setFilterEndDate(e.target.value)}
+                    />
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <input
+                            type="checkbox"
+                            checked={showAllOrders}
+                            onChange={(e) => setShowAllOrders(e.target.checked)}
+                            style={{ width: 'auto', margin: 0 }}
+                        />
+                        완료된 작업 포함
+                    </label>
+                </div>
+                {(filterStartDate || filterEndDate) && (
+                    <button
+                        className="btn-cancel"
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                        onClick={() => {
+                            setFilterStartDate('');
+                            setFilterEndDate('');
+                        }}
+                    >
+                        날짜 초기화
+                    </button>
+                )}
+            </div>
+
             <div className="stats-row">
                 <div className="glass-panel simple-stat">
-                    <span className="label">진행중 작업</span>
-                    <span className="value">{activeOrders.length}건</span>
+                    <span className="label">{showAllOrders ? '전체 작업' : '진행중 작업'}</span>
+                    <span className="value">{filteredOrders.length}건</span>
                 </div>
                 <div className="glass-panel simple-stat">
                     <span className="label">완료 임박</span>
@@ -222,7 +287,11 @@ const DailyProduction = () => {
 
             <Table
                 columns={columns}
-                data={tableData}
+                data={filteredOrders.map(order => ({
+                    ...order,
+                    equipment_name: getEquipmentName(order.equipment_id),
+                    product_name: getProductName(order.product_id)
+                }))}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button
@@ -404,6 +473,41 @@ const DailyProduction = () => {
                 @keyframes blink-warning {
                     0%, 100% { opacity: 1; }
                     50% { opacity: 0.5; }
+                }
+                
+                .filter-row {
+                    display: flex;
+                    gap: 1rem;
+                    margin-bottom: 1.5rem;
+                    align-items: flex-end;
+                    flex-wrap: wrap;
+                }
+                
+                .filter-group {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                }
+                
+                .filter-label {
+                    font-size: 0.9rem;
+                    font-weight: 500;
+                    color: var(--text-secondary);
+                }
+                
+                .filter-date {
+                    padding: 0.6rem 1rem;
+                    border: 1px solid var(--border);
+                    border-radius: 6px;
+                    background: white;
+                    font-size: 0.95rem;
+                    min-width: 160px;
+                    cursor: pointer;
+                }
+                
+                .filter-date:focus {
+                    outline: none;
+                    border-color: var(--primary);
                 }
             `}</style>
         </div>

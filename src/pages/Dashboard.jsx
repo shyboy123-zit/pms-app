@@ -116,6 +116,7 @@ const Dashboard = () => {
                                             key={eq.id}
                                             className="equipment-item clickable"
                                             onClick={() => {
+                                                console.log('=== 호기 클릭됨! ===', workOrder, eq);
                                                 const condition = injectionConditions.find(
                                                     c => c.product_id === workOrder.product_id && c.equipment_id === eq.id
                                                 );

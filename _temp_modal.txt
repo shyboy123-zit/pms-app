@@ -1,0 +1,57 @@
+// 사출조건 모달 JSX
+{/* 사출조건 모달 */}
+<Modal
+    title="사출조건 정보"
+    isOpen={isConditionModalOpen}
+    onClose={() => setIsConditionModalOpen(false)}
+    width="800px"
+>
+    {selectedCondition && (
+        <div className="injection-condition-modal">
+            <div className="condition-section">
+                <h4 className="condition-section-title">🌡️ 온도 (°C)</h4>
+                <div className="condition-grid">
+                    {selectedCondition.hopper_temp && (
+                        <div className="condition-item">
+                            <span className="condition-label">호퍼 온도</span>
+                            <span className="condition-value">{selectedCondition.hopper_temp}°C</span>
+                        </div>
+                    )}
+                    {selectedCondition.nozzle_temp && (
+                        <div className="condition-item">
+                            <span className="condition-label">노즐 온도</span>
+                            <span className="condition-value">{selectedCondition.nozzle_temp}°C</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="condition-section">
+                <h4 className="condition-section-title">1️⃣ 1차 사출</h4>
+                <div className="condition-grid">
+                    {selectedCondition.injection_pressure && (
+                        <div className="condition-item">
+                            <span className="condition-label">압력</span>
+                            <span className="condition-value">{selectedCondition.injection_pressure} kgf/cm²</span>
+                        </div>
+                    )}
+                    {selectedCondition.injection_speed && (
+                        <div className="condition-item">
+                            <span className="condition-label">속도</span>
+                            <span className="condition-value">{selectedCondition.injection_speed} mm/s</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {selectedCondition.notes && (
+                <div className="condition-section">
+                    <h4 className="condition-section-title">📝 비고</h4>
+                    <div className="condition-notes">
+                        {selectedCondition.notes}
+                    </div>
+                </div>
+            )}
+        </div>
+    )}
+</Modal>

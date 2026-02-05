@@ -98,7 +98,31 @@ const DailyProduction = () => {
             accessor: 'quantities',
             render: (row) => `${row.produced_quantity} / ${row.target_quantity}`
         },
+        {
+            header: '원재료 소모량',
+            accessor: 'material_consumption',
+            render: (row) => {
+                const product = products.find(p => p.id === row.product_id);
+                if (!product) return '-';
+
+                const shotWeight = (product.product_weight || 0) + (product.runner_weight || 0);
+                const totalWeightG = shotWeight * (row.produced_quantity || 0);
+                const totalWeightKg = totalWeightG / 1000;
+
+                if (totalWeightKg === 0) return '-';
+
+                return (
+                    <span style={{
+                        fontWeight: 600,
+                        color: totalWeightKg >= 1 ? '#059669' : '#64748b'
+                    }} title={`제품: ${product.product_weight || 0}g, 런너: ${product.runner_weight || 0}g, 생산: ${row.produced_quantity}개`}>
+                        {totalWeightKg.toFixed(2)} kg
+                    </span>
+                );
+            }
+        },
         { header: '지시일', accessor: 'order_date' }
+
     ];
 
     // 오늘 업데이트 확인 함수

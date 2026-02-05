@@ -257,7 +257,6 @@ const InjectionConditions = () => {
                                     className="form-input"
                                     value={formData.equipment_id}
                                     onChange={(e) => updateField('equipment_id', e.target.value)}
-                                    disabled={editingCondition}
                                 >
                                     <option value="">호기 선택</option>
                                     {equipments && equipments.map(eq => (

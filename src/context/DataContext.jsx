@@ -489,6 +489,10 @@ export const DataProvider = ({ children }) => {
             model: item.model || '',
             unit: item.unit || 'EA',
             standard_cycle_time: item.standard_cycle_time || 30,
+            product_weight: item.product_weight || 0,
+            runner_weight: item.runner_weight || 0,
+            cavity_count: item.cavity_count || 1,
+            material_id: item.material_id || null,
             status: item.status || '생산중'
         }]).select();
 

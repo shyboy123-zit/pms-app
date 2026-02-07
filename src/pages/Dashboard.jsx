@@ -9,6 +9,7 @@ import {
     AlertCircle,
     CheckCircle2,
     XCircle,
+    Droplets,
     FileText,
     Image as ImageIcon
 } from 'lucide-react';
@@ -54,6 +55,47 @@ const Dashboard = () => {
 
     // 4. 출고 중인 금형
     const outgoingMolds = moldMovement.filter(m => m.status === '출고중');
+
+    // 5. 일일 원재료 소모 현황 (원재료별 그룹핑)
+    const materialConsumption = (() => {
+        const activeWOs = workOrders.filter(wo => wo.status === '진행중');
+        const consumptionMap = {};
+
+        activeWOs.forEach(wo => {
+            const product = products.find(p => p.id === wo.product_id);
+            if (!product || !product.material_id) return;
+
+            const material = materials.find(m => m.id === product.material_id);
+            if (!material) return;
+
+            const shotWeight = (product.product_weight || 0) + (product.runner_weight || 0);
+            const consumedKg = (shotWeight * (wo.produced_quantity || 0)) / 1000;
+
+            if (!consumptionMap[material.id]) {
+                consumptionMap[material.id] = {
+                    id: material.id,
+                    name: material.name,
+                    stock: material.stock || 0,
+                    minStock: material.min_stock || 0,
+                    unit: material.unit || 'kg',
+                    totalConsumedKg: 0,
+                    productNames: []
+                };
+            }
+
+            consumptionMap[material.id].totalConsumedKg += consumedKg;
+            const pName = product.name;
+            if (!consumptionMap[material.id].productNames.includes(pName)) {
+                consumptionMap[material.id].productNames.push(pName);
+            }
+        });
+
+        return Object.values(consumptionMap).sort((a, b) => {
+            const rateA = a.stock > 0 ? (a.totalConsumedKg / a.stock) * 100 : 999;
+            const rateB = b.stock > 0 ? (b.totalConsumedKg / b.stock) * 100 : 999;
+            return rateB - rateA; // 소진율 높은 순
+        });
+    })();
 
     return (
         <div className="dashboard-container">
@@ -383,6 +425,69 @@ const Dashboard = () => {
                             <div className="empty-state success">
                                 <CheckCircle2 size={48} color="#10b981" />
                                 <p>모든 금형이 정상 보관 중입니다</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* 5. 일일 원재료 소모 현황 */}
+                <div className="widget glass-panel material-consumption">
+                    <div className="widget-header">
+                        <h3>
+                            <Droplets size={20} />
+                            일일 원재료 소모 현황
+                        </h3>
+                        <span className="badge-live">TODAY</span>
+                    </div>
+                    <div className="widget-content">
+                        {materialConsumption.length > 0 ? (
+                            <div className="mc-list">
+                                {materialConsumption.map(mc => {
+                                    const usageRate = mc.stock > 0 ? (mc.totalConsumedKg / mc.stock) * 100 : 0;
+                                    const severity = usageRate >= 50 ? 'critical' : usageRate >= 20 ? 'warning' : 'safe';
+                                    const remainKg = Math.max(0, mc.stock - mc.totalConsumedKg);
+                                    return (
+                                        <div key={mc.id} className={`mc-item ${severity}`}>
+                                            <div className="mc-header">
+                                                <span className="mc-name">{mc.name}</span>
+                                                <span className={`mc-severity-badge ${severity}`}>
+                                                    {severity === 'critical' ? '⚠️ 주의' : severity === 'warning' ? '🟡 관심' : '🟢 양호'}
+                                                </span>
+                                            </div>
+                                            <div className="mc-bar-wrapper">
+                                                <div className="mc-bar">
+                                                    <div className={`mc-bar-fill ${severity}`} style={{ width: `${Math.min(usageRate, 100)}%` }}></div>
+                                                </div>
+                                                <span className="mc-rate">{usageRate.toFixed(1)}%</span>
+                                            </div>
+                                            <div className="mc-details">
+                                                <div className="mc-detail">
+                                                    <span className="mc-detail-label">소모량</span>
+                                                    <span className="mc-detail-value consumed">{mc.totalConsumedKg.toFixed(1)} kg</span>
+                                                </div>
+                                                <div className="mc-detail">
+                                                    <span className="mc-detail-label">잔여 재고</span>
+                                                    <span className="mc-detail-value">{remainKg.toFixed(1)} kg</span>
+                                                </div>
+                                                <div className="mc-detail">
+                                                    <span className="mc-detail-label">현재 재고</span>
+                                                    <span className="mc-detail-value">{mc.stock.toLocaleString()} {mc.unit}</span>
+                                                </div>
+                                            </div>
+                                            <div className="mc-products">
+                                                {mc.productNames.map((pn, i) => (
+                                                    <span key={i} className="mc-product-tag">{pn}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="empty-state">
+                                <Droplets size={48} color="#cbd5e1" />
+                                <p>원재료 소모 데이터가 없습니다</p>
+                                <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>제품에 원재료를 연결하면 자동 표시됩니다</p>
                             </div>
                         )}
                     </div>
@@ -1069,6 +1174,52 @@ const Dashboard = () => {
                 .detail-value.text-danger {
                     color: #dc2626;
                     font-weight: 700;
+                }
+
+                /* 원재료 소모 위젯 */
+                .mc-list { display: flex; flex-direction: column; gap: 1rem; }
+
+                .mc-item {
+                    background: white;
+                    padding: 1rem;
+                    border-radius: 10px;
+                    border: 1px solid #e2e8f0;
+                    transition: all 0.2s;
+                }
+                .mc-item:hover { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08); }
+                .mc-item.critical { border-left: 4px solid #dc2626; background: #fef8f8; }
+                .mc-item.warning { border-left: 4px solid #f59e0b; background: #fffdf5; }
+                .mc-item.safe { border-left: 4px solid #10b981; }
+
+                .mc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+                .mc-name { font-weight: 700; font-size: 1rem; color: #1e293b; }
+                .mc-severity-badge { font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+                .mc-severity-badge.critical { background: #fee2e2; color: #991b1b; }
+                .mc-severity-badge.warning { background: #fef3c7; color: #92400e; }
+                .mc-severity-badge.safe { background: #d1fae5; color: #065f46; }
+
+                .mc-bar-wrapper { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+                .mc-bar { flex: 1; height: 10px; background: #e5e7eb; border-radius: 5px; overflow: hidden; }
+                .mc-bar-fill { height: 100%; border-radius: 5px; transition: width 0.5s ease; }
+                .mc-bar-fill.safe { background: linear-gradient(90deg, #10b981, #34d399); }
+                .mc-bar-fill.warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+                .mc-bar-fill.critical { background: linear-gradient(90deg, #dc2626, #ef4444); }
+                .mc-rate { font-size: 0.85rem; font-weight: 800; min-width: 48px; text-align: right; }
+
+                .mc-details { display: flex; gap: 1rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+                .mc-detail { display: flex; flex-direction: column; }
+                .mc-detail-label { font-size: 0.7rem; color: #94a3b8; font-weight: 500; }
+                .mc-detail-value { font-size: 0.9rem; font-weight: 700; color: #1e293b; }
+                .mc-detail-value.consumed { color: #dc2626; }
+
+                .mc-products { display: flex; gap: 4px; flex-wrap: wrap; }
+                .mc-product-tag {
+                    font-size: 0.7rem;
+                    padding: 2px 8px;
+                    background: #eff6ff;
+                    color: #1d4ed8;
+                    border-radius: 10px;
+                    font-weight: 600;
                 }
                 /* 불량 사진 썸네일 */
                 .defect-photos {

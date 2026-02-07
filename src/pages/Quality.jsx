@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon, FileText, Download, X } from 'lucide-react';
+import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon, FileText, Download, X, Calendar, Filter } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import html2canvas from 'html2canvas';
@@ -40,6 +40,29 @@ const Quality = () => {
         urgency: '일반',
         inspectionData: null
     });
+
+    // 날짜 필터 상태
+    const [filterStartDate, setFilterStartDate] = useState(new Date().toISOString().split('T')[0]);
+    const [filterEndDate, setFilterEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const [filterResult, setFilterResult] = useState('전체'); // 전체, OK, NG
+
+    // 필터링된 검사 데이터
+    const filteredInspections = useMemo(() => {
+        return (inspections || []).filter(i => {
+            const dateMatch = i.date >= filterStartDate && i.date <= filterEndDate;
+            const resultMatch = filterResult === '전체' || i.result === filterResult;
+            return dateMatch && resultMatch;
+        });
+    }, [inspections, filterStartDate, filterEndDate, filterResult]);
+
+    // 필터된 데이터 통계
+    const stats = useMemo(() => {
+        const total = filteredInspections.length;
+        const ng = filteredInspections.filter(i => i.result === 'NG').length;
+        const ok = total - ng;
+        const rate = total > 0 ? ((ng / total) * 100).toFixed(1) : '0.0';
+        return { total, ng, ok, rate };
+    }, [filteredInspections]);
 
     // image_url 파싱 (단일 URL 또는 JSON 배열 호환)
     const parseImageUrls = (imageUrl) => {
@@ -267,7 +290,42 @@ const Quality = () => {
                 </button>
             </div>
 
-            <Table columns={columns} data={inspections || []} />
+            {/* 날짜 필터 */}
+            <div className="quality-filter-section">
+                <div className="filter-row">
+                    <div className="filter-dates">
+                        <Calendar size={16} color="#64748b" />
+                        <input type="date" className="form-input filter-date-input" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} />
+                        <span className="filter-separator">~</span>
+                        <input type="date" className="form-input filter-date-input" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} />
+                    </div>
+                    <div className="filter-buttons">
+                        <button className={`filter-chip ${filterResult === '전체' ? 'active' : ''}`} onClick={() => setFilterResult('전체')}>전체</button>
+                        <button className={`filter-chip ok ${filterResult === 'OK' ? 'active' : ''}`} onClick={() => setFilterResult('OK')}>OK</button>
+                        <button className={`filter-chip ng ${filterResult === 'NG' ? 'active' : ''}`} onClick={() => setFilterResult('NG')}>NG</button>
+                    </div>
+                </div>
+                <div className="quality-stats-row">
+                    <div className="quality-stat">
+                        <span className="quality-stat-label">총 검사</span>
+                        <span className="quality-stat-value">{stats.total}건</span>
+                    </div>
+                    <div className="quality-stat ok">
+                        <span className="quality-stat-label">합격 (OK)</span>
+                        <span className="quality-stat-value">{stats.ok}건</span>
+                    </div>
+                    <div className="quality-stat ng">
+                        <span className="quality-stat-label">불량 (NG)</span>
+                        <span className="quality-stat-value">{stats.ng}건</span>
+                    </div>
+                    <div className={`quality-stat rate ${stats.ng > 0 ? 'danger' : 'safe'}`}>
+                        <span className="quality-stat-label">불량률</span>
+                        <span className="quality-stat-value">{stats.rate}%</span>
+                    </div>
+                </div>
+            </div>
+
+            <Table columns={columns} data={filteredInspections} />
 
             {/* 이미지 뷰어 모달 */}
             <Modal title="첨부 사진" isOpen={isViewerOpen} onClose={() => setIsViewerOpen(false)}>
@@ -591,6 +649,121 @@ const Quality = () => {
                 
                 @keyframes blink { 50% { opacity: 0.5; } }
                 .blink-red { animation: blink 1.5s infinite; }
+
+                /* 날짜 필터 섹션 */
+                .quality-filter-section {
+                    background: rgba(255,255,255,0.6);
+                    backdrop-filter: blur(10px);
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
+                    padding: 1rem 1.25rem;
+                    margin-bottom: 1.25rem;
+                }
+
+                .filter-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 1rem;
+                    flex-wrap: wrap;
+                    margin-bottom: 0.75rem;
+                }
+
+                .filter-dates {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+
+                .filter-date-input {
+                    padding: 0.4rem 0.6rem !important;
+                    font-size: 0.85rem !important;
+                    max-width: 150px;
+                }
+
+                .filter-separator {
+                    color: #94a3b8;
+                    font-weight: 600;
+                }
+
+                .filter-buttons {
+                    display: flex;
+                    gap: 0.4rem;
+                }
+
+                .filter-chip {
+                    padding: 0.35rem 0.9rem;
+                    border-radius: 20px;
+                    border: 1px solid #e2e8f0;
+                    background: white;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    color: #64748b;
+                }
+
+                .filter-chip.active {
+                    background: #4f46e5;
+                    color: white;
+                    border-color: #4f46e5;
+                }
+
+                .filter-chip.ok.active {
+                    background: #10b981;
+                    border-color: #10b981;
+                }
+
+                .filter-chip.ng.active {
+                    background: #ef4444;
+                    border-color: #ef4444;
+                }
+
+                .quality-stats-row {
+                    display: grid;
+                    grid-template-columns: repeat(4, 1fr);
+                    gap: 0.75rem;
+                }
+
+                .quality-stat {
+                    text-align: center;
+                    padding: 0.6rem;
+                    border-radius: 8px;
+                    background: #f8fafc;
+                    border: 1px solid #e2e8f0;
+                }
+
+                .quality-stat.ok { background: #f0fdf4; border-color: #bbf7d0; }
+                .quality-stat.ng { background: #fef2f2; border-color: #fecaca; }
+                .quality-stat.rate.danger { background: #fef2f2; border-color: #fca5a5; }
+                .quality-stat.rate.safe { background: #f0fdf4; border-color: #86efac; }
+
+                .quality-stat-label {
+                    display: block;
+                    font-size: 0.72rem;
+                    font-weight: 500;
+                    color: #94a3b8;
+                    margin-bottom: 2px;
+                }
+
+                .quality-stat-value {
+                    display: block;
+                    font-size: 1.1rem;
+                    font-weight: 800;
+                    color: #1e293b;
+                }
+
+                .quality-stat.ok .quality-stat-value { color: #16a34a; }
+                .quality-stat.ng .quality-stat-value { color: #dc2626; }
+                .quality-stat.rate.danger .quality-stat-value { color: #dc2626; }
+                .quality-stat.rate.safe .quality-stat-value { color: #16a34a; }
+
+                @media (max-width: 600px) {
+                    .filter-row { flex-direction: column; align-items: stretch; }
+                    .filter-dates { justify-content: center; }
+                    .filter-buttons { justify-content: center; }
+                    .quality-stats-row { grid-template-columns: repeat(2, 1fr); }
+                }
             `}</style>
         </div>
     );

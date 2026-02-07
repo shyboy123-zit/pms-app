@@ -5,7 +5,7 @@ import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon
 import { useData } from '../context/DataContext';
 
 const Quality = () => {
-    const { inspections, employees, addInspection, uploadImage, addNotification } = useData();
+    const { inspections, employees, products, addInspection, uploadImage, addNotification } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Initial state for new item including file
@@ -23,7 +23,7 @@ const Quality = () => {
     const columns = [
         { header: '검사ID', accessor: 'qc_code' },
         { header: '검사일자', accessor: 'date' },
-        { header: '품목명', accessor: 'product' },
+        { header: '제품명', accessor: 'product' },
         { header: '검사항목', accessor: 'check_item' }, // Mapped to DB check_item
         {
             header: '판정', accessor: 'result', render: (row) => (
@@ -59,7 +59,7 @@ const Quality = () => {
     ];
 
     const handleSave = async () => {
-        if (!newItem.product) return alert('품목명을 입력하세요.');
+        if (!newItem.product) return alert('제품명을 선택하세요.');
         if (newItem.result === 'NG' && !newItem.ngType) return alert('NG 판정 시 불량유형은 필수입니다.');
 
         setIsUploading(true);
@@ -135,8 +135,13 @@ const Quality = () => {
                     <input type="date" className="form-input" value={newItem.date} onChange={(e) => setNewItem({ ...newItem, date: e.target.value })} />
                 </div>
                 <div className="form-group">
-                    <label className="form-label">품목명</label>
-                    <input className="form-input" value={newItem.product} onChange={(e) => setNewItem({ ...newItem, product: e.target.value })} placeholder="예: Bumper Case A" />
+                    <label className="form-label">제품명</label>
+                    <select className="form-input" value={newItem.product} onChange={(e) => setNewItem({ ...newItem, product: e.target.value })}>
+                        <option value="">제품을 선택하세요</option>
+                        {products.map(p => (
+                            <option key={p.id} value={p.name}>{p.name}</option>
+                        ))}
+                    </select>
                 </div>
                 <div className="form-group">
                     <label className="form-label">검사 항목</label>

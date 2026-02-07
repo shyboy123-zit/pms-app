@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon, FileText, Download } from 'lucide-react';
+import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon, FileText, Download, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import html2canvas from 'html2canvas';
@@ -14,6 +14,9 @@ const Quality = () => {
     const [isRepairModalOpen, setIsRepairModalOpen] = useState(false);
     const [isPdfPreview, setIsPdfPreview] = useState(false);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    // 이미지 뷰어
+    const [viewerImages, setViewerImages] = useState([]);
+    const [isViewerOpen, setIsViewerOpen] = useState(false);
     const pdfRef = useRef(null);
 
     // 검사 등록 폼 상태
@@ -24,7 +27,7 @@ const Quality = () => {
         result: 'OK',
         ngType: '',
         action: '',
-        file: null
+        files: [] // 여러 장 지원
     });
     const [isUploading, setIsUploading] = useState(false);
 
@@ -37,6 +40,18 @@ const Quality = () => {
         urgency: '일반',
         inspectionData: null
     });
+
+    // image_url 파싱 (단일 URL 또는 JSON 배열 호환)
+    const parseImageUrls = (imageUrl) => {
+        if (!imageUrl) return [];
+        try {
+            const parsed = JSON.parse(imageUrl);
+            if (Array.isArray(parsed)) return parsed;
+            return [imageUrl];
+        } catch {
+            return [imageUrl];
+        }
+    };
 
     const columns = [
         { header: '검사ID', accessor: 'qc_code' },
@@ -52,12 +67,18 @@ const Quality = () => {
             )
         },
         {
-            header: '사진', accessor: 'image_url', render: (row) => (
-                row.image_url ?
-                    <a href={row.image_url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
-                        <ImageIcon size={16} /> 보기
-                    </a> : '-'
-            )
+            header: '사진', accessor: 'image_url', render: (row) => {
+                const urls = parseImageUrls(row.image_url);
+                if (urls.length === 0) return '-';
+                return (
+                    <button
+                        onClick={() => { setViewerImages(urls); setIsViewerOpen(true); }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem' }}
+                    >
+                        <ImageIcon size={16} /> {urls.length}장 보기
+                    </button>
+                );
+            }
         },
         {
             header: '불량유형(NG)', accessor: 'ng_type', render: (row) =>
@@ -101,6 +122,18 @@ const Quality = () => {
         }
     ];
 
+    // 파일 추가
+    const handleFilesChange = (e) => {
+        const selectedFiles = Array.from(e.target.files);
+        setNewItem(prev => ({ ...prev, files: [...prev.files, ...selectedFiles] }));
+        e.target.value = ''; // 같은 파일 재선택 허용
+    };
+
+    // 파일 삭제
+    const removeFile = (index) => {
+        setNewItem(prev => ({ ...prev, files: prev.files.filter((_, i) => i !== index) }));
+    };
+
     // 수리 의뢰서 모달 열기
     const openRepairModal = (inspection) => {
         setRepairForm({
@@ -119,9 +152,7 @@ const Quality = () => {
     const generatePdf = async () => {
         setIsGeneratingPdf(true);
         setIsPdfPreview(true);
-
-        // DOM 렌더링 시간 확보
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 800));
 
         try {
             const element = pdfRef.current;
@@ -137,9 +168,22 @@ const Quality = () => {
             const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const imgHeight = (canvas.height * pdfWidth) / canvas.width;
 
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            // 여러 페이지 지원
+            let heightLeft = imgHeight;
+            let position = 0;
+
+            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+            heightLeft -= pdfHeight;
+
+            while (heightLeft > 0) {
+                position = heightLeft - imgHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                heightLeft -= pdfHeight;
+            }
 
             const moldName = molds.find(m => m.id === repairForm.moldId)?.name || '금형';
             const dateStr = repairForm.date.replace(/-/g, '');
@@ -157,9 +201,12 @@ const Quality = () => {
         if (newItem.result === 'NG' && !newItem.ngType) return alert('NG 판정 시 불량유형은 필수입니다.');
 
         setIsUploading(true);
-        let imageUrl = null;
-        if (newItem.file) {
-            imageUrl = await uploadImage(newItem.file);
+
+        // 여러 이미지 업로드
+        let imageUrls = [];
+        for (const file of newItem.files) {
+            const url = await uploadImage(file);
+            if (url) imageUrls.push(url);
         }
 
         const dateStr = newItem.date.replace(/-/g, '').slice(2);
@@ -174,7 +221,7 @@ const Quality = () => {
             result: newItem.result,
             ng_type: newItem.result === 'OK' ? '-' : newItem.ngType,
             action: newItem.result === 'OK' ? '-' : newItem.action,
-            image_url: imageUrl
+            image_url: imageUrls.length > 0 ? JSON.stringify(imageUrls) : null
         };
 
         await addInspection(itemToAdd);
@@ -185,7 +232,6 @@ const Quality = () => {
             const notifMessage = newItem.result === 'NG'
                 ? `${newItem.product} - ${newItem.checkItem}: ${newItem.ngType || 'NG'}`
                 : `${newItem.product} - ${newItem.checkItem}: OK`;
-
             await addNotification(manager.id, notifTitle, notifMessage, 'quality', null);
         }
 
@@ -198,14 +244,16 @@ const Quality = () => {
             result: 'OK',
             ngType: '',
             action: '',
-            file: null
+            files: []
         });
     };
 
-    // 선택된 금형/거래처 정보
     const selectedMold = molds.find(m => m.id === repairForm.moldId);
     const selectedSupplier = suppliers.find(s => s.id === repairForm.supplierId);
     const repairCode = `MR-${repairForm.date.replace(/-/g, '').slice(2)}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // 수리 의뢰서의 이미지들
+    const repairImages = repairForm.inspectionData ? parseImageUrls(repairForm.inspectionData.image_url) : [];
 
     return (
         <div className="page-container">
@@ -220,6 +268,17 @@ const Quality = () => {
             </div>
 
             <Table columns={columns} data={inspections || []} />
+
+            {/* 이미지 뷰어 모달 */}
+            <Modal title="첨부 사진" isOpen={isViewerOpen} onClose={() => setIsViewerOpen(false)}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                    {viewerImages.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+                            <img src={url} alt={`사진 ${i + 1}`} style={{ width: '100%', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                        </a>
+                    ))}
+                </div>
+            </Modal>
 
             {/* 검사 등록 모달 */}
             <Modal title="일일 품질 검사 등록" isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
@@ -259,11 +318,38 @@ const Quality = () => {
                         </label>
                     </div>
                 </div>
+
+                {/* 여러 장 사진 첨부 */}
                 <div className="form-group">
-                    <label className="form-label">현장 사진 첨부</label>
-                    <input type="file" accept="image/*" className="form-input" onChange={(e) => setNewItem({ ...newItem, file: e.target.files[0] })} />
-                    {newItem.file && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>선택됨: {newItem.file.name}</p>}
+                    <label className="form-label">현장 사진 첨부 (여러 장 가능)</label>
+                    <input type="file" accept="image/*" multiple className="form-input" onChange={handleFilesChange} />
+                    {newItem.files.length > 0 && (
+                        <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            {newItem.files.map((file, i) => (
+                                <div key={i} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                                    <img src={URL.createObjectURL(file)} alt={`미리보기 ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    <button
+                                        onClick={() => removeFile(i)}
+                                        style={{
+                                            position: 'absolute', top: '2px', right: '2px',
+                                            background: 'rgba(239,68,68,0.9)', color: 'white',
+                                            border: 'none', borderRadius: '50%',
+                                            width: '20px', height: '20px',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer', padding: 0
+                                        }}
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <p style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                        {newItem.files.length > 0 ? `${newItem.files.length}장 선택됨` : '여러 장의 사진을 한번에 또는 추가로 선택할 수 있습니다.'}
+                    </p>
                 </div>
+
                 {newItem.result === 'NG' && (
                     <div className="ng-section" style={{ background: '#fef2f2', padding: '1rem', borderRadius: '8px', border: '1px solid #fee2e2' }}>
                         <div className="form-group">
@@ -279,7 +365,7 @@ const Quality = () => {
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={() => setIsModalOpen(false)}>취소</button>
                     <button className="btn-submit" onClick={handleSave} disabled={isUploading}>
-                        {isUploading ? '업로드 중...' : '등록'}
+                        {isUploading ? `업로드 중... (${newItem.files.length}장)` : '등록'}
                     </button>
                 </div>
             </Modal>
@@ -288,7 +374,6 @@ const Quality = () => {
             <Modal title="금형 수리 의뢰서 작성" isOpen={isRepairModalOpen} onClose={() => setIsRepairModalOpen(false)}>
                 {!isPdfPreview ? (
                     <>
-                        {/* 검사 정보 요약 */}
                         {repairForm.inspectionData && (
                             <div style={{ background: '#fef2f2', padding: '1rem', borderRadius: '8px', border: '1px solid #fee2e2', marginBottom: '1rem' }}>
                                 <h4 style={{ fontSize: '0.85rem', color: '#991b1b', marginBottom: '0.5rem', fontWeight: 700 }}>📋 불량 검사 정보</h4>
@@ -298,9 +383,11 @@ const Quality = () => {
                                     <div><span style={{ color: '#94a3b8' }}>제품명:</span> <strong>{repairForm.inspectionData.product}</strong></div>
                                     <div><span style={{ color: '#94a3b8' }}>불량유형:</span> <strong style={{ color: '#dc2626' }}>{repairForm.inspectionData.ng_type}</strong></div>
                                 </div>
-                                {repairForm.inspectionData.image_url && (
-                                    <div style={{ marginTop: '0.75rem' }}>
-                                        <img src={repairForm.inspectionData.image_url} alt="불량 사진" style={{ maxWidth: '100%', maxHeight: '150px', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
+                                {repairImages.length > 0 && (
+                                    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                        {repairImages.map((url, i) => (
+                                            <img key={i} src={url} alt={`불량 사진 ${i + 1}`} style={{ maxWidth: '120px', maxHeight: '100px', borderRadius: '6px', border: '1px solid #e2e8f0', objectFit: 'cover' }} />
+                                        ))}
                                     </div>
                                 )}
                             </div>
@@ -334,17 +421,14 @@ const Quality = () => {
                                 {['일반', '긴급', '초긴급'].map(level => (
                                     <label key={level} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
                                         <input type="radio" name="urgency" value={level} checked={repairForm.urgency === level} onChange={(e) => setRepairForm({ ...repairForm, urgency: e.target.value })} />
-                                        <span style={{
-                                            fontWeight: 600,
-                                            color: level === '초긴급' ? '#dc2626' : level === '긴급' ? '#f59e0b' : '#10b981'
-                                        }}>{level}</span>
+                                        <span style={{ fontWeight: 600, color: level === '초긴급' ? '#dc2626' : level === '긴급' ? '#f59e0b' : '#10b981' }}>{level}</span>
                                     </label>
                                 ))}
                             </div>
                         </div>
                         <div className="form-group">
                             <label className="form-label">수리 요청 내용</label>
-                            <textarea className="form-input" rows="4" value={repairForm.repairContent} onChange={(e) => setRepairForm({ ...repairForm, repairContent: e.target.value })} placeholder="수리가 필요한 부분과 요청사항을 상세히 기입해주세요." />
+                            <textarea className="form-input" rows="4" value={repairForm.repairContent} onChange={(e) => setRepairForm({ ...repairForm, repairContent: e.target.value })} placeholder="수리가 필요한 부분과 요청사항을 상세히 기입해주세요.&#10;&#10;예시:&#10;- 캐비티 #3 파팅라인 부위 찍힘 발생&#10;- 게이트 주변 가스 빼기 불량&#10;- 코어핀 마모로 인한 치수 미달" />
                         </div>
                         <div className="modal-actions">
                             <button className="btn-cancel" onClick={() => setIsRepairModalOpen(false)}>취소</button>
@@ -367,7 +451,7 @@ const Quality = () => {
                 )}
             </Modal>
 
-            {/* PDF 렌더링 영역 (화면 밖에서 렌더링) */}
+            {/* PDF 렌더링 영역 (화면 밖) */}
             <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
                 <div ref={pdfRef} style={{
                     width: '794px',
@@ -397,10 +481,7 @@ const Quality = () => {
                                 <td style={{ ...cellStyle, ...headerCellStyle }}>긴급도</td>
                                 <td style={cellStyle}>
                                     <span style={{
-                                        padding: '2px 12px',
-                                        borderRadius: '4px',
-                                        fontSize: '12px',
-                                        fontWeight: 700,
+                                        padding: '2px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700,
                                         background: repairForm.urgency === '초긴급' ? '#fef2f2' : repairForm.urgency === '긴급' ? '#fffbeb' : '#f0fdf4',
                                         color: repairForm.urgency === '초긴급' ? '#dc2626' : repairForm.urgency === '긴급' ? '#d97706' : '#16a34a',
                                         border: `1px solid ${repairForm.urgency === '초긴급' ? '#fca5a5' : repairForm.urgency === '긴급' ? '#fcd34d' : '#86efac'}`
@@ -429,17 +510,35 @@ const Quality = () => {
                         </tbody>
                     </table>
 
-                    {/* 불량 사진 */}
-                    {repairForm.inspectionData?.image_url && (
+                    {/* 불량 사진들 (모든 이미지 포함) */}
+                    {repairImages.length > 0 && (
                         <>
-                            <h3 style={sectionTitleStyle}>불량 사진</h3>
-                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', marginBottom: '20px', textAlign: 'center' }}>
-                                <img
-                                    src={repairForm.inspectionData.image_url}
-                                    alt="불량 사진"
-                                    crossOrigin="anonymous"
-                                    style={{ maxWidth: '100%', maxHeight: '250px', borderRadius: '4px' }}
-                                />
+                            <h3 style={sectionTitleStyle}>불량 사진 ({repairImages.length}장)</h3>
+                            <div style={{
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '8px',
+                                padding: '12px',
+                                marginBottom: '20px',
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: '10px',
+                                justifyContent: 'center'
+                            }}>
+                                {repairImages.map((url, i) => (
+                                    <img
+                                        key={i}
+                                        src={url}
+                                        alt={`불량 사진 ${i + 1}`}
+                                        crossOrigin="anonymous"
+                                        style={{
+                                            maxWidth: repairImages.length === 1 ? '100%' : repairImages.length === 2 ? '48%' : '31%',
+                                            maxHeight: '220px',
+                                            borderRadius: '4px',
+                                            border: '1px solid #e2e8f0',
+                                            objectFit: 'contain'
+                                        }}
+                                    />
+                                ))}
                             </div>
                         </>
                     )}
@@ -497,7 +596,6 @@ const Quality = () => {
     );
 };
 
-// PDF 테이블 스타일
 const cellStyle = {
     border: '1px solid #e2e8f0',
     padding: '8px 12px',

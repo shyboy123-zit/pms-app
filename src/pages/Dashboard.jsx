@@ -9,7 +9,8 @@ import {
     AlertCircle,
     CheckCircle2,
     XCircle,
-    FileText
+    FileText,
+    Image as ImageIcon
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -18,6 +19,22 @@ const Dashboard = () => {
     // 사출조건 모달 상태
     const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
     const [selectedCondition, setSelectedCondition] = useState(null);
+
+    // 불량 사진 뷰어 상태
+    const [viewerImages, setViewerImages] = useState([]);
+    const [isViewerOpen, setIsViewerOpen] = useState(false);
+
+    // image_url 파싱 (단일 URL 또는 JSON 배열 호환)
+    const parseImageUrls = (imageUrl) => {
+        if (!imageUrl) return [];
+        try {
+            const parsed = JSON.parse(imageUrl);
+            if (Array.isArray(parsed)) return parsed;
+            return [imageUrl];
+        } catch {
+            return [imageUrl];
+        }
+    };
 
     // 오늘 날짜
     const today = new Date().toISOString().split('T')[0];
@@ -116,22 +133,22 @@ const Dashboard = () => {
                                             key={eq.id}
                                             className="equipment-item clickable"
                                             onClick={() => {
-    
-    if (!workOrder) return;
-    
-    
-    
-    const condition = injectionConditions.find(
-        c => c.product_id === workOrder.product_id && c.equipment_id === eq.id
-    );
-    
-    if (condition) {
-        setSelectedCondition(condition);
-        setIsConditionModalOpen(true);
-    } else {
-        alert('해당 제품-호기 조합의 사출조건이 등록되지 않았습니다.');
-    }
-}}
+
+                                                if (!workOrder) return;
+
+
+
+                                                const condition = injectionConditions.find(
+                                                    c => c.product_id === workOrder.product_id && c.equipment_id === eq.id
+                                                );
+
+                                                if (condition) {
+                                                    setSelectedCondition(condition);
+                                                    setIsConditionModalOpen(true);
+                                                } else {
+                                                    alert('해당 제품-호기 조합의 사출조건이 등록되지 않았습니다.');
+                                                }
+                                            }}
                                             title="클릭하여 사출조건 보기"
                                         >
                                             <div className="eq-header">
@@ -264,21 +281,32 @@ const Dashboard = () => {
                         {todayDefects.length > 0 && (
                             <div className="defect-list">
                                 <div className="defect-list-header">불량 상세</div>
-                                {todayDefects.map(defect => (
-                                    <div key={defect.id} className="defect-item">
-                                        <div className="defect-info">
-                                            <span className="defect-product">{defect.product}</span>
-                                            <span className="defect-type">{defect.ngType}</span>
-                                        </div>
-                                        <div className="defect-action">
-                                            {defect.action && defect.action !== '-' ? (
-                                                <span className="action-done">✓ 조치완료</span>
-                                            ) : (
-                                                <span className="action-pending">조치 필요</span>
+                                {todayDefects.map(defect => {
+                                    const photos = parseImageUrls(defect.image_url);
+                                    return (
+                                        <div key={defect.id} className="defect-item">
+                                            <div className="defect-info">
+                                                <span className="defect-product">{defect.product}</span>
+                                                <span className="defect-type">{defect.ng_type || defect.ngType}</span>
+                                            </div>
+                                            {photos.length > 0 && (
+                                                <div className="defect-photos" onClick={() => { setViewerImages(photos); setIsViewerOpen(true); }}>
+                                                    {photos.slice(0, 3).map((url, i) => (
+                                                        <img key={i} src={url} alt={`불량${i + 1}`} className="defect-thumb" />
+                                                    ))}
+                                                    {photos.length > 3 && <span className="defect-photo-more">+{photos.length - 3}</span>}
+                                                </div>
                                             )}
+                                            <div className="defect-action">
+                                                {defect.action && defect.action !== '-' ? (
+                                                    <span className="action-done">✓ 조치완료</span>
+                                                ) : (
+                                                    <span className="action-pending">조치 필요</span>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
 
@@ -362,69 +390,69 @@ const Dashboard = () => {
             </div>
 
             {/* 사출조건 모달 */}
-<Modal
-    title="사출조건 정보"
-    isOpen={isConditionModalOpen}
-    onClose={() => setIsConditionModalOpen(false)}
->
-    {selectedCondition && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* 온도 설정 */}
-            <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
-                <h4 style={{ marginBottom: '0.75rem', fontWeight: 700, color: '#1e293b' }}>🌡️ 온도 설정</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', fontSize: '0.9rem' }}>
-                    {selectedCondition.hopper_temp && <div><span style={{ color: '#64748b' }}>호퍼:</span> <strong>{selectedCondition.hopper_temp}°C</strong></div>}
-                    {selectedCondition.cylinder_temp_zone1 && <div><span style={{ color: '#64748b' }}>실린더1:</span> <strong>{selectedCondition.cylinder_temp_zone1}°C</strong></div>}
-                    {selectedCondition.cylinder_temp_zone2 && <div><span style={{ color: '#64748b' }}>실린더2:</span> <strong>{selectedCondition.cylinder_temp_zone2}°C</strong></div>}
-                    {selectedCondition.cylinder_temp_zone3 && <div><span style={{ color: '#64748b' }}>실린더3:</span> <strong>{selectedCondition.cylinder_temp_zone3}°C</strong></div>}
-                    {selectedCondition.cylinder_temp_zone4 && <div><span style={{ color: '#64748b' }}>실린더4:</span> <strong>{selectedCondition.cylinder_temp_zone4}°C</strong></div>}
-                    {selectedCondition.nozzle_temp && <div><span style={{ color: '#64748b' }}>노즐:</span> <strong>{selectedCondition.nozzle_temp}°C</strong></div>}
-                    {selectedCondition.mold_temp_fixed && <div><span style={{ color: '#64748b' }}>금형(고정):</span> <strong>{selectedCondition.mold_temp_fixed}°C</strong></div>}
-                    {selectedCondition.mold_temp_moving && <div><span style={{ color: '#64748b' }}>금형(가동):</span> <strong>{selectedCondition.mold_temp_moving}°C</strong></div>}
-                </div>
-            </div>
+            <Modal
+                title="사출조건 정보"
+                isOpen={isConditionModalOpen}
+                onClose={() => setIsConditionModalOpen(false)}
+            >
+                {selectedCondition && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {/* 온도 설정 */}
+                        <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
+                            <h4 style={{ marginBottom: '0.75rem', fontWeight: 700, color: '#1e293b' }}>🌡️ 온도 설정</h4>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', fontSize: '0.9rem' }}>
+                                {selectedCondition.hopper_temp && <div><span style={{ color: '#64748b' }}>호퍼:</span> <strong>{selectedCondition.hopper_temp}°C</strong></div>}
+                                {selectedCondition.cylinder_temp_zone1 && <div><span style={{ color: '#64748b' }}>실린더1:</span> <strong>{selectedCondition.cylinder_temp_zone1}°C</strong></div>}
+                                {selectedCondition.cylinder_temp_zone2 && <div><span style={{ color: '#64748b' }}>실린더2:</span> <strong>{selectedCondition.cylinder_temp_zone2}°C</strong></div>}
+                                {selectedCondition.cylinder_temp_zone3 && <div><span style={{ color: '#64748b' }}>실린더3:</span> <strong>{selectedCondition.cylinder_temp_zone3}°C</strong></div>}
+                                {selectedCondition.cylinder_temp_zone4 && <div><span style={{ color: '#64748b' }}>실린더4:</span> <strong>{selectedCondition.cylinder_temp_zone4}°C</strong></div>}
+                                {selectedCondition.nozzle_temp && <div><span style={{ color: '#64748b' }}>노즐:</span> <strong>{selectedCondition.nozzle_temp}°C</strong></div>}
+                                {selectedCondition.mold_temp_fixed && <div><span style={{ color: '#64748b' }}>금형(고정):</span> <strong>{selectedCondition.mold_temp_fixed}°C</strong></div>}
+                                {selectedCondition.mold_temp_moving && <div><span style={{ color: '#64748b' }}>금형(가동):</span> <strong>{selectedCondition.mold_temp_moving}°C</strong></div>}
+                            </div>
+                        </div>
 
-            {/* 사출 조건 */}
-            <div style={{ background: '#f0fdf4', padding: '1rem', borderRadius: '8px' }}>
-                <h4 style={{ marginBottom: '0.75rem', fontWeight: 700, color: '#166534' }}>💉 사출 조건</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', fontSize: '0.9rem' }}>
-                    {selectedCondition.injection_pressure && <div><span style={{ color: '#64748b' }}>사출압력:</span> <strong>{selectedCondition.injection_pressure} kgf/cm²</strong></div>}
-                    {selectedCondition.injection_speed && <div><span style={{ color: '#64748b' }}>사출속도:</span> <strong>{selectedCondition.injection_speed} mm/s</strong></div>}
-                    {selectedCondition.injection_time && <div><span style={{ color: '#64748b' }}>사출시간:</span> <strong>{selectedCondition.injection_time}초</strong></div>}
-                    {selectedCondition.dosing_position_1 && <div><span style={{ color: '#64748b' }}>계량위치1:</span> <strong>{selectedCondition.dosing_position_1}mm</strong></div>}
-                    {selectedCondition.injection_pressure_2 && <div><span style={{ color: '#64748b' }}>사출압력2:</span> <strong>{selectedCondition.injection_pressure_2} kgf/cm²</strong></div>}
-                    {selectedCondition.injection_speed_2 && <div><span style={{ color: '#64748b' }}>사출속도2:</span> <strong>{selectedCondition.injection_speed_2} mm/s</strong></div>}
-                    {selectedCondition.injection_time_2 && <div><span style={{ color: '#64748b' }}>사출시간2:</span> <strong>{selectedCondition.injection_time_2}초</strong></div>}
-                    {selectedCondition.dosing_position_2 && <div><span style={{ color: '#64748b' }}>계량위치2:</span> <strong>{selectedCondition.dosing_position_2}mm</strong></div>}
-                </div>
-            </div>
+                        {/* 사출 조건 */}
+                        <div style={{ background: '#f0fdf4', padding: '1rem', borderRadius: '8px' }}>
+                            <h4 style={{ marginBottom: '0.75rem', fontWeight: 700, color: '#166534' }}>💉 사출 조건</h4>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', fontSize: '0.9rem' }}>
+                                {selectedCondition.injection_pressure && <div><span style={{ color: '#64748b' }}>사출압력:</span> <strong>{selectedCondition.injection_pressure} kgf/cm²</strong></div>}
+                                {selectedCondition.injection_speed && <div><span style={{ color: '#64748b' }}>사출속도:</span> <strong>{selectedCondition.injection_speed} mm/s</strong></div>}
+                                {selectedCondition.injection_time && <div><span style={{ color: '#64748b' }}>사출시간:</span> <strong>{selectedCondition.injection_time}초</strong></div>}
+                                {selectedCondition.dosing_position_1 && <div><span style={{ color: '#64748b' }}>계량위치1:</span> <strong>{selectedCondition.dosing_position_1}mm</strong></div>}
+                                {selectedCondition.injection_pressure_2 && <div><span style={{ color: '#64748b' }}>사출압력2:</span> <strong>{selectedCondition.injection_pressure_2} kgf/cm²</strong></div>}
+                                {selectedCondition.injection_speed_2 && <div><span style={{ color: '#64748b' }}>사출속도2:</span> <strong>{selectedCondition.injection_speed_2} mm/s</strong></div>}
+                                {selectedCondition.injection_time_2 && <div><span style={{ color: '#64748b' }}>사출시간2:</span> <strong>{selectedCondition.injection_time_2}초</strong></div>}
+                                {selectedCondition.dosing_position_2 && <div><span style={{ color: '#64748b' }}>계량위치2:</span> <strong>{selectedCondition.dosing_position_2}mm</strong></div>}
+                            </div>
+                        </div>
 
-            {/* 보압 및 기타 */}
-            <div style={{ background: '#eff6ff', padding: '1rem', borderRadius: '8px' }}>
-                <h4 style={{ marginBottom: '0.75rem', fontWeight: 700, color: '#1e40af' }}>⚙️ 보압 및 기타</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', fontSize: '0.9rem' }}>
-                    {selectedCondition.holding_pressure && <div><span style={{ color: '#64748b' }}>보압:</span> <strong>{selectedCondition.holding_pressure} kgf/cm²</strong></div>}
-                    {selectedCondition.holding_speed && <div><span style={{ color: '#64748b' }}>보압속도:</span> <strong>{selectedCondition.holding_speed} mm/s</strong></div>}
-                    {selectedCondition.holding_time && <div><span style={{ color: '#64748b' }}>보압시간:</span> <strong>{selectedCondition.holding_time}초</strong></div>}
-                    {selectedCondition.back_pressure && <div><span style={{ color: '#64748b' }}>배압:</span> <strong>{selectedCondition.back_pressure} kgf/cm²</strong></div>}
-                    {selectedCondition.cooling_time && <div><span style={{ color: '#64748b' }}>냉각시간:</span> <strong>{selectedCondition.cooling_time}초</strong></div>}
-                    {selectedCondition.cycle_time && <div><span style={{ color: '#64748b' }}>사이클타임:</span> <strong>{selectedCondition.cycle_time}초</strong></div>}
-                    {selectedCondition.shot_size && <div><span style={{ color: '#64748b' }}>샷크기:</span> <strong>{selectedCondition.shot_size}mm</strong></div>}
-                    {selectedCondition.screw_rpm && <div><span style={{ color: '#64748b' }}>스크류RPM:</span> <strong>{selectedCondition.screw_rpm}</strong></div>}
-                    {selectedCondition.cushion && <div><span style={{ color: '#64748b' }}>쿠션:</span> <strong>{selectedCondition.cushion}mm</strong></div>}
-                </div>
-            </div>
+                        {/* 보압 및 기타 */}
+                        <div style={{ background: '#eff6ff', padding: '1rem', borderRadius: '8px' }}>
+                            <h4 style={{ marginBottom: '0.75rem', fontWeight: 700, color: '#1e40af' }}>⚙️ 보압 및 기타</h4>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', fontSize: '0.9rem' }}>
+                                {selectedCondition.holding_pressure && <div><span style={{ color: '#64748b' }}>보압:</span> <strong>{selectedCondition.holding_pressure} kgf/cm²</strong></div>}
+                                {selectedCondition.holding_speed && <div><span style={{ color: '#64748b' }}>보압속도:</span> <strong>{selectedCondition.holding_speed} mm/s</strong></div>}
+                                {selectedCondition.holding_time && <div><span style={{ color: '#64748b' }}>보압시간:</span> <strong>{selectedCondition.holding_time}초</strong></div>}
+                                {selectedCondition.back_pressure && <div><span style={{ color: '#64748b' }}>배압:</span> <strong>{selectedCondition.back_pressure} kgf/cm²</strong></div>}
+                                {selectedCondition.cooling_time && <div><span style={{ color: '#64748b' }}>냉각시간:</span> <strong>{selectedCondition.cooling_time}초</strong></div>}
+                                {selectedCondition.cycle_time && <div><span style={{ color: '#64748b' }}>사이클타임:</span> <strong>{selectedCondition.cycle_time}초</strong></div>}
+                                {selectedCondition.shot_size && <div><span style={{ color: '#64748b' }}>샷크기:</span> <strong>{selectedCondition.shot_size}mm</strong></div>}
+                                {selectedCondition.screw_rpm && <div><span style={{ color: '#64748b' }}>스크류RPM:</span> <strong>{selectedCondition.screw_rpm}</strong></div>}
+                                {selectedCondition.cushion && <div><span style={{ color: '#64748b' }}>쿠션:</span> <strong>{selectedCondition.cushion}mm</strong></div>}
+                            </div>
+                        </div>
 
-            {/* 비고 */}
-            {selectedCondition.notes && (
-                <div style={{ padding: '1rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                    <h4 style={{ marginBottom: '0.5rem', fontWeight: 700 }}>📝 비고</h4>
-                    <p style={{ fontSize: '0.95rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{selectedCondition.notes}</p>
-                </div>
-            )}
-        </div>
-    )}
-</Modal>
+                        {/* 비고 */}
+                        {selectedCondition.notes && (
+                            <div style={{ padding: '1rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                                <h4 style={{ marginBottom: '0.5rem', fontWeight: 700 }}>📝 비고</h4>
+                                <p style={{ fontSize: '0.95rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{selectedCondition.notes}</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </Modal>
             <style>{`
                 .dashboard-container {
                     padding: 0 1.5rem;
@@ -1042,7 +1070,48 @@ const Dashboard = () => {
                     color: #dc2626;
                     font-weight: 700;
                 }
+                /* 불량 사진 썸네일 */
+                .defect-photos {
+                    display: flex;
+                    gap: 4px;
+                    align-items: center;
+                    cursor: pointer;
+                    padding: 4px 0;
+                }
+
+                .defect-thumb {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 6px;
+                    object-fit: cover;
+                    border: 2px solid #fee2e2;
+                    transition: all 0.2s;
+                }
+
+                .defect-thumb:hover {
+                    border-color: #f87171;
+                    transform: scale(1.15);
+                    z-index: 1;
+                }
+
+                .defect-photo-more {
+                    font-size: 0.7rem;
+                    font-weight: 700;
+                    color: #94a3b8;
+                    padding: 0 4px;
+                }
             `}</style>
+
+            {/* 불량 사진 뷰어 모달 */}
+            <Modal title="불량 사진 보기" isOpen={isViewerOpen} onClose={() => setIsViewerOpen(false)}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                    {viewerImages.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noreferrer">
+                            <img src={url} alt={`불량 사진 ${i + 1}`} style={{ width: '100%', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                        </a>
+                    ))}
+                </div>
+            </Modal>
         </div>
     );
 };

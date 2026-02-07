@@ -5,7 +5,7 @@ import { Plus, Package, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Products = () => {
-    const { products, addProduct, updateProduct, deleteProduct } = useData();
+    const { products, materials, addProduct, updateProduct, deleteProduct } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
@@ -18,6 +18,7 @@ const Products = () => {
         product_weight: 0,
         runner_weight: 0,
         cavity_count: 1,
+        material_id: '',
         status: '생산중'
     });
 
@@ -36,6 +37,14 @@ const Products = () => {
             }
         },
         { header: '표준 사이클(초)', accessor: 'standard_cycle_time' },
+        {
+            header: '원재료', accessor: 'material_id', render: (row) => {
+                const mat = materials.find(m => m.id === row.material_id);
+                return mat ? (
+                    <span style={{ fontWeight: 600, color: '#0369a1' }}>{mat.name}</span>
+                ) : <span style={{ color: '#94a3b8' }}>-</span>;
+            }
+        },
         {
             header: '상태', accessor: 'status', render: (row) => (
                 <span className={`status-badge ${row.status === '생산중' ? 'status-active' : 'status-danger'}`}>
@@ -67,6 +76,7 @@ const Products = () => {
             product_weight: product.product_weight || 0,
             runner_weight: product.runner_weight || 0,
             cavity_count: product.cavity_count || 1,
+            material_id: product.material_id || '',
             status: product.status
         });
         setIsEditMode(true);
@@ -87,6 +97,7 @@ const Products = () => {
             product_weight: 0,
             runner_weight: 0,
             cavity_count: 1,
+            material_id: '',
             status: '생산중'
         });
         setCurrentProduct(null);
@@ -231,6 +242,19 @@ const Products = () => {
                         )}
                     </div>
                 )}
+                <div className="form-group">
+                    <label className="form-label">원재료 (사용 수지)</label>
+                    <select
+                        className="form-input"
+                        value={formData.material_id}
+                        onChange={(e) => setFormData({ ...formData, material_id: e.target.value })}
+                    >
+                        <option value="">원재료를 선택하세요</option>
+                        {materials.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                    </select>
+                </div>
                 <div className="form-group">
                     <label className="form-label">상태</label>
                     <select

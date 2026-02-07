@@ -5,7 +5,7 @@ import { Plus, Calendar, TrendingUp, Edit } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const DailyProduction = () => {
-    const { workOrders, equipments, products, employees, updateWorkOrder, addNotification } = useData();
+    const { workOrders, equipments, products, materials, employees, updateWorkOrder, addNotification } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -61,6 +61,17 @@ const DailyProduction = () => {
             render: (row) => {
                 const product = products.find(p => p.id === row.product_id);
                 return product?.name || '-';
+            }
+        },
+        {
+            header: '원재료명',
+            accessor: 'material_name',
+            render: (row) => {
+                const product = products.find(p => p.id === row.product_id);
+                const material = product?.material_id ? materials.find(m => m.id === product.material_id) : null;
+                return material ? (
+                    <span style={{ fontWeight: 600, color: '#0369a1' }}>{material.name}</span>
+                ) : <span style={{ color: '#94a3b8' }}>-</span>;
             }
         },
         {

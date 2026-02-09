@@ -48,7 +48,8 @@ const InventoryInOut = () => {
                 itemName: product.name,
                 itemCode: product.product_code || '',
                 unitPrice: product.unit_price || 0,
-                unit: product.unit || 'EA'
+                unit: product.unit || 'EA',
+                client: product.company_name || prev.client
             }));
         } else {
             setNewItem(prev => ({

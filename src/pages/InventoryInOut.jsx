@@ -423,7 +423,7 @@ const InventoryInOut = () => {
                     <select
                         className="form-input"
                         value={newItem.transactionType}
-                        onChange={(e) => setNewItem({ ...newItem, transactionType: e.target.value })}
+                        onChange={(e) => setNewItem({ ...newItem, transactionType: e.target.value, productId: '', itemName: '', itemCode: '', unitPrice: 0 })}
                     >
                         <option value="IN">입고</option>
                         <option value="OUT">출고</option>
@@ -437,7 +437,7 @@ const InventoryInOut = () => {
                         onChange={(e) => handleProductSelect(e.target.value)}
                     >
                         <option value="">제품을 선택하세요</option>
-                        {products.filter(p => p.status !== '단종').map(p => (
+                        {products.filter(p => p.status !== '단종' && (newItem.transactionType === 'IN' ? p.product_type === '매입' : p.product_type === '매출')).map(p => (
                             <option key={p.id} value={p.id}>
                                 {p.product_code ? `[${p.product_code}] ` : ''}{p.name} ({p.model || '규격 없음'}) {p.unit_price ? `- ₩${Number(p.unit_price).toLocaleString()}` : ''}
                             </option>

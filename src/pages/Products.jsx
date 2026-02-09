@@ -15,6 +15,7 @@ const Products = () => {
         model: '',
         unit: 'EA',
         unit_price: 0,
+        product_type: '매출',
         standard_cycle_time: 30,
         product_weight: 0,
         runner_weight: 0,
@@ -28,6 +29,17 @@ const Products = () => {
         { header: '제품명', accessor: 'name' },
         { header: '모델/규격', accessor: 'model' },
         { header: '단위', accessor: 'unit' },
+        {
+            header: '구분', accessor: 'product_type', render: (row) => (
+                <span style={{
+                    padding: '2px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 700,
+                    background: row.product_type === '매출' ? '#d1fae5' : '#dbeafe',
+                    color: row.product_type === '매출' ? '#059669' : '#2563eb'
+                }}>
+                    {row.product_type || '미지정'}
+                </span>
+            )
+        },
         {
             header: '단가', accessor: 'unit_price', render: (row) => (
                 <span style={{ fontWeight: 700, color: '#0ea5e9' }}>
@@ -81,6 +93,7 @@ const Products = () => {
             model: product.model,
             unit: product.unit,
             unit_price: product.unit_price || 0,
+            product_type: product.product_type || '매출',
             standard_cycle_time: product.standard_cycle_time,
             product_weight: product.product_weight || 0,
             runner_weight: product.runner_weight || 0,
@@ -103,6 +116,7 @@ const Products = () => {
             model: '',
             unit: 'EA',
             unit_price: 0,
+            product_type: '매출',
             standard_cycle_time: 30,
             product_weight: 0,
             runner_weight: 0,
@@ -171,6 +185,17 @@ const Products = () => {
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         placeholder="예: 플라스틱 커버 A"
                     />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">구분 (매입/매출) *</label>
+                    <select
+                        className="form-input"
+                        value={formData.product_type}
+                        onChange={(e) => setFormData({ ...formData, product_type: e.target.value })}
+                    >
+                        <option value="매출">매출 (출고 제품)</option>
+                        <option value="매입">매입 (입고 제품)</option>
+                    </select>
                 </div>
                 <div className="form-group">
                     <label className="form-label">모델/규격</label>

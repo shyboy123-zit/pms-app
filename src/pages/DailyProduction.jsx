@@ -5,7 +5,7 @@ import { Plus, Calendar, TrendingUp, Edit } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const DailyProduction = () => {
-    const { workOrders, equipments, products, materials, employees, updateWorkOrder, addNotification } = useData();
+    const { workOrders, equipments, products, materials, employees, updateWorkOrder, addNotification, addProductionLog } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -168,6 +168,15 @@ const DailyProduction = () => {
             produced_quantity: newProducedQuantity,
             daily_quantity: dailyQuantity,
             last_production_date: new Date().toISOString()
+        });
+
+        // 일일 생산 로그 저장 (이력 조회용)
+        await addProductionLog({
+            work_order_id: selectedOrder.id,
+            product_id: selectedOrder.product_id,
+            equipment_id: selectedOrder.equipment_id,
+            daily_quantity: dailyQuantity,
+            production_date: new Date().toISOString().split('T')[0]
         });
 
         // 관리자에게 알림 전송

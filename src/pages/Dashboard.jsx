@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 const Dashboard = () => {
-    const { equipments, materials, inspections, products, workOrders, molds, moldMovement, injectionConditions } = useData();
+    const { equipments, materials, inspections, products, workOrders, molds, moldMovement, injectionConditions, productionLogs } = useData();
 
     // 사출조건 모달 상태
     const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
@@ -24,6 +24,9 @@ const Dashboard = () => {
     // 불량 사진 뷰어 상태
     const [viewerImages, setViewerImages] = useState([]);
     const [isViewerOpen, setIsViewerOpen] = useState(false);
+
+    // 원재료 소모 날짜 선택
+    const [mcDate, setMcDate] = useState(new Date().toISOString().split('T')[0]);
 
     // image_url 파싱 (단일 URL 또는 JSON 배열 호환)
     const parseImageUrls = (imageUrl) => {
@@ -56,19 +59,17 @@ const Dashboard = () => {
     // 4. 출고 중인 금형
     const outgoingMolds = moldMovement.filter(m => m.status === '출고중');
 
-    // 5. 일일 원재료 소모 현황 (오늘 기록된 일일 생산량 기준)
+    // 5. 원재료 소모 현황 (선택 날짜의 production_logs 기준)
     const materialConsumption = (() => {
         const consumptionMap = {};
 
-        workOrders.forEach(wo => {
-            // 오늘 날짜에 기록된 작업지시만 필터
-            const lastDate = wo.last_production_date ? new Date(wo.last_production_date).toISOString().split('T')[0] : null;
-            if (lastDate !== today) return;
+        const filteredLogs = productionLogs.filter(log => log.production_date === mcDate);
 
-            const dailyQty = wo.daily_quantity || 0;
+        filteredLogs.forEach(log => {
+            const dailyQty = log.daily_quantity || 0;
             if (dailyQty <= 0) return;
 
-            const product = products.find(p => p.id === wo.product_id);
+            const product = products.find(p => p.id === log.product_id);
             if (!product || !product.material_id) return;
 
             const material = materials.find(m => m.id === product.material_id);
@@ -82,14 +83,15 @@ const Dashboard = () => {
                     id: material.id,
                     name: material.name,
                     stock: material.stock || 0,
-                    minStock: material.min_stock || 0,
                     unit: material.unit || 'kg',
                     totalConsumedKg: 0,
+                    totalQty: 0,
                     productNames: []
                 };
             }
 
             consumptionMap[material.id].totalConsumedKg += consumedKg;
+            consumptionMap[material.id].totalQty += dailyQty;
             const pName = product.name;
             if (!consumptionMap[material.id].productNames.includes(pName)) {
                 consumptionMap[material.id].productNames.push(pName);
@@ -432,14 +434,32 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                {/* 5. 일일 원재료 소모 현황 */}
+                {/* 5. 원재료 소모 현황 */}
                 <div className="widget glass-panel material-consumption">
                     <div className="widget-header">
                         <h3>
                             <Droplets size={20} />
-                            일일 원재료 소모 현황
+                            원재료 소모 현황
                         </h3>
-                        <span className="badge-live">TODAY</span>
+                        <div className="mc-date-picker">
+                            <button className="mc-date-btn" onClick={() => {
+                                const d = new Date(mcDate);
+                                d.setDate(d.getDate() - 1);
+                                setMcDate(d.toISOString().split('T')[0]);
+                            }}>◀</button>
+                            <input
+                                type="date"
+                                className="mc-date-input"
+                                value={mcDate}
+                                onChange={(e) => setMcDate(e.target.value)}
+                            />
+                            <button className="mc-date-btn" onClick={() => {
+                                const d = new Date(mcDate);
+                                d.setDate(d.getDate() + 1);
+                                setMcDate(d.toISOString().split('T')[0]);
+                            }}>▶</button>
+                            <button className="mc-today-btn" onClick={() => setMcDate(today)}>Today</button>
+                        </div>
                     </div>
                     <div className="widget-content">
                         {materialConsumption.length > 0 ? (
@@ -468,8 +488,8 @@ const Dashboard = () => {
                                                     <span className="mc-detail-value consumed">{mc.totalConsumedKg.toFixed(1)} kg</span>
                                                 </div>
                                                 <div className="mc-detail">
-                                                    <span className="mc-detail-label">잔여 재고</span>
-                                                    <span className="mc-detail-value">{remainKg.toFixed(1)} kg</span>
+                                                    <span className="mc-detail-label">생산수량</span>
+                                                    <span className="mc-detail-value">{mc.totalQty.toLocaleString()} 개</span>
                                                 </div>
                                                 <div className="mc-detail">
                                                     <span className="mc-detail-label">현재 재고</span>
@@ -1223,6 +1243,44 @@ const Dashboard = () => {
                     border-radius: 10px;
                     font-weight: 600;
                 }
+
+                .mc-date-picker {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+                .mc-date-input {
+                    padding: 4px 8px;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    color: #1e293b;
+                    background: #f8fafc;
+                    cursor: pointer;
+                }
+                .mc-date-btn {
+                    padding: 4px 8px;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    background: #f8fafc;
+                    cursor: pointer;
+                    font-size: 0.75rem;
+                    transition: all 0.15s;
+                }
+                .mc-date-btn:hover { background: #e2e8f0; }
+                .mc-today-btn {
+                    padding: 4px 10px;
+                    border: none;
+                    border-radius: 6px;
+                    background: linear-gradient(135deg, #4f46e5, #6366f1);
+                    color: white;
+                    font-size: 0.72rem;
+                    font-weight: 700;
+                    cursor: pointer;
+                    transition: all 0.15s;
+                }
+                .mc-today-btn:hover { opacity: 0.85; }
                 /* 불량 사진 썸네일 */
                 .defect-photos {
                     display: flex;

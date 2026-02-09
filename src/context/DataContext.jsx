@@ -23,6 +23,7 @@ export const DataProvider = ({ children }) => {
     const [salesRecords, setSalesRecords] = useState([]);
     const [notifications, setNotifications] = useState([]);
     const [injectionConditions, setInjectionConditions] = useState([]);
+    const [productionLogs, setProductionLogs] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -118,6 +119,13 @@ export const DataProvider = ({ children }) => {
                 if (conditions) setInjectionConditions(conditions);
             } catch (e) {
                 console.warn('injection_conditions table not available:', e.message);
+            }
+
+            try {
+                const { data: logs } = await supabase.from('production_logs').select('*').order('production_date', { ascending: false });
+                if (logs) setProductionLogs(logs);
+            } catch (e) {
+                console.warn('production_logs table not available:', e.message);
             }
 
         } catch (error) {
@@ -756,6 +764,22 @@ export const DataProvider = ({ children }) => {
         return injectionConditions.find(c => c.product_id === productId);
     };
 
+    // --- Production Logs ---
+    const addProductionLog = async (log) => {
+        try {
+            const { data, error } = await supabase
+                .from('production_logs')
+                .insert([log])
+                .select();
+            if (error) throw error;
+            if (data) setProductionLogs(prev => [data[0], ...prev]);
+            return data?.[0];
+        } catch (error) {
+            console.error('Error adding production log:', error);
+            return null;
+        }
+    };
+
     return (
         <DataContext.Provider value={{
             loading,
@@ -779,7 +803,8 @@ export const DataProvider = ({ children }) => {
             notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification,
             injectionConditions, addInjectionCondition, updateInjectionCondition, deleteInjectionCondition, getConditionByProduct,
             suppliers, addSupplier, updateSupplier, deleteSupplier,
-            purchaseRequests, addPurchaseRequest, updatePurchaseRequest, deletePurchaseRequest
+            purchaseRequests, addPurchaseRequest, updatePurchaseRequest, deletePurchaseRequest,
+            productionLogs, addProductionLog
         }}>
             {children}
         </DataContext.Provider>

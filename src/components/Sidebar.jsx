@@ -19,7 +19,8 @@ import {
   ChevronRight,
   X,
   ShoppingBag,
-  Building
+  Building,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -29,7 +30,8 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
     production: true,
     salesLogistics: false,
     quality: false,
-    hr: false
+    hr: false,
+    community: false
   });
 
   // 카테고리 정의
@@ -82,6 +84,14 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
       icon: Users,
       items: [
         { icon: Users, label: '직원관리', path: '/employees', key: 'employees' }
+      ]
+    },
+    {
+      id: 'community',
+      label: '커뮤니티',
+      icon: MessageSquare,
+      items: [
+        { icon: MessageSquare, label: '게시판', path: '/board', key: 'board' }
       ]
     }
   ];

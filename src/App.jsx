@@ -22,6 +22,7 @@ import WorkHistory from './pages/WorkHistory';
 import InjectionConditions from './pages/InjectionConditions';
 import Suppliers from './pages/Suppliers';
 import Purchase from './pages/Purchase';
+import Board from './pages/Board';
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();
@@ -59,6 +60,7 @@ function App() {
                 <Route path="injection-conditions" element={<InjectionConditions />} />
                 <Route path="suppliers" element={<Suppliers />} />
                 <Route path="purchase" element={<Purchase />} />
+                <Route path="board" element={<Board />} />
               </Route>
             </Route>
 

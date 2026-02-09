@@ -24,6 +24,8 @@ export const DataProvider = ({ children }) => {
     const [notifications, setNotifications] = useState([]);
     const [injectionConditions, setInjectionConditions] = useState([]);
     const [productionLogs, setProductionLogs] = useState([]);
+    const [boardPosts, setBoardPosts] = useState([]);
+    const [boardComments, setBoardComments] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -126,6 +128,20 @@ export const DataProvider = ({ children }) => {
                 if (logs) setProductionLogs(logs);
             } catch (e) {
                 console.warn('production_logs table not available:', e.message);
+            }
+
+            try {
+                const { data: posts } = await supabase.from('board_posts').select('*').order('created_at', { ascending: false });
+                if (posts) setBoardPosts(posts);
+            } catch (e) {
+                console.warn('board_posts table not available:', e.message);
+            }
+
+            try {
+                const { data: comments } = await supabase.from('board_comments').select('*').order('created_at', { ascending: true });
+                if (comments) setBoardComments(comments);
+            } catch (e) {
+                console.warn('board_comments table not available:', e.message);
             }
 
         } catch (error) {
@@ -784,6 +800,41 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    // --- Board (게시판) ---
+    const addBoardPost = async (post) => {
+        try {
+            const { data, error } = await supabase.from('board_posts').insert([post]).select();
+            if (error) throw error;
+            if (data) setBoardPosts(prev => [data[0], ...prev]);
+            return data?.[0];
+        } catch (error) { console.error('Error adding board post:', error); return null; }
+    };
+    const updateBoardPost = async (id, fields) => {
+        const { error } = await supabase.from('board_posts').update(fields).eq('id', id);
+        if (!error) setBoardPosts(prev => prev.map(p => p.id === id ? { ...p, ...fields } : p));
+    };
+    const deleteBoardPost = async (id) => {
+        // 댓글도 함께 삭제
+        await supabase.from('board_comments').delete().eq('post_id', id);
+        const { error } = await supabase.from('board_posts').delete().eq('id', id);
+        if (!error) {
+            setBoardPosts(prev => prev.filter(p => p.id !== id));
+            setBoardComments(prev => prev.filter(c => c.post_id !== id));
+        }
+    };
+    const addBoardComment = async (comment) => {
+        try {
+            const { data, error } = await supabase.from('board_comments').insert([comment]).select();
+            if (error) throw error;
+            if (data) setBoardComments(prev => [...prev, data[0]]);
+            return data?.[0];
+        } catch (error) { console.error('Error adding comment:', error); return null; }
+    };
+    const deleteBoardComment = async (id) => {
+        const { error } = await supabase.from('board_comments').delete().eq('id', id);
+        if (!error) setBoardComments(prev => prev.filter(c => c.id !== id));
+    };
+
     return (
         <DataContext.Provider value={{
             loading,
@@ -808,7 +859,8 @@ export const DataProvider = ({ children }) => {
             injectionConditions, addInjectionCondition, updateInjectionCondition, deleteInjectionCondition, getConditionByProduct,
             suppliers, addSupplier, updateSupplier, deleteSupplier,
             purchaseRequests, addPurchaseRequest, updatePurchaseRequest, deletePurchaseRequest,
-            productionLogs, addProductionLog
+            productionLogs, addProductionLog,
+            boardPosts, boardComments, addBoardPost, updateBoardPost, deleteBoardPost, addBoardComment, deleteBoardComment
         }}>
             {children}
         </DataContext.Provider>

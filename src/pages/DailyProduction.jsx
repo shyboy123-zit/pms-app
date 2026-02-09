@@ -166,6 +166,7 @@ const DailyProduction = () => {
 
         await updateWorkOrder(selectedOrder.id, {
             produced_quantity: newProducedQuantity,
+            daily_quantity: dailyQuantity,
             last_production_date: new Date().toISOString()
         });
 

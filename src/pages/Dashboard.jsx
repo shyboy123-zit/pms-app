@@ -56,12 +56,18 @@ const Dashboard = () => {
     // 4. 출고 중인 금형
     const outgoingMolds = moldMovement.filter(m => m.status === '출고중');
 
-    // 5. 일일 원재료 소모 현황 (원재료별 그룹핑)
+    // 5. 일일 원재료 소모 현황 (오늘 기록된 일일 생산량 기준)
     const materialConsumption = (() => {
-        const activeWOs = workOrders.filter(wo => wo.status === '진행중');
         const consumptionMap = {};
 
-        activeWOs.forEach(wo => {
+        workOrders.forEach(wo => {
+            // 오늘 날짜에 기록된 작업지시만 필터
+            const lastDate = wo.last_production_date ? new Date(wo.last_production_date).toISOString().split('T')[0] : null;
+            if (lastDate !== today) return;
+
+            const dailyQty = wo.daily_quantity || 0;
+            if (dailyQty <= 0) return;
+
             const product = products.find(p => p.id === wo.product_id);
             if (!product || !product.material_id) return;
 
@@ -69,7 +75,7 @@ const Dashboard = () => {
             if (!material) return;
 
             const shotWeight = (product.product_weight || 0) + (product.runner_weight || 0);
-            const consumedKg = (shotWeight * (wo.produced_quantity || 0)) / 1000;
+            const consumedKg = (shotWeight * dailyQty) / 1000;
 
             if (!consumptionMap[material.id]) {
                 consumptionMap[material.id] = {
@@ -90,11 +96,7 @@ const Dashboard = () => {
             }
         });
 
-        return Object.values(consumptionMap).sort((a, b) => {
-            const rateA = a.stock > 0 ? (a.totalConsumedKg / a.stock) * 100 : 999;
-            const rateB = b.stock > 0 ? (b.totalConsumedKg / b.stock) * 100 : 999;
-            return rateB - rateA; // 소진율 높은 순
-        });
+        return Object.values(consumptionMap).sort((a, b) => b.totalConsumedKg - a.totalConsumedKg);
     })();
 
     return (

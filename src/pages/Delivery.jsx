@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, Package, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Package, TrendingUp, TrendingDown, Calendar, DollarSign } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Delivery = () => {
@@ -13,7 +13,7 @@ const Delivery = () => {
     } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [transactionType, setTransactionType] = useState('출고'); // '입고' or '출고'
+    const [transactionType, setTransactionType] = useState('출고');
     const [formData, setFormData] = useState({
         product_id: '',
         client_name: '',
@@ -22,6 +22,36 @@ const Delivery = () => {
         transaction_date: new Date().toISOString().split('T')[0],
         notes: ''
     });
+
+    // 현재 월 기준 필터
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    // 월별 매입/매출 합계 계산
+    const monthlySummary = useMemo(() => {
+        const txs = inventoryTransactions || [];
+        const thisMonth = txs.filter(t => (t.transaction_date || '').startsWith(currentMonth));
+
+        const salesTotal = thisMonth
+            .filter(t => t.type === '출고')
+            .reduce((sum, t) => sum + ((t.quantity || 0) * (t.unit_price || 0)), 0);
+
+        const purchaseTotal = thisMonth
+            .filter(t => t.type === '입고')
+            .reduce((sum, t) => sum + ((t.quantity || 0) * (t.unit_price || 0)), 0);
+
+        return { salesTotal, purchaseTotal, profit: salesTotal - purchaseTotal };
+    }, [inventoryTransactions, currentMonth]);
+
+    // 제품 선택 시 단가 자동 적용
+    const handleProductSelect = (productId) => {
+        const product = products.find(p => p.id === productId);
+        setFormData({
+            ...formData,
+            product_id: productId,
+            unit_price: product?.unit_price || 0
+        });
+    };
 
     const columns = [
         {
@@ -46,24 +76,28 @@ const Delivery = () => {
         {
             header: '수량',
             accessor: 'quantity',
-            render: (row) => `${row.quantity.toLocaleString()}개`
+            render: (row) => `${(row.quantity || 0).toLocaleString()}개`
         },
         {
             header: '단가',
             accessor: 'unit_price',
-            render: (row) => row.unit_price ? `₩${row.unit_price.toLocaleString()}` : '-'
+            render: (row) => row.unit_price ? `₩${Number(row.unit_price).toLocaleString()}` : '-'
         },
         {
             header: '합계',
             render: (row) => {
                 const total = (row.quantity || 0) * (row.unit_price || 0);
-                return total > 0 ? `₩${total.toLocaleString()}` : '-';
+                return total > 0 ? (
+                    <span style={{ fontWeight: 700, color: row.type === '출고' ? '#10b981' : '#3b82f6' }}>
+                        ₩{total.toLocaleString()}
+                    </span>
+                ) : '-';
             }
         },
     ];
 
     const handleSubmit = async () => {
-        if (!formData.product_id && transactionType === '출고') {
+        if (!formData.product_id) {
             return alert('제품을 선택해주세요.');
         }
         if (!formData.client_name) {
@@ -77,8 +111,8 @@ const Delivery = () => {
 
         const transaction = {
             type: transactionType,
-            product_id: transactionType === '출고' ? formData.product_id : null,
-            item_name: transactionType === '입고' ? formData.client_name + ' 입고' : (product ? product.name : ''),
+            product_id: formData.product_id,
+            item_name: product ? product.name : '',
             client_name: formData.client_name,
             quantity: formData.quantity,
             unit_price: formData.unit_price || 0,
@@ -88,7 +122,7 @@ const Delivery = () => {
 
         await addInventoryTransaction(transaction);
 
-        // 출고인 경우 매출 자동 등록
+        // 매출 기록 자동 등록
         if (transactionType === '출고') {
             const salesRecord = {
                 date: formData.transaction_date,
@@ -97,6 +131,16 @@ const Delivery = () => {
                 amount: formData.quantity * (formData.unit_price || 0),
                 type: '매출',
                 notes: `[자동] ${product ? product.name : ''} ${formData.quantity}개 출고`
+            };
+            await addSalesRecord(salesRecord);
+        } else if (transactionType === '입고') {
+            const salesRecord = {
+                date: formData.transaction_date,
+                client: formData.client_name,
+                item: product ? product.name : '',
+                amount: formData.quantity * (formData.unit_price || 0),
+                type: '매입',
+                notes: `[자동] ${product ? product.name : ''} ${formData.quantity}개 입고`
             };
             await addSalesRecord(salesRecord);
         }
@@ -118,6 +162,7 @@ const Delivery = () => {
 
     const openModal = (type) => {
         setTransactionType(type);
+        resetForm();
         setIsModalOpen(true);
     };
 
@@ -138,21 +183,28 @@ const Delivery = () => {
                 </div>
             </div>
 
+            {/* 월별 매입/매출 요약 */}
             <div className="stats-row">
                 <div className="glass-panel simple-stat">
                     <span className="label">총 거래</span>
                     <span className="value">{inventoryTransactions.length}건</span>
                 </div>
-                <div className="glass-panel simple-stat">
-                    <span className="label">입고</span>
-                    <span className="value" style={{ color: '#3b82f6' }}>
-                        {inventoryTransactions.filter(t => t.type === '입고').length}건
+                <div className="glass-panel simple-stat month-stat">
+                    <span className="label"><Calendar size={13} /> 이번 달 매출 (출고)</span>
+                    <span className="value" style={{ color: '#10b981' }}>
+                        ₩{monthlySummary.salesTotal.toLocaleString()}
                     </span>
                 </div>
-                <div className="glass-panel simple-stat">
-                    <span className="label">출고</span>
-                    <span className="value" style={{ color: '#10b981' }}>
-                        {inventoryTransactions.filter(t => t.type === '출고').length}건
+                <div className="glass-panel simple-stat month-stat">
+                    <span className="label"><Calendar size={13} /> 이번 달 매입 (입고)</span>
+                    <span className="value" style={{ color: '#3b82f6' }}>
+                        ₩{monthlySummary.purchaseTotal.toLocaleString()}
+                    </span>
+                </div>
+                <div className="glass-panel simple-stat month-stat">
+                    <span className="label"><DollarSign size={13} /> 순이익</span>
+                    <span className="value" style={{ color: monthlySummary.profit >= 0 ? '#10b981' : '#ef4444' }}>
+                        {monthlySummary.profit >= 0 ? '+' : ''}₩{monthlySummary.profit.toLocaleString()}
                     </span>
                 </div>
             </div>
@@ -167,21 +219,31 @@ const Delivery = () => {
                 isOpen={isModalOpen}
                 onClose={resetForm}
             >
-                {transactionType === '출고' && (
-                    <div className="form-group">
-                        <label className="form-label">제품 선택 *</label>
-                        <select
-                            className="form-input"
-                            value={formData.product_id}
-                            onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
-                        >
-                            <option value="">제품 선택</option>
-                            {products.filter(p => p.status === '생산중').map(p => (
-                                <option key={p.id} value={p.id}>
-                                    {p.name} ({p.model || '규격 없음'})
-                                </option>
-                            ))}
-                        </select>
+                {/* 제품 선택 - 등록된 제품만 표시 */}
+                <div className="form-group">
+                    <label className="form-label">제품 선택 *</label>
+                    <select
+                        className="form-input"
+                        value={formData.product_id}
+                        onChange={(e) => handleProductSelect(e.target.value)}
+                    >
+                        <option value="">제품을 선택하세요</option>
+                        {products.filter(p => p.status === '생산중').map(p => (
+                            <option key={p.id} value={p.id}>
+                                {p.name} ({p.model || '규격 없음'}) {p.unit_price ? `- ₩${Number(p.unit_price).toLocaleString()}` : ''}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {formData.product_id && (
+                    <div style={{ padding: '0.6rem 0.75rem', background: '#f0f9ff', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #bae6fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', color: '#0369a1', fontWeight: 600 }}>
+                            📦 {products.find(p => p.id === formData.product_id)?.name}
+                        </span>
+                        <span style={{ fontSize: '0.85rem', color: '#0ea5e9', fontWeight: 700 }}>
+                            단가: ₩{Number(formData.unit_price).toLocaleString()}
+                        </span>
                     </div>
                 )}
 
@@ -202,27 +264,29 @@ const Delivery = () => {
                         className="form-input"
                         value={formData.quantity}
                         onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
+                        onFocus={(e) => e.target.select()}
                         min="1"
                         placeholder="수량"
                     />
                 </div>
 
                 <div className="form-group">
-                    <label className="form-label">단가 (원)</label>
+                    <label className="form-label">단가 (원) <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>- 제품 선택시 자동 적용</span></label>
                     <input
                         type="number"
                         className="form-input"
                         value={formData.unit_price}
                         onChange={(e) => setFormData({ ...formData, unit_price: parseInt(e.target.value) || 0 })}
+                        onFocus={(e) => e.target.select()}
                         min="0"
                         placeholder="단가"
                     />
                 </div>
 
                 {formData.quantity > 0 && formData.unit_price > 0 && (
-                    <div style={{ padding: '0.75rem', background: '#f0fdf4', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #86efac' }}>
-                        <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>총 금액</div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#16a34a' }}>
+                    <div style={{ padding: '0.85rem', background: transactionType === '출고' ? '#f0fdf4' : '#eff6ff', borderRadius: '8px', marginBottom: '1rem', border: `1px solid ${transactionType === '출고' ? '#86efac' : '#93c5fd'}` }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>총 {transactionType === '출고' ? '매출' : '매입'} 금액</div>
+                        <div style={{ fontSize: '1.35rem', fontWeight: 'bold', color: transactionType === '출고' ? '#16a34a' : '#2563eb' }}>
                             ₩{(formData.quantity * formData.unit_price).toLocaleString()}
                         </div>
                     </div>
@@ -249,13 +313,11 @@ const Delivery = () => {
                     />
                 </div>
 
-                {transactionType === '출고' && (
-                    <div style={{ padding: '0.75rem', background: '#eff6ff', borderRadius: '6px', marginBottom: '1rem' }}>
-                        <div style={{ fontSize: '0.85rem', color: '#1e40af', fontWeight: '600' }}>
-                            💡 출고 등록 시 매출에 자동으로 등록됩니다.
-                        </div>
+                <div style={{ padding: '0.75rem', background: transactionType === '출고' ? '#f0fdf4' : '#eff6ff', borderRadius: '6px', marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '0.85rem', color: transactionType === '출고' ? '#16a34a' : '#1e40af', fontWeight: '600' }}>
+                        💡 {transactionType} 등록 시 {transactionType === '출고' ? '매출' : '매입'}에 자동으로 등록됩니다.
                     </div>
-                )}
+                </div>
 
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={resetForm}>취소</button>
@@ -272,13 +334,17 @@ const Delivery = () => {
                 .btn-in:hover { transform: translateY(-1px); box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3); }
                 .btn-out { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 0.65rem 1.3rem; border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; font-weight: 600; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2); transition: all 0.2s; }
                 .btn-out:hover { transform: translateY(-1px); box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3); }
-                .stats-row { display: flex; gap: 1rem; margin-bottom: 2rem; }
-                .simple-stat { padding: 1rem 1.5rem; display: flex; flex-direction: column; flex: 1; }
-                .simple-stat .label { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; }
-                .simple-stat .value { font-size: 1.5rem; font-weight: 700; color: var(--text-main); }
+                .stats-row { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
+                .simple-stat { padding: 1rem 1.5rem; display: flex; flex-direction: column; flex: 1; min-width: 150px; }
+                .simple-stat .label { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 4px; }
+                .simple-stat .value { font-size: 1.3rem; font-weight: 700; color: var(--text-main); }
                 .type-badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8125rem; font-weight: 600; }
                 .type-in { background: #dbeafe; color: #1e40af; }
                 .type-out { background: #d1fae5; color: #065f46; }
+                @media (max-width: 768px) {
+                    .stats-row { flex-direction: column; }
+                    .simple-stat .value { font-size: 1.1rem; }
+                }
             `}</style>
         </div>
     );

@@ -14,6 +14,7 @@ const Products = () => {
         name: '',
         model: '',
         unit: 'EA',
+        unit_price: 0,
         standard_cycle_time: 30,
         product_weight: 0,
         runner_weight: 0,
@@ -27,6 +28,13 @@ const Products = () => {
         { header: '제품명', accessor: 'name' },
         { header: '모델/규격', accessor: 'model' },
         { header: '단위', accessor: 'unit' },
+        {
+            header: '단가', accessor: 'unit_price', render: (row) => (
+                <span style={{ fontWeight: 700, color: '#0ea5e9' }}>
+                    {row.unit_price ? `₩${Number(row.unit_price).toLocaleString()}` : '-'}
+                </span>
+            )
+        },
         { header: 'C/V수', accessor: 'cavity_count', render: (row) => `${row.cavity_count || 1}-C/V` },
         {
             header: '1 Shot 중량(g)',
@@ -72,6 +80,7 @@ const Products = () => {
             name: product.name,
             model: product.model,
             unit: product.unit,
+            unit_price: product.unit_price || 0,
             standard_cycle_time: product.standard_cycle_time,
             product_weight: product.product_weight || 0,
             runner_weight: product.runner_weight || 0,
@@ -93,6 +102,7 @@ const Products = () => {
             name: '',
             model: '',
             unit: 'EA',
+            unit_price: 0,
             standard_cycle_time: 30,
             product_weight: 0,
             runner_weight: 0,
@@ -183,6 +193,18 @@ const Products = () => {
                         <option value="BOX">BOX</option>
                         <option value="KG">KG</option>
                     </select>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">단가 (원)</label>
+                    <input
+                        type="number"
+                        className="form-input"
+                        value={formData.unit_price}
+                        onChange={(e) => setFormData({ ...formData, unit_price: parseInt(e.target.value) || 0 })}
+                        onFocus={(e) => e.target.select()}
+                        min="0"
+                        placeholder="예: 1500"
+                    />
                 </div>
                 <div className="form-group">
                     <label className="form-label">표준 사이클 타임 (초)</label>

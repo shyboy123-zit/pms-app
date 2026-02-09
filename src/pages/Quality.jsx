@@ -1,17 +1,18 @@
 import React, { useState, useRef, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon, FileText, Download, X, Calendar, Filter } from 'lucide-react';
+import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon, FileText, Download, X, Calendar, Filter, Pencil, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 const Quality = () => {
-    const { inspections, employees, products, workOrders, molds, suppliers, addInspection, uploadImage, addNotification } = useData();
+    const { inspections, employees, products, workOrders, molds, suppliers, addInspection, updateInspection, deleteInspection, uploadImage, addNotification } = useData();
     const { user } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isRepairModalOpen, setIsRepairModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isPdfPreview, setIsPdfPreview] = useState(false);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     // 이미지 뷰어
@@ -36,6 +37,9 @@ const Quality = () => {
         const productIds = [...new Set(activeWOs.map(wo => wo.product_id))];
         return products.filter(p => productIds.includes(p.id));
     }, [workOrders, products]);
+
+    // 수정 폼 상태
+    const [editItem, setEditItem] = useState(null);
 
     // 수리 의뢰서 폼 상태
     const [repairForm, setRepairForm] = useState({
@@ -148,6 +152,22 @@ const Quality = () => {
                     </button>
                 );
             }
+        },
+        {
+            header: '관리', accessor: 'actions', render: (row) => (
+                <div style={{ display: 'flex', gap: '4px' }}>
+                    <button onClick={() => openEditModal(row)} style={{
+                        background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe',
+                        padding: '4px 8px', borderRadius: '6px', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.75rem', fontWeight: 600
+                    }}><Pencil size={12} /> 수정</button>
+                    <button onClick={() => handleDelete(row.id)} style={{
+                        background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca',
+                        padding: '4px 8px', borderRadius: '6px', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.75rem', fontWeight: 600
+                    }}><Trash2 size={12} /> 삭제</button>
+                </div>
+            )
         }
     ];
 
@@ -161,6 +181,41 @@ const Quality = () => {
     // 파일 삭제
     const removeFile = (index) => {
         setNewItem(prev => ({ ...prev, files: prev.files.filter((_, i) => i !== index) }));
+    };
+
+    // 수정 모달 열기
+    const openEditModal = (row) => {
+        setEditItem({
+            id: row.id,
+            date: row.date || '',
+            product: row.product || '',
+            checkItem: row.check_item || '',
+            result: row.result || 'OK',
+            ngType: row.ng_type || '',
+            action: row.action || ''
+        });
+        setIsEditModalOpen(true);
+    };
+
+    // 수정 저장
+    const handleEditSave = async () => {
+        if (!editItem) return;
+        await updateInspection(editItem.id, {
+            date: editItem.date,
+            product: editItem.product,
+            check_item: editItem.checkItem,
+            result: editItem.result,
+            ng_type: editItem.result === 'OK' ? '-' : editItem.ngType,
+            action: editItem.result === 'OK' ? '-' : editItem.action
+        });
+        setIsEditModalOpen(false);
+        setEditItem(null);
+    };
+
+    // 삭제
+    const handleDelete = async (id) => {
+        if (!window.confirm('이 검사 기록을 삭제하시겠습니까?')) return;
+        await deleteInspection(id);
     };
 
     // 수리 의뢰서 모달 열기
@@ -455,6 +510,60 @@ const Quality = () => {
                         {isUploading ? `업로드 중... (${newItem.files.length}장)` : '등록'}
                     </button>
                 </div>
+            </Modal>
+
+            {/* 수정 모달 */}
+            <Modal title="검사 결과 수정" isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); setEditItem(null); }}>
+                {editItem && (
+                    <>
+                        <div className="form-group">
+                            <label className="form-label">검사 일자</label>
+                            <input type="date" className="form-input" value={editItem.date} onChange={(e) => setEditItem({ ...editItem, date: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">제품명</label>
+                            <select className="form-input" value={editItem.product} onChange={(e) => setEditItem({ ...editItem, product: e.target.value })}>
+                                <option value="">제품을 선택하세요</option>
+                                {products.map(p => (
+                                    <option key={p.id} value={p.name}>{p.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">검사 항목</label>
+                            <input className="form-input" value={editItem.checkItem} onChange={(e) => setEditItem({ ...editItem, checkItem: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">판정 결과</label>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                    <input type="radio" name="editResult" value="OK" checked={editItem.result === 'OK'} onChange={(e) => setEditItem({ ...editItem, result: e.target.value })} />
+                                    <span style={{ fontWeight: 600, color: 'var(--success)' }}>OK (합격)</span>
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                    <input type="radio" name="editResult" value="NG" checked={editItem.result === 'NG'} onChange={(e) => setEditItem({ ...editItem, result: e.target.value })} />
+                                    <span style={{ fontWeight: 600, color: 'var(--danger)' }}>NG (불량)</span>
+                                </label>
+                            </div>
+                        </div>
+                        {editItem.result === 'NG' && (
+                            <div style={{ background: '#fef2f2', padding: '1rem', borderRadius: '8px', border: '1px solid #fee2e2' }}>
+                                <div className="form-group">
+                                    <label className="form-label" style={{ color: '#991b1b' }}>불량 유형 (NG Type)</label>
+                                    <input className="form-input" value={editItem.ngType} onChange={(e) => setEditItem({ ...editItem, ngType: e.target.value })} style={{ borderColor: '#fca5a5' }} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label" style={{ color: '#991b1b' }}>조치 내용</label>
+                                    <textarea className="form-input" rows="2" value={editItem.action} onChange={(e) => setEditItem({ ...editItem, action: e.target.value })} style={{ borderColor: '#fca5a5' }} />
+                                </div>
+                            </div>
+                        )}
+                        <div className="modal-actions">
+                            <button className="btn-cancel" onClick={() => { setIsEditModalOpen(false); setEditItem(null); }}>취소</button>
+                            <button className="btn-submit" onClick={handleEditSave}>수정 저장</button>
+                        </div>
+                    </>
+                )}
             </Modal>
 
             {/* 수리 의뢰서 모달 */}

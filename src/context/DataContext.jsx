@@ -219,6 +219,10 @@ export const DataProvider = ({ children }) => {
         const { error } = await supabase.from('inspections').update(fields).eq('id', id);
         if (!error) setInspections(inspections.map(i => i.id === id ? { ...i, ...fields } : i));
     };
+    const deleteInspection = async (id) => {
+        const { error } = await supabase.from('inspections').delete().eq('id', id);
+        if (!error) setInspections(inspections.filter(i => i.id !== id));
+    };
 
     // 7. Employees
     const addEmployee = async (item) => {
@@ -788,7 +792,7 @@ export const DataProvider = ({ children }) => {
             materials, addMaterial, updateMaterial, deleteMaterial,
             equipments, addEquipment, updateEquipment, deleteEquipment,
             eqHistory, addEqHistory, deleteEqHistory,
-            inspections, addInspection, updateInspection,
+            inspections, addInspection, updateInspection, deleteInspection,
             employees, addEmployee, updateEmployee, deleteEmployee,
             materialUsage, addMaterialUsage, getMaterialUsageHistory,
             updateMaterialUsage, deleteMaterialUsage,

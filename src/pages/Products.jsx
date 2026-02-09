@@ -191,6 +191,7 @@ const Products = () => {
                         className="form-input"
                         value={formData.standard_cycle_time}
                         onChange={(e) => setFormData({ ...formData, standard_cycle_time: parseInt(e.target.value) || 0 })}
+                        onFocus={(e) => e.target.select()}
                         min="1"
                     />
                 </div>
@@ -202,6 +203,7 @@ const Products = () => {
                         className="form-input"
                         value={formData.product_weight}
                         onChange={(e) => setFormData({ ...formData, product_weight: parseFloat(e.target.value) || 0 })}
+                        onFocus={(e) => e.target.select()}
                         min="0"
                         placeholder="예: 50"
                     />
@@ -214,6 +216,7 @@ const Products = () => {
                         className="form-input"
                         value={formData.runner_weight}
                         onChange={(e) => setFormData({ ...formData, runner_weight: parseFloat(e.target.value) || 0 })}
+                        onFocus={(e) => e.target.select()}
                         min="0"
                         placeholder="예: 10"
                     />
@@ -225,6 +228,7 @@ const Products = () => {
                         className="form-input"
                         value={formData.cavity_count}
                         onChange={(e) => setFormData({ ...formData, cavity_count: parseInt(e.target.value) || 1 })}
+                        onFocus={(e) => e.target.select()}
                         min="1"
                         placeholder="예: 2"
                     />

@@ -42,7 +42,15 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
       icon: LayoutDashboard,
       path: '/',
       key: 'dashboard',
-      standalone: true // 카테고리 없이 단독 표시
+      standalone: true
+    },
+    {
+      id: 'board',
+      label: '게시판',
+      icon: MessageSquare,
+      path: '/board',
+      key: 'board',
+      standalone: true
     },
     {
       id: 'production',
@@ -84,14 +92,6 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
       icon: Users,
       items: [
         { icon: Users, label: '직원관리', path: '/employees', key: 'employees' }
-      ]
-    },
-    {
-      id: 'community',
-      label: '커뮤니티',
-      icon: MessageSquare,
-      items: [
-        { icon: MessageSquare, label: '게시판', path: '/board', key: 'board' }
       ]
     }
   ];

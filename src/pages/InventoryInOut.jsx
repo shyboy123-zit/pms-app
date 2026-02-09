@@ -8,10 +8,12 @@ import { useData } from '../context/DataContext';
 const InventoryInOut = () => {
     const {
         inventoryTransactions,
+        products,
         addInventoryTransaction,
         updateInventoryTransaction,
         deleteInventoryTransaction,
-        getTransactionsByDateRange
+        getTransactionsByDateRange,
+        addSalesRecord
     } = useData();
 
     const [activeTab, setActiveTab] = useState('all'); // 'all', 'in', 'out', 'status'
@@ -25,6 +27,7 @@ const InventoryInOut = () => {
 
     const [newItem, setNewItem] = useState({
         transactionType: 'IN',
+        productId: '',
         itemName: '',
         itemCode: '',
         quantity: 0,
@@ -34,6 +37,29 @@ const InventoryInOut = () => {
         client: '',
         notes: ''
     });
+
+    // 제품 선택 시 정보 자동 적용
+    const handleProductSelect = (productId) => {
+        const product = products.find(p => p.id === productId);
+        if (product) {
+            setNewItem(prev => ({
+                ...prev,
+                productId: productId,
+                itemName: product.name,
+                itemCode: product.product_code || '',
+                unitPrice: product.unit_price || 0,
+                unit: product.unit || 'EA'
+            }));
+        } else {
+            setNewItem(prev => ({
+                ...prev,
+                productId: '',
+                itemName: '',
+                itemCode: '',
+                unitPrice: 0
+            }));
+        }
+    };
 
     useEffect(() => {
         filterTransactions();
@@ -121,6 +147,19 @@ const InventoryInOut = () => {
             await updateInventoryTransaction(editingId, itemToSave);
         } else {
             await addInventoryTransaction(itemToSave);
+
+            // 매출/매입 기록 자동 등록
+            if (addSalesRecord) {
+                const salesRecord = {
+                    date: newItem.transactionDate,
+                    client: newItem.client,
+                    item: newItem.itemName,
+                    amount: parseFloat(newItem.quantity) * parseFloat(newItem.unitPrice),
+                    type: newItem.transactionType === 'OUT' ? '매출' : '매입',
+                    notes: `[자동] ${newItem.itemName} ${newItem.quantity}개 ${newItem.transactionType === 'OUT' ? '출고' : '입고'}`
+                };
+                await addSalesRecord(salesRecord);
+            }
         }
 
         resetForm();
@@ -155,6 +194,7 @@ const InventoryInOut = () => {
         setEditingId(null);
         setNewItem({
             transactionType: 'IN',
+            productId: '',
             itemName: '',
             itemCode: '',
             quantity: 0,
@@ -185,6 +225,16 @@ const InventoryInOut = () => {
     };
 
     const stats = getTodayStats();
+
+    // 이번 달 매입/매출 합계
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthlyStats = (() => {
+        const monthTxs = (inventoryTransactions || []).filter(t => (t.transaction_date || '').startsWith(currentMonth));
+        const salesTotal = monthTxs.filter(t => t.transaction_type === 'OUT').reduce((sum, t) => sum + parseFloat(t.total_amount || 0), 0);
+        const purchaseTotal = monthTxs.filter(t => t.transaction_type === 'IN').reduce((sum, t) => sum + parseFloat(t.total_amount || 0), 0);
+        return { salesTotal, purchaseTotal };
+    })();
 
     // Calculate current inventory status
     const getInventoryStatus = () => {
@@ -256,6 +306,24 @@ const InventoryInOut = () => {
                         <div className="stat-value" style={{ color: stats.net >= 0 ? '#059669' : '#dc2626' }}>
                             {stats.net >= 0 ? '+' : ''}₩{stats.net.toLocaleString()}
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* 이번 달 매입/매출 합계 */}
+            <div className="summary-cards" style={{ marginBottom: '0.5rem' }}>
+                <div className="stat-card stat-in">
+                    <div className="stat-icon"><TrendingUp size={24} /></div>
+                    <div className="stat-content">
+                        <div className="stat-label">이번 달 총 매입 (입고)</div>
+                        <div className="stat-value" style={{ color: '#2563eb' }}>₩{monthlyStats.purchaseTotal.toLocaleString()}</div>
+                    </div>
+                </div>
+                <div className="stat-card stat-out">
+                    <div className="stat-icon"><TrendingDown size={24} /></div>
+                    <div className="stat-content">
+                        <div className="stat-label">이번 달 총 매출 (출고)</div>
+                        <div className="stat-value" style={{ color: '#059669' }}>₩{monthlyStats.salesTotal.toLocaleString()}</div>
                     </div>
                 </div>
             </div>
@@ -362,23 +430,26 @@ const InventoryInOut = () => {
                     </select>
                 </div>
                 <div className="form-group">
-                    <label className="form-label">품목코드 (선택)</label>
-                    <input
+                    <label className="form-label">제품 선택 *</label>
+                    <select
                         className="form-input"
-                        value={newItem.itemCode}
-                        onChange={(e) => setNewItem({ ...newItem, itemCode: e.target.value })}
-                        placeholder="예: BJB-001"
-                    />
+                        value={newItem.productId}
+                        onChange={(e) => handleProductSelect(e.target.value)}
+                    >
+                        <option value="">제품을 선택하세요</option>
+                        {products.filter(p => p.status !== '단종').map(p => (
+                            <option key={p.id} value={p.id}>
+                                {p.product_code ? `[${p.product_code}] ` : ''}{p.name} ({p.model || '규격 없음'}) {p.unit_price ? `- ₩${Number(p.unit_price).toLocaleString()}` : ''}
+                            </option>
+                        ))}
+                    </select>
                 </div>
-                <div className="form-group">
-                    <label className="form-label">품목명 *</label>
-                    <input
-                        className="form-input"
-                        value={newItem.itemName}
-                        onChange={(e) => setNewItem({ ...newItem, itemName: e.target.value })}
-                        placeholder="볼 조인트 베어링 품목명"
-                    />
-                </div>
+                {newItem.productId && (
+                    <div style={{ padding: '0.6rem 0.75rem', background: '#f0f9ff', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #bae6fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', color: '#0369a1', fontWeight: 600 }}>📦 {newItem.itemName}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#0ea5e9', fontWeight: 700 }}>단가: ₩{Number(newItem.unitPrice).toLocaleString()}</span>
+                    </div>
+                )}
                 <div className="form-group">
                     <label className="form-label">수량 *</label>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>

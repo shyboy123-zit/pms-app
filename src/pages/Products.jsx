@@ -16,6 +16,7 @@ const Products = () => {
         unit: 'EA',
         unit_price: 0,
         product_type: '매출',
+        company_name: '',
         standard_cycle_time: 30,
         product_weight: 0,
         runner_weight: 0,
@@ -40,6 +41,7 @@ const Products = () => {
                 </span>
             )
         },
+        { header: '업체명', accessor: 'company_name', render: (row) => row.company_name || '-' },
         {
             header: '단가', accessor: 'unit_price', render: (row) => (
                 <span style={{ fontWeight: 700, color: '#0ea5e9' }}>
@@ -94,6 +96,7 @@ const Products = () => {
             unit: product.unit,
             unit_price: product.unit_price || 0,
             product_type: product.product_type || '매출',
+            company_name: product.company_name || '',
             standard_cycle_time: product.standard_cycle_time,
             product_weight: product.product_weight || 0,
             runner_weight: product.runner_weight || 0,
@@ -117,6 +120,7 @@ const Products = () => {
             unit: 'EA',
             unit_price: 0,
             product_type: '매출',
+            company_name: '',
             standard_cycle_time: 30,
             product_weight: 0,
             runner_weight: 0,
@@ -198,7 +202,15 @@ const Products = () => {
                     </select>
                 </div>
                 <div className="form-group">
-                    <label className="form-label">모델/규격</label>
+                    <label className="form-label">업체명</label>
+                    <input
+                        className="form-input"
+                        value={formData.company_name}
+                        onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                        placeholder="예: 현대자동차"
+                    />
+                </div>
+                <div className="form-group">
                     <input
                         className="form-input"
                         value={formData.model}

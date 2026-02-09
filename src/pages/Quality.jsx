@@ -8,7 +8,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 const Quality = () => {
-    const { inspections, employees, products, molds, suppliers, addInspection, uploadImage, addNotification } = useData();
+    const { inspections, employees, products, workOrders, molds, suppliers, addInspection, uploadImage, addNotification } = useData();
     const { user } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isRepairModalOpen, setIsRepairModalOpen] = useState(false);
@@ -19,17 +19,23 @@ const Quality = () => {
     const [isViewerOpen, setIsViewerOpen] = useState(false);
     const pdfRef = useRef(null);
 
-    // 검사 등록 폼 상태
     const [newItem, setNewItem] = useState({
         date: new Date().toISOString().split('T')[0],
         product: '',
-        checkItem: '외관 검사',
+        checkItem: [],
         result: 'OK',
         ngType: '',
         action: '',
-        files: [] // 여러 장 지원
+        files: []
     });
     const [isUploading, setIsUploading] = useState(false);
+
+    // 진행중인 작업지시의 제품만 필터
+    const activeProducts = useMemo(() => {
+        const activeWOs = workOrders.filter(wo => wo.status === '진행중');
+        const productIds = [...new Set(activeWOs.map(wo => wo.product_id))];
+        return products.filter(p => productIds.includes(p.id));
+    }, [workOrders, products]);
 
     // 수리 의뢰서 폼 상태
     const [repairForm, setRepairForm] = useState({
@@ -221,6 +227,7 @@ const Quality = () => {
 
     const handleSave = async () => {
         if (!newItem.product) return alert('제품명을 선택하세요.');
+        if (newItem.checkItem.length === 0) return alert('검사 항목을 하나 이상 선택하세요.');
         if (newItem.result === 'NG' && !newItem.ngType) return alert('NG 판정 시 불량유형은 필수입니다.');
 
         setIsUploading(true);
@@ -240,7 +247,7 @@ const Quality = () => {
             qc_code: newCode,
             date: newItem.date,
             product: newItem.product,
-            check_item: newItem.checkItem,
+            check_item: newItem.checkItem.join(', '),
             result: newItem.result,
             ng_type: newItem.result === 'OK' ? '-' : newItem.ngType,
             action: newItem.result === 'OK' ? '-' : newItem.action,
@@ -263,7 +270,7 @@ const Quality = () => {
         setNewItem({
             date: newItem.date,
             product: newItem.product,
-            checkItem: '외관 검사',
+            checkItem: [],
             result: 'OK',
             ngType: '',
             action: '',
@@ -345,23 +352,45 @@ const Quality = () => {
                     <input type="date" className="form-input" value={newItem.date} onChange={(e) => setNewItem({ ...newItem, date: e.target.value })} />
                 </div>
                 <div className="form-group">
-                    <label className="form-label">제품명</label>
+                    <label className="form-label">제품명 (진행중 작업만 표시)</label>
                     <select className="form-input" value={newItem.product} onChange={(e) => setNewItem({ ...newItem, product: e.target.value })}>
                         <option value="">제품을 선택하세요</option>
-                        {products.map(p => (
+                        {activeProducts.map(p => (
                             <option key={p.id} value={p.name}>{p.name}</option>
                         ))}
                     </select>
                 </div>
                 <div className="form-group">
-                    <label className="form-label">검사 항목</label>
-                    <select className="form-input" value={newItem.checkItem} onChange={(e) => setNewItem({ ...newItem, checkItem: e.target.value })}>
-                        <option value="외관 검사">외관 검사</option>
-                        <option value="치수 검사">치수 검사</option>
-                        <option value="강도 테스트">강도 테스트</option>
-                        <option value="조립성 확인">조립성 확인</option>
-                        <option value="기능 검사">기능 검사</option>
-                    </select>
+                    <label className="form-label">검사 항목 (복수 선택 가능)</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {['외관 검사', '치수 검사', '강도 테스트', '조립성 확인', '기능 검사'].map(item => {
+                            const isChecked = newItem.checkItem.includes(item);
+                            return (
+                                <label key={item} onClick={() => {
+                                    setNewItem(prev => ({
+                                        ...prev,
+                                        checkItem: isChecked
+                                            ? prev.checkItem.filter(c => c !== item)
+                                            : [...prev.checkItem, item]
+                                    }));
+                                }} style={{
+                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                    padding: '0.45rem 0.9rem', borderRadius: '8px', cursor: 'pointer',
+                                    background: isChecked ? 'linear-gradient(135deg, #4f46e5, #6366f1)' : '#f1f5f9',
+                                    color: isChecked ? 'white' : '#475569',
+                                    fontWeight: isChecked ? 700 : 500, fontSize: '0.85rem',
+                                    border: isChecked ? '2px solid #4f46e5' : '2px solid #e2e8f0',
+                                    transition: 'all 0.15s'
+                                }}>
+                                    {isChecked ? <CheckCircle size={15} /> : <span style={{ width: 15, height: 15, border: '2px solid #cbd5e1', borderRadius: '50%', display: 'inline-block' }} />}
+                                    {item}
+                                </label>
+                            );
+                        })}
+                    </div>
+                    {newItem.checkItem.length === 0 && (
+                        <p style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '4px' }}>하나 이상 선택해주세요</p>
+                    )}
                 </div>
                 <div className="form-group">
                     <label className="form-label">판정 결과</label>

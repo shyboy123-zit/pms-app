@@ -235,7 +235,8 @@ const Employees = () => {
         injection_conditions: '사출조건표',
         purchase: '구매관리',
         suppliers: '거래처관리',
-        employees: '직원관리'
+        employees: '직원관리',
+        government_support: '국가지원사업'
     };
 
     // === PDF 관련 함수 ===

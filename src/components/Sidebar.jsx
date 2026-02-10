@@ -20,7 +20,8 @@ import {
   X,
   ShoppingBag,
   Building,
-  MessageSquare
+  MessageSquare,
+  Briefcase
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -31,7 +32,8 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
     salesLogistics: false,
     quality: false,
     hr: false,
-    community: false
+    community: false,
+    bizSupport: false
   });
 
   // 카테고리 정의
@@ -92,6 +94,14 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
       icon: Users,
       items: [
         { icon: Users, label: '직원관리', path: '/employees', key: 'employees' }
+      ]
+    },
+    {
+      id: 'bizSupport',
+      label: '경영지원',
+      icon: Briefcase,
+      items: [
+        { icon: Building, label: '국가지원사업', path: '/government-support', key: 'government_support' }
       ]
     }
   ];

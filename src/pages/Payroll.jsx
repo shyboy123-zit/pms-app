@@ -92,7 +92,8 @@ const Payroll = () => {
         nightHours: '',       // 야간근로시간
         holidayHours: '',     // 휴일근로시간
         bonus: '',            // 상여금
-        annualLeavePay: '',   // 연차수당
+        annualLeavePay: '',   // 연차수당 (직접입력 시)
+        annualLeaveDays: '',  // 미사용 연차일수 (자동계산용)
         holidayBonus: '',     // 명절수당 (설날/추석)
         performanceBonus: '', // 성과금
         mealAllowance: '',    // 식대 (비과세)
@@ -143,6 +144,7 @@ const Payroll = () => {
         const holidayHours = parseFloat(payData.holidayHours) || 0;
         const bonus = parseFloat(payData.bonus) || 0;
         const annualLeavePay = parseFloat(payData.annualLeavePay) || 0;
+        const annualLeaveDays = parseFloat(payData.annualLeaveDays) || 0;
         const holidayBonus = parseFloat(payData.holidayBonus) || 0;
         const performanceBonus = parseFloat(payData.performanceBonus) || 0;
         const weeklyHours = parseFloat(payData.weeklyHours) || 40;
@@ -164,11 +166,17 @@ const Payroll = () => {
         const nightPay = Math.round(effectiveHourly * 0.5 * nightHours); // 야간수당 가산분
         const holidayPay = Math.round(effectiveHourly * 1.5 * holidayHours);
 
+        // 1일급 계산 (통상시급 × 1일 소정근로시간 8h)
+        const dailyWage = Math.round(effectiveHourly * 8);
+
+        // 연차수당: 일수 입력 시 자동계산, 없으면 직접입력 금액 사용
+        const calculatedAnnualPay = annualLeaveDays > 0 ? (dailyWage * annualLeaveDays) : annualLeavePay;
+
         // 주휴수당 (시급제 & 주 15시간 이상)
         const weeklyHolidayPay = payType === 'hourly' ? calcWeeklyHolidayPay(hourlyWage, weeklyHours) : 0;
 
         // 과세 총액
-        const taxableTotal = grossBase + overtimePay + nightPay + holidayPay + bonus + annualLeavePay + holidayBonus + performanceBonus + weeklyHolidayPay;
+        const taxableTotal = grossBase + overtimePay + nightPay + holidayPay + bonus + calculatedAnnualPay + holidayBonus + performanceBonus + weeklyHolidayPay;
         // 비과세 총액 (식대 월 20만원, 교통비 월 20만원 한도)
         const nonTaxMeal = Math.min(mealAllowance, 200000);
         const nonTaxTransport = Math.min(transportAllowance, 200000);
@@ -197,7 +205,8 @@ const Payroll = () => {
 
         return {
             grossBase, overtimePay, nightPay, holidayPay, bonus,
-            annualLeavePay, holidayBonus, performanceBonus, weeklyHolidayPay,
+            annualLeavePay: calculatedAnnualPay, annualLeaveDays, dailyWage,
+            holidayBonus, performanceBonus, weeklyHolidayPay,
             taxableTotal, nonTaxMeal, nonTaxTransport, nonTaxTotal, totalPay,
             nationalPension, healthInsurance, longTermCare, employmentInsurance, totalInsurance,
             incomeTax, localIncomeTax, totalDeduction, netPay,
@@ -427,10 +436,16 @@ const Payroll = () => {
                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
                         </div>
                         <div>
-                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>연차수당</label>
-                            <input type="number" placeholder="0" value={payData.annualLeavePay}
-                                onChange={(e) => setPayData({ ...payData, annualLeavePay: e.target.value })}
+                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>미사용 연차 (일수)</label>
+                            <input type="number" placeholder="0" min="0" value={payData.annualLeaveDays}
+                                onChange={(e) => setPayData({ ...payData, annualLeaveDays: e.target.value, annualLeavePay: '' })}
                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
+                            {calculation.dailyWage > 0 && (
+                                <div style={{ fontSize: '0.65rem', color: '#4f46e5', marginTop: '3px', fontWeight: 600 }}>
+                                    1일급: {fmt(calculation.dailyWage)}원
+                                    {payData.annualLeaveDays > 0 && ` × ${payData.annualLeaveDays}일 = ${fmt(calculation.annualLeavePay)}원`}
+                                </div>
+                            )}
                         </div>
                         <div>
                             <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>성과금</label>
@@ -496,7 +511,7 @@ const Payroll = () => {
                             { label: '휴일근로수당 (×1.5)', value: calculation.holidayPay },
                             { label: `주휴수당 (주${payData.weeklyHours || 40}h)`, value: calculation.weeklyHolidayPay },
                             { label: '상여금', value: calculation.bonus },
-                            { label: '연차수당', value: calculation.annualLeavePay },
+                            { label: `연차수당${calculation.annualLeaveDays > 0 ? ` (1일급 ${fmt(calculation.dailyWage)}원×${calculation.annualLeaveDays}일)` : ''}`, value: calculation.annualLeavePay },
                             { label: '명절수당', value: calculation.holidayBonus },
                             { label: '성과금', value: calculation.performanceBonus },
                             { label: '식대 (비과세)', value: calculation.nonTaxMeal },

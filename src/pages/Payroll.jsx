@@ -28,12 +28,32 @@ const MINIMUM_WAGE = {
     2026: 10360,   // 2026년 최저시급
 };
 
-// 주휴수당 계산: 주 15시간 이상 근무 시 지급
-// 주휴수당 = (주간 소정근로시간 / 40) × 8 × 시급 × 4.345주(월 환산)
+// ===== 주휴수당 (Weekly Holiday Pay) =====
+//
+// [법적 근거]
+// - 근로기준법 제55조 (휴일): 사용자는 1주간 소정근로일을 개근한 근로자에게
+//   1주일에 평균 1회 이상의 유급휴일을 주어야 한다.
+// - 근로기준법 시행령 제30조: 1주간 소정근로시간이 15시간 미만인 근로자에
+//   대해서는 제55조를 적용하지 아니한다.
+//
+// [계산 공식]
+// 1일 소정근로시간 = 주간 소정근로시간 ÷ 5일
+// 주휴수당(주) = 1일 소정근로시간 × 시급
+// 주휴수당(월) = 주휴수당(주) × 4.345 (= 52주 ÷ 12개월)
+//
+// [적용 조건]
+// - 주 15시간 이상 근무하는 근로자에게만 지급
+// - 해당 주의 소정근로일을 개근해야 지급 (본 시스템에서는 개근 가정)
+// - 월급제의 경우 기본급에 주휴수당이 이미 포함되어 있으므로 별도 계산하지 않음
+//
+// [위반 시 제재]
+// - 주휴수당 미지급 시 근로기준법 제109조에 따라 3년 이하의 징역 또는
+//   3천만원 이하의 벌금에 처할 수 있음
+//
 const calcWeeklyHolidayPay = (hourlyWage, weeklyHours) => {
-    if (weeklyHours < 15) return 0;
+    if (weeklyHours < 15) return 0; // 주 15시간 미만: 주휴수당 미적용 (시행령 제30조)
     const dailyHours = Math.min(weeklyHours, 40) / 5; // 1일 소정근로시간
-    return Math.round(dailyHours * hourlyWage * 4.345); // 월 환산 (52주/12개월)
+    return Math.round(dailyHours * hourlyWage * 4.345); // 월 환산 (52주/12개월 ≒ 4.345)
 };
 
 // ===== 간이세액표 (월급여 기준, 부양가족 1인 기준) =====
@@ -543,6 +563,51 @@ const Payroll = () => {
                             ⚠️ PDF 생성을 위해 직원을 선택해주세요
                         </div>
                     )}
+                </div>
+            </div>
+
+            {/* 주휴수당 법적 안내 */}
+            <div style={{
+                background: 'var(--card)', borderRadius: '14px', padding: '18px 20px',
+                border: '1px solid var(--border)', marginBottom: '1.5rem', fontSize: '0.78rem',
+                lineHeight: 1.7, color: 'var(--text-muted)'
+            }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 700, marginBottom: '12px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    📜 주휴수당 계산 방식 및 법적 근거
+                </div>
+
+                <div style={{ marginBottom: '10px' }}>
+                    <span style={{ fontWeight: 700, color: '#4f46e5' }}>■ 법적 근거</span>
+                    <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                        <li><strong>근로기준법 제55조 (휴일)</strong>: 사용자는 1주간 소정근로일을 개근한 근로자에게 1주일에 평균 1회 이상의 유급휴일을 주어야 한다.</li>
+                        <li><strong>근로기준법 시행령 제30조</strong>: 1주간 소정근로시간이 <span style={{ color: '#dc2626', fontWeight: 600 }}>15시간 미만</span>인 근로자에 대해서는 제55조를 적용하지 아니한다.</li>
+                    </ul>
+                </div>
+
+                <div style={{ marginBottom: '10px' }}>
+                    <span style={{ fontWeight: 700, color: '#059669' }}>■ 계산 공식</span>
+                    <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: '8px', margin: '6px 0', border: '1px solid #e2e8f0', fontFamily: 'monospace', fontSize: '0.76rem' }}>
+                        • 1일 소정근로시간 = 주간 소정근로시간 ÷ 5일<br />
+                        • 주휴수당(주) = 1일 소정근로시간 × 시급<br />
+                        • 주휴수당(월) = 주휴수당(주) × 4.345 (= 52주 ÷ 12개월)<br />
+                        • 예시) 주 40시간, 시급 10,360원 → (40÷5) × 10,360 × 4.345 = <strong>360,109원/월</strong>
+                    </div>
+                </div>
+
+                <div style={{ marginBottom: '10px' }}>
+                    <span style={{ fontWeight: 700, color: '#d97706' }}>■ 적용 조건</span>
+                    <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                        <li>주 <strong>15시간 이상</strong> 근무하는 근로자에게만 지급</li>
+                        <li>해당 주의 소정근로일을 <strong>개근</strong>해야 지급</li>
+                        <li><strong>월급제</strong>의 경우 기본급에 주휴수당이 이미 포함되어 있으므로 별도 계산 불필요</li>
+                    </ul>
+                </div>
+
+                <div style={{
+                    background: '#fef2f2', padding: '10px 14px', borderRadius: '8px',
+                    border: '1px solid #fecaca', color: '#991b1b'
+                }}>
+                    <span style={{ fontWeight: 700 }}>⚠️ 위반 시 제재</span>: 주휴수당 미지급 시 <strong>근로기준법 제109조</strong>에 따라 <strong>3년 이하의 징역</strong> 또는 <strong>3천만원 이하의 벌금</strong>에 처할 수 있습니다.
                 </div>
             </div>
 

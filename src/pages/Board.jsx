@@ -457,8 +457,9 @@ const Board = () => {
                     transition: all 0.2s;
                     border: 1px solid #f1f5f9;
                     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+                    overflow: hidden;
                 }
-                .board-item:hover { border-color: #c7d2fe; box-shadow: 0 4px 12px rgba(79,70,229,0.08); transform: translateY(-1px); }
+                .board-item:hover { border-color: #c7d2fe; box-shadow: 0 4px 12px rgba(79,70,229,0.08); transform: translateY(-1px); overflow: hidden; }
                 .board-item.pinned { background: linear-gradient(135deg, #fefce8, #fff7ed); border-color: #fde68a; }
 
                 .board-item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -479,14 +480,14 @@ const Board = () => {
                 .board-time { display: flex; align-items: center; gap: 4px; font-size: 0.78rem; color: #94a3b8; font-weight: 500; }
 
                 /* 이미지 그리드 */
-                .img-grid { display: grid; gap: 4px; border-radius: 12px; overflow: hidden; margin-top: 8px; }
+                .img-grid { display: grid; gap: 4px; border-radius: 12px; overflow: hidden; margin-top: 8px; max-width: 100%; }
                 .img-grid-1 { grid-template-columns: 1fr; }
                 .img-grid-2 { grid-template-columns: 1fr 1fr; }
                 .img-grid-3 { grid-template-columns: 1fr 1fr; grid-template-rows: 200px 200px; }
                 .img-grid-3 .img-grid-item:first-child { grid-row: span 2; }
                 .img-grid-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 200px 200px; }
                 .img-grid-item { position: relative; cursor: pointer; overflow: hidden; background: #f1f5f9; border-radius: 8px; }
-                .img-grid-1 .img-grid-item img { width: 100%; height: auto; display: block; transition: transform 0.2s; }
+                .img-grid-1 .img-grid-item img { width: 100%; max-width: 100%; height: auto; max-height: 500px; object-fit: contain; display: block; transition: transform 0.2s; }
                 .img-grid-2 .img-grid-item img, .img-grid-3 .img-grid-item img, .img-grid-4 .img-grid-item img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s; }
                 .img-grid-item:hover img { transform: scale(1.03); }
                 .img-grid-more { position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: 700; }

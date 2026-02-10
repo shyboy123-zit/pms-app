@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import Modal from '../components/Modal';
 import {
@@ -22,7 +22,8 @@ const Dashboard = () => {
     // 뉴스 속보 상태
     const [newsItems, setNewsItems] = useState([]);
     const [newsLoading, setNewsLoading] = useState(false);
-    const newsTickerRef = useRef(null);
+    const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
+    const [newsFade, setNewsFade] = useState(true);
 
     useEffect(() => {
         const fetchNews = async () => {
@@ -45,6 +46,19 @@ const Dashboard = () => {
         const interval = setInterval(fetchNews, 10 * 60 * 1000); // 10분마다 갱신
         return () => clearInterval(interval);
     }, []);
+
+    // 뉴스 자동 전환 (4초 간격)
+    useEffect(() => {
+        if (newsItems.length <= 1) return;
+        const timer = setInterval(() => {
+            setNewsFade(false);
+            setTimeout(() => {
+                setCurrentNewsIndex(prev => (prev + 1) % newsItems.length);
+                setNewsFade(true);
+            }, 400);
+        }, 4000);
+        return () => clearInterval(timer);
+    }, [newsItems]);
 
     // 사출조건 모달 상태
     const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
@@ -149,42 +163,39 @@ const Dashboard = () => {
                         whiteSpace: 'nowrap', zIndex: 2, flexShrink: 0,
                         boxShadow: '4px 0 8px rgba(0,0,0,0.3)'
                     }}>
-                        <span style={{ animation: 'pulse 1.5s ease-in-out infinite' }}>🔴</span> 속보
+                        <span style={{ animation: 'pulse 1.5s ease-in-out infinite', WebkitAnimation: 'pulse 1.5s ease-in-out infinite' }}>🔴</span> 속보
                     </div>
                     <div style={{
                         flex: 1, overflow: 'hidden', position: 'relative', height: '100%',
-                        display: 'flex', alignItems: 'center',
-                        maskImage: 'linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%)',
-                        WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%)'
+                        display: 'flex', alignItems: 'center', padding: '0 14px'
                     }}>
-                        <div ref={newsTickerRef} style={{
-                            display: 'flex', gap: '50px', whiteSpace: 'nowrap',
-                            animation: `tickerScroll ${Math.max(newsItems.length * 8, 30)}s linear infinite`,
-                            WebkitAnimation: `tickerScroll ${Math.max(newsItems.length * 8, 30)}s linear infinite`,
-                            willChange: 'transform',
-                            WebkitTransform: 'translateZ(0)',
-                            paddingLeft: '20px'
-                        }}>
-                            {[...newsItems, ...newsItems].map((item, i) => (
-                                <a key={i} href={item.link} target="_blank" rel="noopener noreferrer"
-                                    style={{
-                                        color: '#e2e8f0', textDecoration: 'none', fontSize: '0.82rem',
-                                        fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '8px',
-                                        transition: 'color 0.2s'
-                                    }}
-                                    onMouseOver={(e) => e.currentTarget.style.color = '#60a5fa'}
-                                    onMouseOut={(e) => e.currentTarget.style.color = '#e2e8f0'}
-                                >
-                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>▸</span>
-                                    {item.title}
-                                    {item.pubDate && (
-                                        <span style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 400 }}>
-                                            {new Date(item.pubDate).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                    )}
-                                </a>
-                            ))}
-                        </div>
+                        {newsItems[currentNewsIndex] && (
+                            <a href={newsItems[currentNewsIndex].link} target="_blank" rel="noopener noreferrer"
+                                style={{
+                                    color: '#e2e8f0', textDecoration: 'none', fontSize: '0.8rem',
+                                    fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px',
+                                    transition: 'opacity 0.4s ease, color 0.2s',
+                                    opacity: newsFade ? 1 : 0,
+                                    width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                                }}
+                            >
+                                <span style={{ color: '#94a3b8', fontSize: '0.7rem', flexShrink: 0 }}>▸</span>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {newsItems[currentNewsIndex].title}
+                                </span>
+                                {newsItems[currentNewsIndex].pubDate && (
+                                    <span style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 400, flexShrink: 0 }}>
+                                        {new Date(newsItems[currentNewsIndex].pubDate).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                )}
+                            </a>
+                        )}
+                    </div>
+                    <div style={{
+                        padding: '0 10px', fontSize: '0.65rem', color: '#64748b',
+                        whiteSpace: 'nowrap', flexShrink: 0
+                    }}>
+                        {currentNewsIndex + 1}/{newsItems.length}
                     </div>
                 </div>
             )}

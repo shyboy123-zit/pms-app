@@ -15,13 +15,13 @@ const GovernmentSupport = () => {
     const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
     const [lastFetched, setLastFetched] = useState(null);
 
-    // 기업마당 API (Vercel 서버리스 프록시)
+    // 기업마당 API (Vercel 서버리스 프록시 - 인증키 필요)
     const fetchPrograms = async () => {
         setLoading(true);
         setError(null);
 
         try {
-            // Vercel 서버리스 함수를 통한 API 호출 (CORS 우회)
+            // Vercel 서버리스 함수 호출 (서버에서 인증키 관리)
             const fetchFromBizinfo = async (hashtag, region) => {
                 const params = new URLSearchParams({
                     searchCnt: '50',
@@ -30,57 +30,34 @@ const GovernmentSupport = () => {
                 });
                 if (hashtag) params.append('hashtags', hashtag);
 
-                // 1차: Vercel 서버리스 프록시
-                let data = null;
                 try {
                     const res = await fetch(`/api/bizinfo?${params.toString()}`);
-                    if (res.ok) {
-                        data = await res.json();
+                    if (!res.ok) return [];
+                    const data = await res.json();
+
+                    // 인증키 미설정 또는 오류
+                    if (data.error) return [];
+
+                    if (data?.jsonArray) {
+                        return data.jsonArray.map(item => ({
+                            id: item.pblancId || item.inqireCo || Math.random().toString(36).substr(2, 9),
+                            title: item.pblancNm || '',
+                            organization: item.jrsdInsttNm || '',
+                            category: item.bsnsSumryCn || item.pldirSportRealmLclasCodeNm || '',
+                            region: region || detectRegion(item.jrsdInsttNm || '', item.pblancNm || ''),
+                            startDate: item.reqstBeginEndDe?.split('~')[0]?.trim() || '',
+                            endDate: item.reqstBeginEndDe?.split('~')[1]?.trim() || '',
+                            dateRange: item.reqstBeginEndDe || '',
+                            url: item.pblancUrl || `https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/view.do?pblancId=${item.pblancId}`,
+                            views: item.inqireCo || 0,
+                            source: '기업마당'
+                        }));
                     }
-                } catch (e) {
-                    console.warn('서버리스 프록시 실패, CORS 프록시로 전환:', e);
-                }
-
-                // 2차: CORS 프록시 폴백
-                if (!data || data.error) {
-                    try {
-                        const corsProxies = [
-                            'https://api.allorigins.win/raw?url=',
-                            'https://corsproxy.io/?url='
-                        ];
-                        for (const proxy of corsProxies) {
-                            try {
-                                const bizUrl = `https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do?dataType=json&${params.toString()}`;
-                                const res = await fetch(proxy + encodeURIComponent(bizUrl));
-                                if (res.ok) {
-                                    const text = await res.text();
-                                    data = JSON.parse(text);
-                                    break;
-                                }
-                            } catch { continue; }
-                        }
-                    } catch { /* 모든 프록시 실패 */ }
-                }
-
-                if (data?.jsonArray) {
-                    return data.jsonArray.map(item => ({
-                        id: item.pblancId || item.inqireCo || Math.random().toString(36).substr(2, 9),
-                        title: item.pblancNm || '',
-                        organization: item.jrsdInsttNm || '',
-                        category: item.bsnsSumryCn || item.pldirSportRealmLclasCodeNm || '',
-                        region: region || detectRegion(item.jrsdInsttNm || '', item.pblancNm || ''),
-                        startDate: item.reqstBeginEndDe?.split('~')[0]?.trim() || '',
-                        endDate: item.reqstBeginEndDe?.split('~')[1]?.trim() || '',
-                        dateRange: item.reqstBeginEndDe || '',
-                        url: item.pblancUrl || `https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/view.do?pblancId=${item.pblancId}`,
-                        views: item.inqireCo || 0,
-                        source: '기업마당'
-                    }));
-                }
+                } catch { /* fetch 실패 */ }
                 return [];
             };
 
-            // 경남/김해 관련 키워드로도 검색
+            // 여러 키워드로 병렬 검색
             const results = await Promise.allSettled([
                 fetchFromBizinfo('', '전국'),
                 fetchFromBizinfo('경남', '경남'),
@@ -105,9 +82,8 @@ const GovernmentSupport = () => {
             });
 
             if (allPrograms.length === 0) {
-                // 데모 데이터 + 안내
                 setPrograms(getSamplePrograms());
-                setError('API 연결이 제한되어 샘플 데이터를 표시합니다. 기업마당 사이트에서 직접 확인해주세요.');
+                setError('info'); // 안내 메시지 전용
             } else {
                 setPrograms(allPrograms);
             }
@@ -116,7 +92,7 @@ const GovernmentSupport = () => {
         } catch (err) {
             console.error('지원사업 조회 실패:', err);
             setPrograms(getSamplePrograms());
-            setError('API 연결이 제한되어 샘플 데이터를 표시합니다. 아래 바로가기 링크를 통해 직접 확인해주세요.');
+            setError('info');
             setLastFetched(new Date());
         } finally {
             setLoading(false);
@@ -341,15 +317,21 @@ const GovernmentSupport = () => {
                 )}
             </div>
 
-            {/* 오류 메시지 */}
-            {error && (
+            {/* 안내 메시지 */}
+            {error === 'info' && (
                 <div style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    padding: '10px 16px', borderRadius: '10px', marginBottom: '1rem',
-                    background: '#fef3c7', color: '#92400e', fontSize: '0.82rem', fontWeight: 500,
-                    border: '1px solid #fde68a'
+                    display: 'flex', alignItems: 'flex-start', gap: '10px',
+                    padding: '12px 16px', borderRadius: '10px', marginBottom: '1rem',
+                    background: '#eef2ff', color: '#4338ca', fontSize: '0.8rem',
+                    border: '1px solid #c7d2fe', lineHeight: 1.5
                 }}>
-                    <AlertCircle size={16} /> {error}
+                    <AlertCircle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                    <div>
+                        <strong>📋 참고용 샘플 데이터</strong>를 표시하고 있습니다. 실시간 연동을 원하시면{' '}
+                        <a href="https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/view.do" target="_blank" rel="noopener noreferrer"
+                            style={{ color: '#4f46e5', fontWeight: 600, textDecoration: 'underline' }}>기업마당</a>에서 API 인증키를 발급받아 Vercel 환경변수에 <code style={{ background: '#e0e7ff', padding: '1px 5px', borderRadius: '4px', fontSize: '0.75rem' }}>BIZINFO_API_KEY</code>로 등록해주세요.
+                        <span style={{ display: 'block', marginTop: '4px', color: '#6366f1' }}>바로가기 링크를 통해 최신 지원사업을 직접 확인하실 수도 있습니다.</span>
+                    </div>
                 </div>
             )}
 

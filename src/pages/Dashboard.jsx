@@ -160,6 +160,9 @@ const Dashboard = () => {
                         <div ref={newsTickerRef} style={{
                             display: 'flex', gap: '50px', whiteSpace: 'nowrap',
                             animation: `tickerScroll ${Math.max(newsItems.length * 8, 30)}s linear infinite`,
+                            WebkitAnimation: `tickerScroll ${Math.max(newsItems.length * 8, 30)}s linear infinite`,
+                            willChange: 'transform',
+                            WebkitTransform: 'translateZ(0)',
                             paddingLeft: '20px'
                         }}>
                             {[...newsItems, ...newsItems].map((item, i) => (

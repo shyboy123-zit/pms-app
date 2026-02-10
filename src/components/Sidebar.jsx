@@ -101,7 +101,8 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
       label: '경영지원',
       icon: Briefcase,
       items: [
-        { icon: Building, label: '국가지원사업', path: '/government-support', key: 'government_support' }
+        { icon: Building, label: '국가지원사업', path: '/government-support', key: 'government_support' },
+        { icon: DollarSign, label: '급여관리', path: '/payroll', key: 'payroll' }
       ]
     }
   ];

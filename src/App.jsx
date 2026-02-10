@@ -24,6 +24,7 @@ import Suppliers from './pages/Suppliers';
 import Purchase from './pages/Purchase';
 import Board from './pages/Board';
 import GovernmentSupport from './pages/GovernmentSupport';
+import Payroll from './pages/Payroll';
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();
@@ -63,6 +64,7 @@ function App() {
                 <Route path="purchase" element={<Purchase />} />
                 <Route path="board" element={<Board />} />
                 <Route path="government-support" element={<GovernmentSupport />} />
+                <Route path="payroll" element={<Payroll />} />
               </Route>
             </Route>
 

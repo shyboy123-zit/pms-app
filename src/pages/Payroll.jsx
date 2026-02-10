@@ -22,6 +22,20 @@ const INSURANCE_RATES = {
     }
 };
 
+// ===== 최저임금 (시급 기준) =====
+const MINIMUM_WAGE = {
+    2025: 10030,   // 2025년 최저시급
+    2026: 10360,   // 2026년 최저시급
+};
+
+// 주휴수당 계산: 주 15시간 이상 근무 시 지급
+// 주휴수당 = (주간 소정근로시간 / 40) × 8 × 시급 × 4.345주(월 환산)
+const calcWeeklyHolidayPay = (hourlyWage, weeklyHours) => {
+    if (weeklyHours < 15) return 0;
+    const dailyHours = Math.min(weeklyHours, 40) / 5; // 1일 소정근로시간
+    return Math.round(dailyHours * hourlyWage * 4.345); // 월 환산 (52주/12개월)
+};
+
 // ===== 간이세액표 (월급여 기준, 부양가족 1인 기준) =====
 // 근사 계산: 실제는 국세청 간이세액표를 사용해야 하나, 구간별 근사치 적용
 const getIncomeTax = (monthlySalary, dependents = 1) => {
@@ -53,6 +67,7 @@ const Payroll = () => {
         baseSalary: '',       // 기본급 (월급제)
         hourlyWage: '',       // 시급 (시급제)
         workedHours: '',      // 근무시간 (시급제)
+        weeklyHours: '40',    // 주간 소정근로시간 (주휴수당 계산용)
         overtimeHours: '',    // 연장근로시간
         nightHours: '',       // 야간근로시간
         holidayHours: '',     // 휴일근로시간
@@ -80,6 +95,23 @@ const Payroll = () => {
     const year = parseInt(yearMonth.split('-')[0]);
     const month = parseInt(yearMonth.split('-')[1]);
     const rates = INSURANCE_RATES[year] || INSURANCE_RATES[2026];
+    const minWage = MINIMUM_WAGE[year] || MINIMUM_WAGE[2026];
+
+    // 최저임금 검증
+    const minWageWarning = useMemo(() => {
+        if (payType === 'hourly') {
+            const hw = parseFloat(payData.hourlyWage) || 0;
+            if (hw > 0 && hw < minWage) return `시급 ${hw.toLocaleString()}원은 ${year}년 최저임금 ${minWage.toLocaleString()}원 미만입니다!`;
+        } else {
+            const bs = parseFloat(payData.baseSalary) || 0;
+            // 월급제: 기본급 / 209시간 으로 환산 시급 계산
+            if (bs > 0) {
+                const converted = Math.round(bs / 209);
+                if (converted < minWage) return `기본급 환산 시급 ${converted.toLocaleString()}원은 ${year}년 최저임금 ${minWage.toLocaleString()}원 미만입니다! (기본급 ÷ 209시간)`;
+            }
+        }
+        return null;
+    }, [payData.hourlyWage, payData.baseSalary, payType, minWage, year]);
 
     // === 급여 계산 ===
     const calculation = useMemo(() => {
@@ -93,6 +125,7 @@ const Payroll = () => {
         const annualLeavePay = parseFloat(payData.annualLeavePay) || 0;
         const holidayBonus = parseFloat(payData.holidayBonus) || 0;
         const performanceBonus = parseFloat(payData.performanceBonus) || 0;
+        const weeklyHours = parseFloat(payData.weeklyHours) || 40;
         const mealAllowance = parseFloat(payData.mealAllowance) || 0;
         const transportAllowance = parseFloat(payData.transportAllowance) || 0;
         const dependents = parseInt(payData.dependents) || 1;
@@ -111,8 +144,11 @@ const Payroll = () => {
         const nightPay = Math.round(effectiveHourly * 0.5 * nightHours); // 야간수당 가산분
         const holidayPay = Math.round(effectiveHourly * 1.5 * holidayHours);
 
+        // 주휴수당 (시급제 & 주 15시간 이상)
+        const weeklyHolidayPay = payType === 'hourly' ? calcWeeklyHolidayPay(hourlyWage, weeklyHours) : 0;
+
         // 과세 총액
-        const taxableTotal = grossBase + overtimePay + nightPay + holidayPay + bonus + annualLeavePay + holidayBonus + performanceBonus;
+        const taxableTotal = grossBase + overtimePay + nightPay + holidayPay + bonus + annualLeavePay + holidayBonus + performanceBonus + weeklyHolidayPay;
         // 비과세 총액 (식대 월 20만원, 교통비 월 20만원 한도)
         const nonTaxMeal = Math.min(mealAllowance, 200000);
         const nonTaxTransport = Math.min(transportAllowance, 200000);
@@ -141,7 +177,7 @@ const Payroll = () => {
 
         return {
             grossBase, overtimePay, nightPay, holidayPay, bonus,
-            annualLeavePay, holidayBonus, performanceBonus,
+            annualLeavePay, holidayBonus, performanceBonus, weeklyHolidayPay,
             taxableTotal, nonTaxMeal, nonTaxTransport, nonTaxTotal, totalPay,
             nationalPension, healthInsurance, longTermCare, employmentInsurance, totalInsurance,
             incomeTax, localIncomeTax, totalDeduction, netPay,
@@ -308,7 +344,7 @@ const Payroll = () => {
                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
                         </div>
                     ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                             <div>
                                 <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>시급</label>
                                 <input type="number" placeholder="0" value={payData.hourlyWage}
@@ -321,6 +357,24 @@ const Payroll = () => {
                                     onChange={(e) => setPayData({ ...payData, workedHours: e.target.value })}
                                     style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
                             </div>
+                            <div>
+                                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>주간 소정근로 (h)</label>
+                                <input type="number" placeholder="40" value={payData.weeklyHours}
+                                    onChange={(e) => setPayData({ ...payData, weeklyHours: e.target.value })}
+                                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 최저임금 경고 */}
+                    {minWageWarning && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            padding: '10px 14px', borderRadius: '10px', marginBottom: '10px',
+                            background: '#fef2f2', color: '#dc2626', fontSize: '0.78rem',
+                            border: '1px solid #fecaca', fontWeight: 600
+                        }}>
+                            ⚠️ {minWageWarning}
                         </div>
                     )}
 
@@ -420,6 +474,7 @@ const Payroll = () => {
                             { label: '연장근로수당 (×1.5)', value: calculation.overtimePay },
                             { label: '야간근로수당 (×0.5 가산)', value: calculation.nightPay },
                             { label: '휴일근로수당 (×1.5)', value: calculation.holidayPay },
+                            { label: `주휴수당 (주${payData.weeklyHours || 40}h)`, value: calculation.weeklyHolidayPay },
                             { label: '상여금', value: calculation.bonus },
                             { label: '연차수당', value: calculation.annualLeavePay },
                             { label: '명절수당', value: calculation.holidayBonus },
@@ -548,6 +603,7 @@ const Payroll = () => {
                                     { label: '연장근로수당', value: calculation.overtimePay },
                                     { label: '야간근로수당', value: calculation.nightPay },
                                     { label: '휴일근로수당', value: calculation.holidayPay },
+                                    { label: '주휴수당', value: calculation.weeklyHolidayPay },
                                     { label: '상여금', value: calculation.bonus },
                                     { label: '연차수당', value: calculation.annualLeavePay },
                                     { label: '명절수당', value: calculation.holidayBonus },

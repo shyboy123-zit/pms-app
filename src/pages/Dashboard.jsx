@@ -11,11 +11,13 @@ import {
     XCircle,
     Droplets,
     FileText,
-    Image as ImageIcon
+    Image as ImageIcon,
+    Calendar,
+    Users
 } from 'lucide-react';
 
 const Dashboard = () => {
-    const { equipments, materials, inspections, products, workOrders, molds, moldMovement, injectionConditions, productionLogs } = useData();
+    const { equipments, materials, inspections, products, workOrders, molds, moldMovement, injectionConditions, productionLogs, employees } = useData();
 
     // 사출조건 모달 상태
     const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
@@ -152,6 +154,114 @@ const Dashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* 연차사용촉진 알림 */}
+            {(() => {
+                const now = new Date();
+                const activeEmployees = (employees || []).filter(e => e.status === '재직' && e.join_date);
+
+                const leaveAlerts = activeEmployees.map(emp => {
+                    const joinDate = new Date(emp.join_date);
+                    const totalLeave = emp.total_leave || 15;
+                    const usedLeave = emp.used_leave || 0;
+                    const remainingLeave = totalLeave - usedLeave;
+
+                    if (remainingLeave <= 0) return null;
+
+                    // 입사 기념일 계산 (올해 or 내년)
+                    const thisYearAnniv = new Date(now.getFullYear(), joinDate.getMonth(), joinDate.getDate());
+                    const nextAnniv = thisYearAnniv > now ? thisYearAnniv : new Date(now.getFullYear() + 1, joinDate.getMonth(), joinDate.getDate());
+
+                    const daysToAnniv = Math.floor((nextAnniv - now) / (1000 * 60 * 60 * 24));
+
+                    // 근무 기간 1년 미만이면 제외
+                    const serviceYears = Math.floor((now - joinDate) / (1000 * 60 * 60 * 24 * 365));
+                    if (serviceYears < 1) return null;
+
+                    // 근로기준법 제61조:
+                    // 1차 촉진: 기념일 6개월 전 (잔여일수 통보)
+                    // 2차 촉진: 기념일 2개월 전 (사용시기 지정)
+                    let level = null;
+                    if (daysToAnniv <= 60) {
+                        level = 'urgent'; // 2개월 이내 - 긴급
+                    } else if (daysToAnniv <= 180) {
+                        level = 'warning'; // 6개월 이내 - 주의
+                    }
+
+                    if (!level) return null;
+
+                    return {
+                        ...emp,
+                        remainingLeave,
+                        daysToAnniv,
+                        level,
+                        anniversaryDate: nextAnniv
+                    };
+                }).filter(Boolean).sort((a, b) => a.daysToAnniv - b.daysToAnniv);
+
+                if (leaveAlerts.length === 0) return null;
+
+                const urgentCount = leaveAlerts.filter(a => a.level === 'urgent').length;
+                const warningCount = leaveAlerts.filter(a => a.level === 'warning').length;
+
+                return (
+                    <div style={{
+                        background: urgentCount > 0 ? 'linear-gradient(135deg, #fef2f2, #fff7ed)' : 'linear-gradient(135deg, #fffbeb, #fef3c7)',
+                        border: `1px solid ${urgentCount > 0 ? '#fecaca' : '#fde68a'}`,
+                        borderRadius: '16px', padding: '18px 22px', marginBottom: '1.5rem'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Calendar size={18} style={{ color: urgentCount > 0 ? '#dc2626' : '#d97706' }} />
+                                <span style={{ fontSize: '0.95rem', fontWeight: 700, color: urgentCount > 0 ? '#dc2626' : '#92400e' }}>
+                                    연차사용촉진 대상자
+                                </span>
+                                <span style={{
+                                    padding: '2px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                                    background: urgentCount > 0 ? '#fee2e2' : '#fef3c7',
+                                    color: urgentCount > 0 ? '#dc2626' : '#d97706'
+                                }}>
+                                    {leaveAlerts.length}명
+                                </span>
+                            </div>
+                            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>근로기준법 제61조</span>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {leaveAlerts.map(emp => (
+                                <div key={emp.id} style={{
+                                    display: 'flex', alignItems: 'center', gap: '10px',
+                                    padding: '10px 14px', borderRadius: '10px',
+                                    background: emp.level === 'urgent' ? '#fff1f2' : '#fffbeb',
+                                    border: `1px solid ${emp.level === 'urgent' ? '#fecdd3' : '#fde68a'}`,
+                                    flexWrap: 'wrap'
+                                }}>
+                                    <span style={{
+                                        padding: '2px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700,
+                                        background: emp.level === 'urgent' ? '#dc2626' : '#f59e0b',
+                                        color: 'white', whiteSpace: 'nowrap'
+                                    }}>
+                                        {emp.level === 'urgent' ? '🚨 긴급' : '⚠️ 주의'}
+                                    </span>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
+                                        {emp.name}
+                                    </span>
+                                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                        {emp.department} · {emp.position}
+                                    </span>
+                                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#dc2626' }}>
+                                        잔여 {emp.remainingLeave}일
+                                    </span>
+                                    <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginLeft: 'auto' }}>
+                                        기념일까지 {emp.daysToAnniv}일
+                                        {emp.level === 'urgent' ? ' (2차 촉진 기한)' : ' (1차 촉진 기한)'}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* 메인 위젯 그리드 */}
             <div className="widgets-grid">

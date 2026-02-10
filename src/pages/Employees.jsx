@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, UserPlus, UserMinus, Shield, Trash2, Calendar, Edit } from 'lucide-react';
+import { Plus, UserPlus, UserMinus, Shield, Trash2, Calendar, Edit, Download, FileText } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 const Employees = () => {
     // Consume global data from Supabase via DataContext
@@ -19,6 +21,17 @@ const Employees = () => {
     const [viewMode, setViewMode] = useState('재직'); // '재직' or '퇴사'
     const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
     const [leaveUsage, setLeaveUsage] = useState({ employeeId: null, days: 1, startDate: '', reason: '' });
+
+    // PDF 관련 상태
+    const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+    const [pdfTarget, setPdfTarget] = useState(null); // 대상 직원
+    const [pdfType, setPdfType] = useState('promotion'); // 'promotion' or 'application'
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [isPdfPreview, setIsPdfPreview] = useState(false);
+    const pdfRef = useRef(null);
+    const [leaveAppData, setLeaveAppData] = useState({
+        startDate: '', endDate: '', days: 1, reason: ''
+    });
 
     const filteredEmployees = employees.filter(e => {
         if (viewMode === '전체') return true;
@@ -218,6 +231,65 @@ const Employees = () => {
         employees: '직원관리'
     };
 
+    // === PDF 관련 함수 ===
+    const openPdfModal = (emp) => {
+        setPdfTarget(emp);
+        setPdfType('promotion');
+        setLeaveAppData({ startDate: '', endDate: '', days: 1, reason: '' });
+        setIsPdfModalOpen(true);
+    };
+
+    const generatePdf = async () => {
+        setIsGeneratingPdf(true);
+        setIsPdfPreview(true);
+        await new Promise(r => setTimeout(r, 800));
+
+        try {
+            const element = pdfRef.current;
+            if (!element) return;
+
+            const canvas = await html2canvas(element, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            let heightLeft = imgHeight;
+            let position = 0;
+
+            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+            heightLeft -= pdfHeight;
+
+            while (heightLeft > 0) {
+                position = heightLeft - imgHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                heightLeft -= pdfHeight;
+            }
+
+            const fileName = pdfType === 'promotion'
+                ? `연차사용촉진_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`
+                : `연차사용신청서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`;
+            pdf.save(fileName);
+        } catch (err) {
+            console.error('PDF 생성 실패:', err);
+            alert('PDF 생성에 실패했습니다.');
+        } finally {
+            setIsGeneratingPdf(false);
+            setIsPdfPreview(false);
+        }
+    };
+
+    const today = new Date();
+    const formatDate = (d) => `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+
     return (
         <div className="page-container">
             <div className="page-header-row">
@@ -225,9 +297,11 @@ const Employees = () => {
                     <h2 className="page-subtitle">직원 관리</h2>
                     <p className="page-description">직원 입/퇴사 관리 및 접근 권한을 설정합니다.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-                    <UserPlus size={18} /> 직원 등록
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                        <UserPlus size={18} /> 직원 등록
+                    </button>
+                </div>
             </div>
 
             <div className="filter-tabs">
@@ -260,6 +334,10 @@ const Employees = () => {
                             <>
                                 <button className="icon-btn leave-btn" onClick={() => openLeaveModal(row)} title="연차 사용 처리">
                                     <Calendar size={16} />
+                                </button>
+                                <button className="icon-btn" onClick={() => openPdfModal(row)} title="연차 서식 다운로드"
+                                    style={{ color: '#6366f1' }}>
+                                    <FileText size={16} />
                                 </button>
                                 <button className="icon-btn" onClick={() => handleResign(row.id)} title="퇴사 처리">
                                     <UserMinus size={16} />
@@ -427,6 +505,262 @@ const Employees = () => {
                 </div>
             </Modal>
 
+            {/* PDF 서식 선택 모달 */}
+            <Modal title="📄 연차 서식 다운로드" isOpen={isPdfModalOpen} onClose={() => setIsPdfModalOpen(false)}>
+                {pdfTarget && (
+                    <div>
+                        <div style={{ padding: '12px 16px', background: '#f0f9ff', borderRadius: '10px', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                            <strong>{pdfTarget.name}</strong> ({pdfTarget.department} / {pdfTarget.position})
+                            <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>
+                                연차: {pdfTarget.used_leave}/{pdfTarget.total_leave}일 사용 (잔여: {pdfTarget.total_leave - pdfTarget.used_leave}일)
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
+                            <button
+                                onClick={() => setPdfType('promotion')}
+                                style={{
+                                    flex: 1, padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                                    fontWeight: 700, fontSize: '0.85rem', transition: 'all 0.2s',
+                                    background: pdfType === 'promotion' ? '#4f46e5' : '#f1f5f9',
+                                    color: pdfType === 'promotion' ? 'white' : '#64748b'
+                                }}
+                            >
+                                📋 연차사용촉진 서식
+                            </button>
+                            <button
+                                onClick={() => setPdfType('application')}
+                                style={{
+                                    flex: 1, padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                                    fontWeight: 700, fontSize: '0.85rem', transition: 'all 0.2s',
+                                    background: pdfType === 'application' ? '#4f46e5' : '#f1f5f9',
+                                    color: pdfType === 'application' ? 'white' : '#64748b'
+                                }}
+                            >
+                                📝 연차사용 신청서
+                            </button>
+                        </div>
+
+                        {pdfType === 'application' && (
+                            <div style={{ background: '#faf5ff', padding: '14px', borderRadius: '10px', marginBottom: '1rem' }}>
+                                <div className="form-group" style={{ marginBottom: '8px' }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>사용 시작일</label>
+                                    <input type="date" className="form-input" value={leaveAppData.startDate}
+                                        onChange={(e) => setLeaveAppData({ ...leaveAppData, startDate: e.target.value })} />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: '8px' }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>사용 종료일</label>
+                                    <input type="date" className="form-input" value={leaveAppData.endDate}
+                                        onChange={(e) => setLeaveAppData({ ...leaveAppData, endDate: e.target.value })} />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: '8px' }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>사용 일수</label>
+                                    <input type="number" className="form-input" min="0.5" step="0.5" value={leaveAppData.days}
+                                        onChange={(e) => setLeaveAppData({ ...leaveAppData, days: parseFloat(e.target.value) || 0 })} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>사유</label>
+                                    <textarea className="form-input" rows="2" value={leaveAppData.reason}
+                                        onChange={(e) => setLeaveAppData({ ...leaveAppData, reason: e.target.value })}
+                                        placeholder="예: 개인 사유, 가족 행사 등" />
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="modal-actions">
+                            <button className="btn-cancel" onClick={() => setIsPdfModalOpen(false)}>취소</button>
+                            <button className="btn-submit" onClick={generatePdf} disabled={isGeneratingPdf}
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Download size={16} /> {isGeneratingPdf ? 'PDF 생성 중...' : 'PDF 다운로드'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* PDF 랜더링 영역 (숨김) */}
+            {isPdfPreview && pdfTarget && (
+                <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+                    <div ref={pdfRef} style={{
+                        width: '800px', padding: '60px', background: 'white',
+                        fontFamily: "'Noto Sans KR', 'Malgun Gothic', sans-serif",
+                        color: '#1e293b', lineHeight: 1.8
+                    }}>
+                        {pdfType === 'promotion' ? (
+                            /* === 연차사용촉진 서식 === */
+                            <div>
+                                <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+                                    <h1 style={{ fontSize: '26px', fontWeight: 800, letterSpacing: '6px', marginBottom: '8px' }}>연 차 사 용 촉 진 통 보 서</h1>
+                                    <div style={{ width: '60px', height: '3px', background: '#4f46e5', margin: '0 auto' }}></div>
+                                </div>
+
+                                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                    <tbody>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>수 신</td>
+                                            <td style={{ ...cellStyle, width: '30%' }}>{pdfTarget.name} ({pdfTarget.position})</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>부 서</td>
+                                            <td style={{ ...cellStyle, width: '30%' }}>{pdfTarget.department}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>입사일</td>
+                                            <td style={cellStyle}>{pdfTarget.join_date}</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>통보일</td>
+                                            <td style={cellStyle}>{formatDate(today)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                    <tbody>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '25%' }}>총 발생 연차일수</td>
+                                            <td style={{ ...cellStyle, width: '25%', textAlign: 'center', fontWeight: 700, color: '#4f46e5' }}>{pdfTarget.total_leave}일</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '25%' }}>사용 연차일수</td>
+                                            <td style={{ ...cellStyle, width: '25%', textAlign: 'center' }}>{pdfTarget.used_leave}일</td>
+                                        </tr>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>미사용 연차일수</td>
+                                            <td style={{ ...cellStyle, textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>{pdfTarget.total_leave - pdfTarget.used_leave}일</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>촉진 기한</td>
+                                            <td style={{ ...cellStyle, textAlign: 'center' }}>
+                                                {(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return formatDate(d); })()}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px', marginBottom: '24px', fontSize: '13px', lineHeight: 2 }}>
+                                    <p style={{ marginBottom: '12px' }}>근로기준법 제61조에 의거하여 귀하의 미사용 연차유급휴가에 대해 아래와 같이 사용을 촉진합니다.</p>
+                                    <p style={{ marginBottom: '12px' }}>귀하의 미사용 연차일수는 <strong style={{ color: '#dc2626' }}>{pdfTarget.total_leave - pdfTarget.used_leave}일</strong>입니다.</p>
+                                    <p style={{ marginBottom: '12px' }}>본 통보서 수령일부터 <strong>10일 이내</strong>에 미사용 연차의 사용 시기를 정하여 서면으로 통보하여 주시기 바랍니다.</p>
+                                    <p>기한 내 사용 시기를 정하지 않을 경우, 사용자가 미사용 연차의 사용 시기를 지정하며, 이 경우 미사용 연차에 대한 보상 의무가 면제됨을 알려드립니다.</p>
+                                </div>
+
+                                <div style={{ textAlign: 'center', margin: '40px 0 30px', fontSize: '14px', fontWeight: 600 }}>
+                                    {formatDate(today)}
+                                </div>
+
+                                <table style={{ width: '80%', margin: '0 auto', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                    <tbody>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '30%', textAlign: 'center' }}>통보자 (사업주)</td>
+                                            <td style={{ ...cellStyle, textAlign: 'center', height: '50px' }}>(인)</td>
+                                        </tr>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>수신자 (근로자)</td>
+                                            <td style={{ ...cellStyle, textAlign: 'center', height: '50px' }}>{pdfTarget.name} (인)</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            /* === 연차사용 신청서 === */
+                            <div>
+                                <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+                                    <h1 style={{ fontSize: '26px', fontWeight: 800, letterSpacing: '6px', marginBottom: '8px' }}>연 차 사 용 신 청 서</h1>
+                                    <div style={{ width: '60px', height: '3px', background: '#4f46e5', margin: '0 auto' }}></div>
+                                </div>
+
+                                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                    <tbody>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>성 명</td>
+                                            <td style={{ ...cellStyle, width: '30%' }}>{pdfTarget.name}</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>사원번호</td>
+                                            <td style={{ ...cellStyle, width: '30%' }}>{pdfTarget.emp_id}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>부 서</td>
+                                            <td style={cellStyle}>{pdfTarget.department}</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>직 급</td>
+                                            <td style={cellStyle}>{pdfTarget.position}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>입사일</td>
+                                            <td style={cellStyle}>{pdfTarget.join_date}</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>신청일</td>
+                                            <td style={cellStyle}>{formatDate(today)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                    <tbody>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '25%' }}>총 연차일수</td>
+                                            <td style={{ ...cellStyle, width: '25%', textAlign: 'center', fontWeight: 700 }}>{pdfTarget.total_leave}일</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '25%' }}>기사용 연차</td>
+                                            <td style={{ ...cellStyle, width: '25%', textAlign: 'center' }}>{pdfTarget.used_leave}일</td>
+                                        </tr>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>잔여 연차</td>
+                                            <td style={{ ...cellStyle, textAlign: 'center', fontWeight: 700, color: '#4f46e5' }}>{pdfTarget.total_leave - pdfTarget.used_leave}일</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>금회 신청</td>
+                                            <td style={{ ...cellStyle, textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>{leaveAppData.days}일</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                    <tbody>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '25%' }}>사용 기간</td>
+                                            <td colSpan="3" style={{ ...cellStyle, textAlign: 'center', fontWeight: 600 }}>
+                                                {leaveAppData.startDate || '____년 __월 __일'} ~ {leaveAppData.endDate || '____년 __월 __일'} ({leaveAppData.days}일간)
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>사 유</td>
+                                            <td colSpan="3" style={{ ...cellStyle, minHeight: '60px' }}>
+                                                {leaveAppData.reason || '개인 사유'}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '24px', fontSize: '13px', lineHeight: 2, color: '#64748b' }}>
+                                    근로기준법 제60조에 의거하여 위와 같이 연차유급휴가를 신청합니다.
+                                </div>
+
+                                <div style={{ textAlign: 'center', margin: '40px 0 30px', fontSize: '14px', fontWeight: 600 }}>
+                                    {formatDate(today)}
+                                </div>
+
+                                <table style={{ width: '80%', margin: '0 auto', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                    <tbody>
+                                        <tr>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '30%', textAlign: 'center' }}>신청인</td>
+                                            <td style={{ ...cellStyle, textAlign: 'center', height: '50px' }}>{pdfTarget.name} (인)</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <div style={{ marginTop: '40px', borderTop: '2px solid #e2e8f0', paddingTop: '20px' }}>
+                                    <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '12px', color: '#64748b' }}>결 재</div>
+                                    <table style={{ width: '60%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>담당</th>
+                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>팀장</th>
+                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>대표</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td style={{ ...cellStyle, textAlign: 'center', height: '60px' }}></td>
+                                                <td style={{ ...cellStyle, textAlign: 'center', height: '60px' }}></td>
+                                                <td style={{ ...cellStyle, textAlign: 'center', height: '60px' }}></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             <style>{`
                 .page-container { padding: 0 1rem; }
                 .page-header-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
@@ -479,6 +813,12 @@ const Employees = () => {
             `}</style>
         </div >
     );
+};
+
+const cellStyle = {
+    border: '1px solid #e2e8f0',
+    padding: '8px 12px',
+    fontSize: '13px'
 };
 
 export default Employees;

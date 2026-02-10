@@ -15,53 +15,69 @@ const GovernmentSupport = () => {
     const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
     const [lastFetched, setLastFetched] = useState(null);
 
-    // 기업마당 RSS API (CORS 프록시 사용)
-    const BIZINFO_API = 'https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do';
-
+    // 기업마당 API (Vercel 서버리스 프록시)
     const fetchPrograms = async () => {
         setLoading(true);
         setError(null);
 
         try {
-            // 여러 소스에서 병렬로 가져오기
+            // Vercel 서버리스 함수를 통한 API 호출 (CORS 우회)
             const fetchFromBizinfo = async (hashtag, region) => {
                 const params = new URLSearchParams({
-                    dataType: 'json',
                     searchCnt: '50',
                     pageUnit: '50',
                     pageIndex: '1'
                 });
                 if (hashtag) params.append('hashtags', hashtag);
 
-                // CORS 프록시 사용
-                const corsProxy = 'https://api.allorigins.win/raw?url=';
-                const url = `${BIZINFO_API}?${params.toString()}`;
-                const res = await fetch(corsProxy + encodeURIComponent(url));
-
-                if (!res.ok) throw new Error(`API 응답 오류: ${res.status}`);
-                const text = await res.text();
-
+                // 1차: Vercel 서버리스 프록시
+                let data = null;
                 try {
-                    const data = JSON.parse(text);
-                    if (data?.jsonArray) {
-                        return data.jsonArray.map(item => ({
-                            id: item.pblancId || item.inqireCo || Math.random().toString(36).substr(2, 9),
-                            title: item.pblancNm || '',
-                            organization: item.jrsdInsttNm || '',
-                            category: item.bsnsSumryCn || item.pldirSportRealmLclasCodeNm || '',
-                            region: region || detectRegion(item.jrsdInsttNm || '', item.pblancNm || ''),
-                            startDate: item.reqstBeginEndDe?.split('~')[0]?.trim() || '',
-                            endDate: item.reqstBeginEndDe?.split('~')[1]?.trim() || '',
-                            dateRange: item.reqstBeginEndDe || '',
-                            url: item.pblancUrl || `https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/view.do?pblancId=${item.pblancId}`,
-                            views: item.inqireCo || 0,
-                            source: '기업마당'
-                        }));
+                    const res = await fetch(`/api/bizinfo?${params.toString()}`);
+                    if (res.ok) {
+                        data = await res.json();
                     }
-                    return [];
-                } catch {
-                    return [];
+                } catch (e) {
+                    console.warn('서버리스 프록시 실패, CORS 프록시로 전환:', e);
                 }
+
+                // 2차: CORS 프록시 폴백
+                if (!data || data.error) {
+                    try {
+                        const corsProxies = [
+                            'https://api.allorigins.win/raw?url=',
+                            'https://corsproxy.io/?url='
+                        ];
+                        for (const proxy of corsProxies) {
+                            try {
+                                const bizUrl = `https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do?dataType=json&${params.toString()}`;
+                                const res = await fetch(proxy + encodeURIComponent(bizUrl));
+                                if (res.ok) {
+                                    const text = await res.text();
+                                    data = JSON.parse(text);
+                                    break;
+                                }
+                            } catch { continue; }
+                        }
+                    } catch { /* 모든 프록시 실패 */ }
+                }
+
+                if (data?.jsonArray) {
+                    return data.jsonArray.map(item => ({
+                        id: item.pblancId || item.inqireCo || Math.random().toString(36).substr(2, 9),
+                        title: item.pblancNm || '',
+                        organization: item.jrsdInsttNm || '',
+                        category: item.bsnsSumryCn || item.pldirSportRealmLclasCodeNm || '',
+                        region: region || detectRegion(item.jrsdInsttNm || '', item.pblancNm || ''),
+                        startDate: item.reqstBeginEndDe?.split('~')[0]?.trim() || '',
+                        endDate: item.reqstBeginEndDe?.split('~')[1]?.trim() || '',
+                        dateRange: item.reqstBeginEndDe || '',
+                        url: item.pblancUrl || `https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/view.do?pblancId=${item.pblancId}`,
+                        views: item.inqireCo || 0,
+                        source: '기업마당'
+                    }));
+                }
+                return [];
             };
 
             // 경남/김해 관련 키워드로도 검색

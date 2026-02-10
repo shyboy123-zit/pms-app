@@ -25,12 +25,19 @@ const Employees = () => {
     // PDF 관련 상태
     const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
     const [pdfTarget, setPdfTarget] = useState(null); // 대상 직원
-    const [pdfType, setPdfType] = useState('promotion'); // 'promotion' or 'application'
+    const [pdfType, setPdfType] = useState('promotion'); // 'promotion', 'application', 'retirement'
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isPdfPreview, setIsPdfPreview] = useState(false);
     const pdfRef = useRef(null);
     const [leaveAppData, setLeaveAppData] = useState({
         startDate: '', endDate: '', days: 1, reason: ''
+    });
+    const [retireData, setRetireData] = useState({
+        resignDate: new Date().toISOString().split('T')[0],
+        monthlyWage: '', // 월 기본급
+        bonus3m: '', // 최근 3개월 상여금 합계
+        annualBonus: '', // 연간 상여금 총액
+        otherAllowance: '' // 기타 수당 (월 평균)
     });
 
     const filteredEmployees = employees.filter(e => {
@@ -236,6 +243,10 @@ const Employees = () => {
         setPdfTarget(emp);
         setPdfType('promotion');
         setLeaveAppData({ startDate: '', endDate: '', days: 1, reason: '' });
+        setRetireData({
+            resignDate: emp.resign_date || new Date().toISOString().split('T')[0],
+            monthlyWage: '', bonus3m: '', annualBonus: '', otherAllowance: ''
+        });
         setIsPdfModalOpen(true);
     };
 
@@ -274,9 +285,12 @@ const Employees = () => {
                 heightLeft -= pdfHeight;
             }
 
-            const fileName = pdfType === 'promotion'
-                ? `연차사용촉진_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`
-                : `연차사용신청서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`;
+            const fileNames = {
+                promotion: `연차사용촉진_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
+                application: `연차사용신청서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
+                retirement: `퇴직금계산서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`
+            };
+            const fileName = fileNames[pdfType] || fileNames.promotion;
             pdf.save(fileName);
         } catch (err) {
             console.error('PDF 생성 실패:', err);
@@ -330,14 +344,14 @@ const Employees = () => {
                         <button className="icon-btn" onClick={() => openPermModal(row)} title="접근 권한 설정">
                             <Shield size={16} />
                         </button>
+                        <button className="icon-btn" onClick={() => openPdfModal(row)} title="인사 서식 다운로드"
+                            style={{ color: '#6366f1' }}>
+                            <FileText size={16} />
+                        </button>
                         {row.status === '재직' && (
                             <>
                                 <button className="icon-btn leave-btn" onClick={() => openLeaveModal(row)} title="연차 사용 처리">
                                     <Calendar size={16} />
-                                </button>
-                                <button className="icon-btn" onClick={() => openPdfModal(row)} title="연차 서식 다운로드"
-                                    style={{ color: '#6366f1' }}>
-                                    <FileText size={16} />
                                 </button>
                                 <button className="icon-btn" onClick={() => handleResign(row.id)} title="퇴사 처리">
                                     <UserMinus size={16} />
@@ -506,7 +520,7 @@ const Employees = () => {
             </Modal>
 
             {/* PDF 서식 선택 모달 */}
-            <Modal title="📄 연차 서식 다운로드" isOpen={isPdfModalOpen} onClose={() => setIsPdfModalOpen(false)}>
+            <Modal title="📄 인사 서식 다운로드" isOpen={isPdfModalOpen} onClose={() => setIsPdfModalOpen(false)}>
                 {pdfTarget && (
                     <div>
                         <div style={{ padding: '12px 16px', background: '#f0f9ff', borderRadius: '10px', marginBottom: '1rem', fontSize: '0.9rem' }}>
@@ -516,29 +530,20 @@ const Employees = () => {
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
-                            <button
-                                onClick={() => setPdfType('promotion')}
-                                style={{
-                                    flex: 1, padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                                    fontWeight: 700, fontSize: '0.85rem', transition: 'all 0.2s',
-                                    background: pdfType === 'promotion' ? '#4f46e5' : '#f1f5f9',
-                                    color: pdfType === 'promotion' ? 'white' : '#64748b'
-                                }}
-                            >
-                                📋 연차사용촉진 서식
-                            </button>
-                            <button
-                                onClick={() => setPdfType('application')}
-                                style={{
-                                    flex: 1, padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                                    fontWeight: 700, fontSize: '0.85rem', transition: 'all 0.2s',
-                                    background: pdfType === 'application' ? '#4f46e5' : '#f1f5f9',
-                                    color: pdfType === 'application' ? 'white' : '#64748b'
-                                }}
-                            >
-                                📝 연차사용 신청서
-                            </button>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                            {[{ key: 'promotion', icon: '📋', label: '연차사용촉진' }, { key: 'application', icon: '📝', label: '연차신청서' }, { key: 'retirement', icon: '💰', label: '퇴직금계산' }].map(t => (
+                                <button key={t.key}
+                                    onClick={() => setPdfType(t.key)}
+                                    style={{
+                                        flex: 1, padding: '10px 8px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                                        fontWeight: 700, fontSize: '0.8rem', transition: 'all 0.2s', minWidth: '100px',
+                                        background: pdfType === t.key ? '#4f46e5' : '#f1f5f9',
+                                        color: pdfType === t.key ? 'white' : '#64748b'
+                                    }}
+                                >
+                                    {t.icon} {t.label}
+                                </button>
+                            ))}
                         </div>
 
                         {pdfType === 'application' && (
@@ -563,6 +568,41 @@ const Employees = () => {
                                     <textarea className="form-input" rows="2" value={leaveAppData.reason}
                                         onChange={(e) => setLeaveAppData({ ...leaveAppData, reason: e.target.value })}
                                         placeholder="예: 개인 사유, 가족 행사 등" />
+                                </div>
+                            </div>
+                        )}
+
+                        {pdfType === 'retirement' && (
+                            <div style={{ background: '#fef3c7', padding: '14px', borderRadius: '10px', marginBottom: '1rem' }}>
+                                <div style={{ fontSize: '0.78rem', color: '#92400e', marginBottom: '10px', fontWeight: 600 }}>💡 퇴직금 산정을 위한 급여 정보를 입력해주세요</div>
+                                <div className="form-group" style={{ marginBottom: '8px' }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>퇴직일</label>
+                                    <input type="date" className="form-input" value={retireData.resignDate}
+                                        onChange={(e) => setRetireData({ ...retireData, resignDate: e.target.value })} />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: '8px' }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>월 기본급 (원)</label>
+                                    <input type="number" className="form-input" value={retireData.monthlyWage}
+                                        onChange={(e) => setRetireData({ ...retireData, monthlyWage: e.target.value })}
+                                        placeholder="예: 2500000" />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: '8px' }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>최근 3개월 상여금 합계 (원)</label>
+                                    <input type="number" className="form-input" value={retireData.bonus3m}
+                                        onChange={(e) => setRetireData({ ...retireData, bonus3m: e.target.value })}
+                                        placeholder="예: 500000 (없으면 0)" />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: '8px' }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>연간 상여금 총액 (원)</label>
+                                    <input type="number" className="form-input" value={retireData.annualBonus}
+                                        onChange={(e) => setRetireData({ ...retireData, annualBonus: e.target.value })}
+                                        placeholder="예: 2000000 (없으면 0)" />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>기타 수당 월평균 (원)</label>
+                                    <input type="number" className="form-input" value={retireData.otherAllowance}
+                                        onChange={(e) => setRetireData({ ...retireData, otherAllowance: e.target.value })}
+                                        placeholder="예: 200000 (교통비, 식대 등)" />
                                 </div>
                             </div>
                         )}
@@ -654,7 +694,7 @@ const Employees = () => {
                                     </tbody>
                                 </table>
                             </div>
-                        ) : (
+                        ) : pdfType === 'application' ? (
                             /* === 연차사용 신청서 === */
                             <div>
                                 <div style={{ textAlign: 'center', marginBottom: '40px' }}>
@@ -756,6 +796,187 @@ const Employees = () => {
                                     </table>
                                 </div>
                             </div>
+                        ) : (
+                            /* === 퇴직금 계산서 === */
+                            (() => {
+                                const joinD = new Date(pdfTarget.join_date);
+                                const resignD = retireData.resignDate ? new Date(retireData.resignDate) : today;
+                                const totalDays = Math.floor((resignD - joinD) / (1000 * 60 * 60 * 24));
+                                const years = Math.floor(totalDays / 365);
+                                const months = Math.floor((totalDays % 365) / 30);
+                                const days = totalDays % 30;
+
+                                const mw = parseFloat(retireData.monthlyWage) || 0;
+                                const b3 = parseFloat(retireData.bonus3m) || 0;
+                                const ab = parseFloat(retireData.annualBonus) || 0;
+                                const oa = parseFloat(retireData.otherAllowance) || 0;
+
+                                // 1일 평균임금 = (최근 3개월 급여 총액 + 3개월 상여금 비례분 + 연차수당) / 해당 일수(보통 90일)
+                                const threeMonthWage = mw * 3; // 3개월 기본급
+                                const bonusProportion = ab / 12 * 3; // 연간 상여금의 3/12
+                                const otherTotal = oa * 3; // 3개월 기타수당
+                                const totalThreeMonth = threeMonthWage + (b3 || bonusProportion) + otherTotal;
+                                const dailyAvgWage = totalThreeMonth / 90;
+
+                                // 퇴직금 = 1일 평균임금 × 30일 × (재직일수 / 365)
+                                const retirePay = dailyAvgWage * 30 * (totalDays / 365);
+
+                                const fmt = (n) => n.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+
+                                return (
+                                    <div>
+                                        <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+                                            <h1 style={{ fontSize: '26px', fontWeight: 800, letterSpacing: '6px', marginBottom: '8px' }}>퇴 직 금 산 정 서</h1>
+                                            <div style={{ width: '60px', height: '3px', background: '#4f46e5', margin: '0 auto' }}></div>
+                                        </div>
+
+                                        {/* 직원 정보 */}
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                                            <tbody>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>성 명</td>
+                                                    <td style={{ ...cellStyle, width: '30%' }}>{pdfTarget.name}</td>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>사원번호</td>
+                                                    <td style={{ ...cellStyle, width: '30%' }}>{pdfTarget.emp_id}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>부 서</td>
+                                                    <td style={cellStyle}>{pdfTarget.department}</td>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>직 급</td>
+                                                    <td style={cellStyle}>{pdfTarget.position}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>입사일</td>
+                                                    <td style={cellStyle}>{pdfTarget.join_date}</td>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>퇴직일</td>
+                                                    <td style={cellStyle}>{retireData.resignDate}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>재직기간</td>
+                                                    <td colSpan="3" style={{ ...cellStyle, fontWeight: 700, color: '#4f46e5' }}>
+                                                        {years}년 {months}개월 {days}일 (총 {totalDays}일)
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+
+                                        {/* 급여 정보 */}
+                                        <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1e293b' }}>■ 급여 정보 (퇴직 전 3개월 기준)</div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                                            <tbody>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '30%' }}>월 기본급</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'right' }}>{fmt(mw)}원</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>기타 수당 (월평균)</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'right' }}>{fmt(oa)}원</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>최근 3개월 상여금</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'right' }}>{fmt(b3 || bonusProportion)}원</td>
+                                                </tr>
+                                                <tr style={{ background: '#eff6ff' }}>
+                                                    <td style={{ ...cellStyle, fontWeight: 700 }}>3개월간 임금 총액</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'right', fontWeight: 700, color: '#4f46e5' }}>{fmt(totalThreeMonth)}원</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+
+                                        {/* 퇴직금 계산 */}
+                                        <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1e293b' }}>■ 퇴직금 산정</div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                                            <tbody>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '40%' }}>① 3개월간 임금 총액</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'right' }}>{fmt(totalThreeMonth)}원</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>② 산정 기간 일수</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'right' }}>90일</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>③ 1일 평균임금 (① ÷ ②)</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'right', fontWeight: 600 }}>{fmt(dailyAvgWage)}원</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>④ 30일분 평균임금 (③ × 30)</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'right', fontWeight: 600 }}>{fmt(dailyAvgWage * 30)}원</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>⑤ 재직일수 / 365</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'right' }}>{(totalDays / 365).toFixed(4)}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+
+                                        <div style={{ background: '#eef2ff', border: '2px solid #4f46e5', borderRadius: '10px', padding: '20px', marginBottom: '24px', textAlign: 'center' }}>
+                                            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>퇴직금 = ④ × ⑤</div>
+                                            <div style={{ fontSize: '24px', fontWeight: 800, color: '#4f46e5' }}>{fmt(retirePay)}원</div>
+                                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>({Math.floor(retirePay / 10000).toLocaleString()}만원)</div>
+                                        </div>
+
+                                        {/* 계산 공식 설명 */}
+                                        <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1e293b' }}>■ 퇴직금 산정 공식</div>
+                                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '20px', fontSize: '12px', lineHeight: 1.9, color: '#475569' }}>
+                                            <div style={{ background: '#f1f5f9', padding: '10px', borderRadius: '6px', textAlign: 'center', marginBottom: '12px', fontSize: '13px', fontWeight: 700 }}>
+                                                퇴직금 = 1일 평균임금 × 30일 × (총 재직일수 ÷ 365)
+                                            </div>
+                                            <p style={{ marginBottom: '6px' }}>• <strong>1일 평균임금</strong> = 퇴직 전 3개월간 지급된 임금 총액 ÷ 해당 기간의 총 일수 (90일)</p>
+                                            <p style={{ marginBottom: '6px' }}>• <strong>3개월 임금 총액</strong> = (기본급 × 3) + (3개월간 상여금) + (기타 수당 × 3)</p>
+                                            <p>• 상여금이 연간 단위인 경우 3/12를 적용하여 비례 산정합니다.</p>
+                                        </div>
+
+                                        {/* 법적 설명 */}
+                                        <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1e293b' }}>■ 법적 근거 및 안내</div>
+                                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '20px', fontSize: '11.5px', lineHeight: 2, color: '#475569' }}>
+                                            <p style={{ marginBottom: '8px' }}><strong>1. 퇴직급여 지급 대상 (근로자퇴직급여 보장법 제4조)</strong></p>
+                                            <p style={{ marginBottom: '8px', paddingLeft: '12px' }}>사용자는 계속근로기간이 <strong>1년 이상</strong>이고, <strong>4주간 평균하여 1주간의 소정근로시간이 15시간 이상</strong>인 근로자에게 퇴직급여를 지급하여야 합니다.</p>
+
+                                            <p style={{ marginBottom: '8px' }}><strong>2. 퇴직금 산정 방법 (근로자퇴직급여 보장법 제8조 제1항)</strong></p>
+                                            <p style={{ marginBottom: '8px', paddingLeft: '12px' }}>퇴직금은 계속근로기간 1년에 대하여 <strong>30일분 이상의 평균임금</strong>을 퇴직금으로 지급합니다. 평균임금은 퇴직일 이전 3개월간 지급된 임금총액을 기준으로 산정합니다.</p>
+
+                                            <p style={{ marginBottom: '8px' }}><strong>3. 평균임금 산정 (근로기준법 제2조 제1항 제6호)</strong></p>
+                                            <p style={{ marginBottom: '8px', paddingLeft: '12px' }}>평균임금은 이를 산정하여야 할 사유가 발생한 날 이전 3개월간에 그 근로자에게 지급된 임금의 총액을 그 기간의 총일수로 나눈 금액을 말합니다. 통상임금보다 평균임금이 낮은 경우 통상임금을 적용합니다.</p>
+
+                                            <p style={{ marginBottom: '8px' }}><strong>4. 퇴직금 지급 기한 (근로자퇴직급여 보장법 제9조)</strong></p>
+                                            <p style={{ marginBottom: '8px', paddingLeft: '12px' }}>퇴직금은 지급사유가 발생한 날부터 <strong>14일 이내</strong>에 지급하여야 합니다. 다만, 특별한 사정이 있는 경우 당사자 간 합의에 의하여 연장할 수 있습니다.</p>
+
+                                            <p style={{ marginBottom: '8px' }}><strong>5. 퇴직소득세 (소득세법 제22조)</strong></p>
+                                            <p style={{ marginBottom: '8px', paddingLeft: '12px' }}>퇴직금은 퇴직소득에 해당하며, 근속연수에 따른 공제 후 세금이 부과됩니다. 퇴직소득세는 별도 산정하여 원천징수합니다.</p>
+
+                                            <p style={{ marginBottom: '8px' }}><strong>6. 위반 시 제재 (근로자퇴직급여 보장법 제44조)</strong></p>
+                                            <p style={{ paddingLeft: '12px' }}>퇴직금을 정당한 사유 없이 기한 내 미지급 시 <strong>3년 이하의 징역 또는 2천만원 이하의 벌금</strong>에 처할 수 있습니다. 또한 미지급 기간에 대한 지연이자(연 20%)가 발생합니다.</p>
+                                        </div>
+
+                                        {/* 주의사항 */}
+                                        <div style={{ background: '#fefce8', border: '1px solid #fde047', borderRadius: '8px', padding: '14px', marginBottom: '24px', fontSize: '11.5px', lineHeight: 1.8, color: '#854d0e' }}>
+                                            <strong>※ 유의사항</strong>
+                                            <p>• 본 산정서는 참고용이며, 정확한 퇴직금은 실제 급여대장 기준으로 산정하여야 합니다.</p>
+                                            <p>• 퇴직소득세는 별도로 계산되어 원천징수되며, 실수령액은 상이할 수 있습니다.</p>
+                                            <p>• 미사용 연차수당이 있는 경우 평균임금 산정 시 포함하여야 합니다.</p>
+                                        </div>
+
+                                        {/* 서명란 */}
+                                        <div style={{ textAlign: 'center', margin: '30px 0 20px', fontSize: '14px', fontWeight: 600 }}>
+                                            {formatDate(today)}
+                                        </div>
+
+                                        <table style={{ width: '80%', margin: '0 auto', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                            <tbody>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '30%', textAlign: 'center' }}>확인자 (사업주)</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'center', height: '50px' }}>(인)</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>수령자 (근로자)</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'center', height: '50px' }}>{pdfTarget.name} (인)</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            })()
                         )}
                     </div>
                 </div>

@@ -222,3 +222,14 @@ button {
 .text-muted {
   color: var(--text-muted);
 }
+
+/* News Ticker Animation */
+@keyframes tickerScroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}

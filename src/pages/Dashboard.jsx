@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useData } from '../context/DataContext';
 import Modal from '../components/Modal';
 import {
@@ -18,6 +18,33 @@ import {
 
 const Dashboard = () => {
     const { equipments, materials, inspections, products, workOrders, molds, moldMovement, injectionConditions, productionLogs, employees } = useData();
+
+    // 뉴스 속보 상태
+    const [newsItems, setNewsItems] = useState([]);
+    const [newsLoading, setNewsLoading] = useState(false);
+    const newsTickerRef = useRef(null);
+
+    useEffect(() => {
+        const fetchNews = async () => {
+            setNewsLoading(true);
+            try {
+                const res = await fetch('/api/news?category=economy');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.items?.length > 0) {
+                        setNewsItems(data.items);
+                    }
+                }
+            } catch (e) {
+                console.warn('뉴스 로드 실패:', e);
+            } finally {
+                setNewsLoading(false);
+            }
+        };
+        fetchNews();
+        const interval = setInterval(fetchNews, 10 * 60 * 1000); // 10분마다 갱신
+        return () => clearInterval(interval);
+    }, []);
 
     // 사출조건 모달 상태
     const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
@@ -105,6 +132,60 @@ const Dashboard = () => {
 
     return (
         <div className="dashboard-container">
+            {/* 실시간 뉴스 속보 티커 */}
+            {newsItems.length > 0 && (
+                <div style={{
+                    background: 'linear-gradient(135deg, #1e293b, #0f172a)',
+                    borderRadius: '12px', padding: '0', marginBottom: '1rem',
+                    overflow: 'hidden', position: 'relative', height: '42px',
+                    display: 'flex', alignItems: 'center',
+                    border: '1px solid #334155'
+                }}>
+                    <div style={{
+                        background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                        padding: '0 14px', height: '100%',
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        fontWeight: 800, fontSize: '0.78rem', color: 'white',
+                        whiteSpace: 'nowrap', zIndex: 2, flexShrink: 0,
+                        boxShadow: '4px 0 8px rgba(0,0,0,0.3)'
+                    }}>
+                        <span style={{ animation: 'pulse 1.5s ease-in-out infinite' }}>🔴</span> 속보
+                    </div>
+                    <div style={{
+                        flex: 1, overflow: 'hidden', position: 'relative', height: '100%',
+                        display: 'flex', alignItems: 'center',
+                        maskImage: 'linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%)',
+                        WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%)'
+                    }}>
+                        <div ref={newsTickerRef} style={{
+                            display: 'flex', gap: '50px', whiteSpace: 'nowrap',
+                            animation: `tickerScroll ${Math.max(newsItems.length * 8, 30)}s linear infinite`,
+                            paddingLeft: '20px'
+                        }}>
+                            {[...newsItems, ...newsItems].map((item, i) => (
+                                <a key={i} href={item.link} target="_blank" rel="noopener noreferrer"
+                                    style={{
+                                        color: '#e2e8f0', textDecoration: 'none', fontSize: '0.82rem',
+                                        fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '8px',
+                                        transition: 'color 0.2s'
+                                    }}
+                                    onMouseOver={(e) => e.currentTarget.style.color = '#60a5fa'}
+                                    onMouseOut={(e) => e.currentTarget.style.color = '#e2e8f0'}
+                                >
+                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>▸</span>
+                                    {item.title}
+                                    {item.pubDate && (
+                                        <span style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 400 }}>
+                                            {new Date(item.pubDate).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    )}
+                                </a>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="dashboard-header">
                 <div>
                     <h2 className="page-title">생산 관리 대시보드</h2>

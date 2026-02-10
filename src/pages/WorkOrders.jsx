@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, Play, CheckCircle, XCircle, Edit } from 'lucide-react';
+import { Plus, Play, CheckCircle, XCircle, Edit, FileText, Wrench, PenTool, Truck, ClipboardList } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const WorkOrders = () => {
     const {
-        workOrders, products, equipments,
+        workOrders, products, equipments, molds,
+        repairHistory, eqHistory, moldMovement,
         addWorkOrder, updateWorkOrder, startWork, completeWork
     } = useData();
 
@@ -156,6 +157,58 @@ const WorkOrders = () => {
         setCurrentOrder(null);
     };
 
+    // === 이력 조회 기능 ===
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [historyOrder, setHistoryOrder] = useState(null);
+    const [historyTab, setHistoryTab] = useState('equipment');
+
+    const openHistory = (order) => {
+        setHistoryOrder(order);
+        setHistoryTab('equipment');
+        setIsHistoryOpen(true);
+    };
+
+    // 이력 데이터 계산
+    const historyData = useMemo(() => {
+        if (!historyOrder) return null;
+
+        const productName = getProductName(historyOrder.product_id);
+        const equipmentName = getEquipmentName(historyOrder.equipment_id);
+
+        // 금형 자동 매칭 (제품명과 일치하는 금형 찾기)
+        const matchedMold = molds.find(m => m.name === productName || m.name?.includes(productName) || productName?.includes(m.name));
+
+        // 설비 점검/수리 이력
+        const equipHistory = (eqHistory || [])
+            .filter(h => h.equipment_id === historyOrder.equipment_id)
+            .sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at))
+            .slice(0, 10);
+
+        // 금형 수리 이력
+        const moldRepairHist = matchedMold
+            ? (repairHistory || [])
+                .filter(h => h.mold_id === matchedMold.id)
+                .sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at))
+                .slice(0, 10)
+            : [];
+
+        // 금형 출입고 이력
+        const moldMoveHist = matchedMold
+            ? (moldMovement || [])
+                .filter(m => m.mold_id === matchedMold.id)
+                .sort((a, b) => new Date(b.outgoing_date || b.created_at) - new Date(a.outgoing_date || a.created_at))
+                .slice(0, 10)
+            : [];
+
+        // 과거 작업지시 이력 (같은 설비)
+        const pastOrders = workOrders
+            .filter(wo => wo.id !== historyOrder.id && wo.equipment_id === historyOrder.equipment_id && (wo.status === '완료' || wo.status === '진행중'))
+            .sort((a, b) => new Date(b.order_date) - new Date(a.order_date))
+            .slice(0, 10);
+
+        return { productName, equipmentName, matchedMold, equipHistory, moldRepairHist, moldMoveHist, pastOrders };
+    }, [historyOrder, molds, eqHistory, repairHistory, moldMovement, workOrders]);
+
     return (
         <div className="page-container">
             <div className="page-header-row">
@@ -210,6 +263,12 @@ const WorkOrders = () => {
                 data={filteredOrders || []}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {/* 이력 조회 */}
+                        <button className="icon-btn" onClick={() => openHistory(row)} title="금형/설비 이력 조회"
+                            style={{ color: '#6366f1' }}>
+                            <FileText size={16} />
+                        </button>
+
                         {/* Edit 버튼 (완료/취소 아닌 경우) */}
                         {row.status !== '완료' && row.status !== '취소' && (
                             <button className="icon-btn" onClick={() => handleEdit(row)} title="작업지시 수정">
@@ -372,6 +431,159 @@ const WorkOrders = () => {
                             <button className="btn-submit" onClick={handleUpdateQuantity}>업데이트</button>
                         </div>
                     </>
+                )}
+            </Modal>
+
+            {/* 이력 조회 Modal */}
+            <Modal
+                title={historyData ? `📋 이력 조회 - ${historyData.productName}` : '이력 조회'}
+                isOpen={isHistoryOpen}
+                onClose={() => { setIsHistoryOpen(false); setHistoryOrder(null); }}
+            >
+                {historyData && (
+                    <div>
+                        {/* 요약 헤더 */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '1rem' }}>
+                            <div style={{ padding: '10px 14px', background: '#eff6ff', borderRadius: '8px', fontSize: '0.85rem' }}>
+                                <div style={{ color: '#64748b', fontSize: '0.75rem', marginBottom: '2px' }}>설비</div>
+                                <div style={{ fontWeight: 700, color: '#1e40af' }}>{historyData.equipmentName}</div>
+                            </div>
+                            <div style={{ padding: '10px 14px', background: '#faf5ff', borderRadius: '8px', fontSize: '0.85rem' }}>
+                                <div style={{ color: '#64748b', fontSize: '0.75rem', marginBottom: '2px' }}>금형</div>
+                                <div style={{ fontWeight: 700, color: '#7c3aed' }}>
+                                    {historyData.matchedMold ? `${historyData.matchedMold.name} (${historyData.matchedMold.cycle_count?.toLocaleString() || 0}타)` : '매칭 금형 없음'}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 탭 */}
+                        <div style={{ display: 'flex', gap: '4px', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                            {[
+                                { key: 'equipment', label: '설비 이력', icon: <Wrench size={13} />, count: historyData.equipHistory.length },
+                                { key: 'mold', label: '금형 이력', icon: <PenTool size={13} />, count: historyData.moldRepairHist.length },
+                                { key: 'movement', label: '출입고', icon: <Truck size={13} />, count: historyData.moldMoveHist.length },
+                                { key: 'orders', label: '과거 작업', icon: <ClipboardList size={13} />, count: historyData.pastOrders.length },
+                            ].map(tab => (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setHistoryTab(tab.key)}
+                                    style={{
+                                        padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600,
+                                        display: 'flex', alignItems: 'center', gap: '4px', border: 'none', cursor: 'pointer',
+                                        background: historyTab === tab.key ? '#4f46e5' : '#f1f5f9',
+                                        color: historyTab === tab.key ? 'white' : '#64748b',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    {tab.icon} {tab.label} ({tab.count})
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* 설비 이력 탭 */}
+                        {historyTab === 'equipment' && (
+                            <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                                {historyData.equipHistory.length === 0 ? (
+                                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.9rem' }}>설비 이력이 없습니다.</div>
+                                ) : historyData.equipHistory.map((h, i) => (
+                                    <div key={i} style={{ padding: '10px 14px', background: i % 2 === 0 ? '#f8fafc' : 'white', borderRadius: '8px', marginBottom: '4px', fontSize: '0.85rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                            <span style={{
+                                                padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700,
+                                                background: h.type === '정기점검' ? '#dbeafe' : h.type === '고장수리' ? '#fee2e2' : '#e0e7ff',
+                                                color: h.type === '정기점검' ? '#1d4ed8' : h.type === '고장수리' ? '#dc2626' : '#4338ca'
+                                            }}>{h.type}</span>
+                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{h.date || h.created_at?.split('T')[0]}</span>
+                                        </div>
+                                        <div style={{ color: '#334155' }}>{h.note || h.notes || '-'}</div>
+                                        {h.worker && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>작업자: {h.worker}</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* 금형 이력 탭 */}
+                        {historyTab === 'mold' && (
+                            <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                                {!historyData.matchedMold ? (
+                                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.9rem' }}>매칭되는 금형이 없습니다.</div>
+                                ) : historyData.moldRepairHist.length === 0 ? (
+                                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.9rem' }}>금형 수리/점검 이력이 없습니다.</div>
+                                ) : historyData.moldRepairHist.map((h, i) => (
+                                    <div key={i} style={{ padding: '10px 14px', background: i % 2 === 0 ? '#faf5ff' : 'white', borderRadius: '8px', marginBottom: '4px', fontSize: '0.85rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                            <span style={{
+                                                padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700,
+                                                background: h.type === '정기점검' ? '#dbeafe' : '#fce7f3',
+                                                color: h.type === '정기점검' ? '#1d4ed8' : '#be185d'
+                                            }}>{h.type}</span>
+                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{h.date || h.created_at?.split('T')[0]}</span>
+                                        </div>
+                                        <div style={{ color: '#334155' }}>{h.note || '-'}</div>
+                                        {h.cost > 0 && <div style={{ fontSize: '0.78rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>비용: {Number(h.cost).toLocaleString()}원</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* 금형 출입고 탭 */}
+                        {historyTab === 'movement' && (
+                            <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                                {!historyData.matchedMold ? (
+                                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.9rem' }}>매칭되는 금형이 없습니다.</div>
+                                ) : historyData.moldMoveHist.length === 0 ? (
+                                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.9rem' }}>출입고 이력이 없습니다.</div>
+                                ) : historyData.moldMoveHist.map((m, i) => (
+                                    <div key={i} style={{ padding: '10px 14px', background: i % 2 === 0 ? '#fffbeb' : 'white', borderRadius: '8px', marginBottom: '4px', fontSize: '0.85rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                            <span style={{
+                                                padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700,
+                                                background: m.status === '출고중' ? '#fef3c7' : '#d1fae5',
+                                                color: m.status === '출고중' ? '#b45309' : '#047857'
+                                            }}>{m.status || '출고'}</span>
+                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                                {m.outgoing_date} {m.incoming_date ? `→ ${m.incoming_date}` : ''}
+                                            </span>
+                                        </div>
+                                        <div style={{ color: '#334155' }}>
+                                            {m.destination && <span>행선지: {m.destination}</span>}
+                                            {m.repair_vendor && <span> | 업체: {m.repair_vendor}</span>}
+                                        </div>
+                                        {m.outgoing_reason && <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>사유: {m.outgoing_reason}</div>}
+                                        {m.repair_result && <div style={{ fontSize: '0.78rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>수리결과: {m.repair_result}</div>}
+                                        {m.actual_cost > 0 && <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: '2px' }}>비용: {Number(m.actual_cost).toLocaleString()}원</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* 과거 작업 탭 */}
+                        {historyTab === 'orders' && (
+                            <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                                {historyData.pastOrders.length === 0 ? (
+                                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.9rem' }}>과거 작업 이력이 없습니다.</div>
+                                ) : historyData.pastOrders.map((wo, i) => (
+                                    <div key={i} style={{ padding: '10px 14px', background: i % 2 === 0 ? '#f0fdf4' : 'white', borderRadius: '8px', marginBottom: '4px', fontSize: '0.85rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                            <span style={{ fontWeight: 700, color: '#1e293b' }}>{getProductName(wo.product_id)}</span>
+                                            <span style={{
+                                                padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700,
+                                                background: wo.status === '완료' ? '#dcfce7' : '#dbeafe',
+                                                color: wo.status === '완료' ? '#166534' : '#1d4ed8'
+                                            }}>{wo.status}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+                                            <span>수량: {wo.produced_quantity}/{wo.target_quantity}
+                                                ({wo.target_quantity > 0 ? Math.round((wo.produced_quantity / wo.target_quantity) * 100) : 0}%)
+                                            </span>
+                                            <span>{wo.order_date}</span>
+                                        </div>
+                                        {wo.notes && <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '2px' }}>{wo.notes}</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 )}
             </Modal>
 

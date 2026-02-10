@@ -57,6 +57,9 @@ const Payroll = () => {
         nightHours: '',       // 야간근로시간
         holidayHours: '',     // 휴일근로시간
         bonus: '',            // 상여금
+        annualLeavePay: '',   // 연차수당
+        holidayBonus: '',     // 명절수당 (설날/추석)
+        performanceBonus: '', // 성과금
         mealAllowance: '',    // 식대 (비과세)
         transportAllowance: '',// 교통비 (비과세)
         dependents: '1',      // 부양가족 수
@@ -87,6 +90,9 @@ const Payroll = () => {
         const nightHours = parseFloat(payData.nightHours) || 0;
         const holidayHours = parseFloat(payData.holidayHours) || 0;
         const bonus = parseFloat(payData.bonus) || 0;
+        const annualLeavePay = parseFloat(payData.annualLeavePay) || 0;
+        const holidayBonus = parseFloat(payData.holidayBonus) || 0;
+        const performanceBonus = parseFloat(payData.performanceBonus) || 0;
         const mealAllowance = parseFloat(payData.mealAllowance) || 0;
         const transportAllowance = parseFloat(payData.transportAllowance) || 0;
         const dependents = parseInt(payData.dependents) || 1;
@@ -106,7 +112,7 @@ const Payroll = () => {
         const holidayPay = Math.round(effectiveHourly * 1.5 * holidayHours);
 
         // 과세 총액
-        const taxableTotal = grossBase + overtimePay + nightPay + holidayPay + bonus;
+        const taxableTotal = grossBase + overtimePay + nightPay + holidayPay + bonus + annualLeavePay + holidayBonus + performanceBonus;
         // 비과세 총액 (식대 월 20만원, 교통비 월 20만원 한도)
         const nonTaxMeal = Math.min(mealAllowance, 200000);
         const nonTaxTransport = Math.min(transportAllowance, 200000);
@@ -135,6 +141,7 @@ const Payroll = () => {
 
         return {
             grossBase, overtimePay, nightPay, holidayPay, bonus,
+            annualLeavePay, holidayBonus, performanceBonus,
             taxableTotal, nonTaxMeal, nonTaxTransport, nonTaxTotal, totalPay,
             nationalPension, healthInsurance, longTermCare, employmentInsurance, totalInsurance,
             incomeTax, localIncomeTax, totalDeduction, netPay,
@@ -338,11 +345,32 @@ const Payroll = () => {
                         </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                         <div>
                             <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>상여금</label>
                             <input type="number" placeholder="0" value={payData.bonus}
                                 onChange={(e) => setPayData({ ...payData, bonus: e.target.value })}
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>연차수당</label>
+                            <input type="number" placeholder="0" value={payData.annualLeavePay}
+                                onChange={(e) => setPayData({ ...payData, annualLeavePay: e.target.value })}
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>성과금</label>
+                            <input type="number" placeholder="0" value={payData.performanceBonus}
+                                onChange={(e) => setPayData({ ...payData, performanceBonus: e.target.value })}
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                        <div>
+                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>명절수당</label>
+                            <input type="number" placeholder="0" value={payData.holidayBonus}
+                                onChange={(e) => setPayData({ ...payData, holidayBonus: e.target.value })}
                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
                         </div>
                         <div>
@@ -393,6 +421,9 @@ const Payroll = () => {
                             { label: '야간근로수당 (×0.5 가산)', value: calculation.nightPay },
                             { label: '휴일근로수당 (×1.5)', value: calculation.holidayPay },
                             { label: '상여금', value: calculation.bonus },
+                            { label: '연차수당', value: calculation.annualLeavePay },
+                            { label: '명절수당', value: calculation.holidayBonus },
+                            { label: '성과금', value: calculation.performanceBonus },
                             { label: '식대 (비과세)', value: calculation.nonTaxMeal },
                             { label: '교통비 (비과세)', value: calculation.nonTaxTransport }
                         ].filter(r => r.value > 0).map(row => (
@@ -518,6 +549,9 @@ const Payroll = () => {
                                     { label: '야간근로수당', value: calculation.nightPay },
                                     { label: '휴일근로수당', value: calculation.holidayPay },
                                     { label: '상여금', value: calculation.bonus },
+                                    { label: '연차수당', value: calculation.annualLeavePay },
+                                    { label: '명절수당', value: calculation.holidayBonus },
+                                    { label: '성과금', value: calculation.performanceBonus },
                                     { label: '식대 (비과세)', value: calculation.nonTaxMeal },
                                     { label: '교통비 (비과세)', value: calculation.nonTaxTransport }
                                 ].map(row => (

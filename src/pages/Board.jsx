@@ -486,7 +486,7 @@ const Board = () => {
                 .img-grid-3 .img-grid-item:first-child { grid-row: span 2; }
                 .img-grid-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
                 .img-grid-item { position: relative; cursor: pointer; overflow: hidden; background: #f1f5f9; }
-                .img-grid-item img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s; min-height: 80px; }
+                .img-grid-item img { width: 100%; height: auto; object-fit: contain; display: block; transition: transform 0.2s; max-height: 400px; }
                 .img-grid-item:hover img { transform: scale(1.03); }
                 .img-grid-more { position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: 700; }
 

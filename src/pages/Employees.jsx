@@ -110,7 +110,7 @@ const Employees = () => {
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!newItem.name || !newItem.joinDate) return alert('필수 항목을 입력해주세요.');
 
         if (isEditing) {
@@ -123,7 +123,12 @@ const Employees = () => {
                 position: newItem.position,
                 join_date: newItem.joinDate
             };
-            updateEmployee(editingId, itemToUpdate);
+            try {
+                await updateEmployee(editingId, itemToUpdate);
+                alert(`✅ ${newItem.name} 직원 정보가 수정되었습니다. (직급: ${newItem.position})`);
+            } catch (err) {
+                alert('❌ 수정 실패: ' + err.message);
+            }
             setIsEditing(false);
             setEditingId(null);
         } else {

@@ -247,7 +247,8 @@ export const DataProvider = ({ children }) => {
     };
     const updateEmployee = async (id, fields) => {
         const { error } = await supabase.from('employees').update(fields).eq('id', id);
-        if (!error) setEmployees(employees.map(e => e.id === id ? { ...e, ...fields } : e));
+        if (error) throw new Error(error.message);
+        setEmployees(employees.map(e => e.id === id ? { ...e, ...fields } : e));
     };
     const deleteEmployee = async (id) => {
         const { error } = await supabase.from('employees').delete().eq('id', id);

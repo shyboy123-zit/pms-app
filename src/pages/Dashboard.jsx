@@ -358,6 +358,140 @@ const Dashboard = () => {
                 );
             })()}
 
+            {/* ===== 의무교육 관리 카드 ===== */}
+            {(() => {
+                const TRAININGS = [
+                    { code: 'safety', name: '산업안전보건교육', period: 'quarterly', hours: '사무직 3h / 생산직 6h', law: '산업안전보건법 제29조', icon: '🦺' },
+                    { code: 'harassment', name: '성희롱 예방교육', period: 'yearly', hours: '1시간 이상', law: '남녀고용평등법 제13조', icon: '🛡️' },
+                    { code: 'privacy', name: '개인정보보호 교육', period: 'yearly', hours: '1시간 이상', law: '개인정보보호법 제28조', icon: '🔒' },
+                    { code: 'bullying', name: '직장 내 괴롭힘 예방교육', period: 'yearly', hours: '1시간 이상', law: '근로기준법 제76조의2', icon: '🤝' },
+                    { code: 'fire', name: '소방안전교육', period: 'yearly', hours: '2시간 이상', law: '화재예방법 제17조', icon: '🧯' },
+                    { code: 'disability', name: '장애인 인식개선 교육', period: 'yearly', hours: '1시간 이상', law: '장애인고용촉진법 제5조의3', icon: '♿' }
+                ];
+
+                let records = {};
+                try { records = JSON.parse(localStorage.getItem('trainingRecords') || '{}'); } catch (e) { /* ignore */ }
+
+                const now = new Date();
+                const thisYear = now.getFullYear();
+
+                const trainingStatus = TRAININGS.map(t => {
+                    const rec = records[t.code];
+                    const lastDate = rec?.lastDate ? new Date(rec.lastDate) : null;
+
+                    let nextDate;
+                    if (t.period === 'quarterly') {
+                        // 분기별: 마지막 실시일 + 3개월, 없으면 현재 분기 말
+                        if (lastDate) {
+                            nextDate = new Date(lastDate);
+                            nextDate.setMonth(nextDate.getMonth() + 3);
+                        } else {
+                            const qEnd = Math.ceil((now.getMonth() + 1) / 3) * 3;
+                            nextDate = new Date(thisYear, qEnd, 0); // 현재 분기 말일
+                        }
+                    } else {
+                        // 연 1회: 올해 12/31까지, 이미 올해 실시했으면 내년 12/31
+                        if (lastDate && lastDate.getFullYear() === thisYear) {
+                            nextDate = new Date(thisYear + 1, 11, 31);
+                        } else {
+                            nextDate = new Date(thisYear, 11, 31);
+                        }
+                    }
+
+                    const dday = Math.ceil((nextDate - now) / (1000 * 60 * 60 * 24));
+                    const isCompleted = lastDate && (
+                        t.period === 'quarterly'
+                            ? (now - lastDate) < (90 * 24 * 60 * 60 * 1000) // 분기 내 실시
+                            : lastDate.getFullYear() === thisYear // 올해 실시
+                    );
+
+                    let urgency = 'normal';
+                    if (isCompleted) urgency = 'done';
+                    else if (dday < 0) urgency = 'overdue';
+                    else if (dday <= 14) urgency = 'urgent';
+                    else if (dday <= 30) urgency = 'warning';
+
+                    return { ...t, lastDate, nextDate, dday, isCompleted, urgency };
+                });
+
+                const overdueCount = trainingStatus.filter(t => t.urgency === 'overdue').length;
+                const urgentCount2 = trainingStatus.filter(t => t.urgency === 'urgent').length;
+                const doneCount = trainingStatus.filter(t => t.urgency === 'done').length;
+
+                const urgencyColors = {
+                    overdue: { bg: '#fef2f2', border: '#fecaca', badge: '#dc2626', text: '#991b1b' },
+                    urgent: { bg: '#fff7ed', border: '#fed7aa', badge: '#ea580c', text: '#9a3412' },
+                    warning: { bg: '#fffbeb', border: '#fde68a', badge: '#d97706', text: '#92400e' },
+                    normal: { bg: 'var(--card)', border: 'var(--border)', badge: '#6366f1', text: 'var(--text)' },
+                    done: { bg: '#f0fdf4', border: '#bbf7d0', badge: '#16a34a', text: '#166534' }
+                };
+
+                return (
+                    <div style={{
+                        background: overdueCount > 0 ? 'linear-gradient(135deg, #fef2f2, #fff1f2)' :
+                            urgentCount2 > 0 ? 'linear-gradient(135deg, #fff7ed, #fffbeb)' :
+                                'linear-gradient(135deg, #f0f9ff, #f0fdf4)',
+                        border: `1px solid ${overdueCount > 0 ? '#fecaca' : urgentCount2 > 0 ? '#fed7aa' : '#bae6fd'}`,
+                        borderRadius: '16px', padding: '18px 22px', marginBottom: '1.5rem'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '1.1rem' }}>📚</span>
+                                <span style={{ fontSize: '0.95rem', fontWeight: 700, color: overdueCount > 0 ? '#dc2626' : '#1e293b' }}>
+                                    의무교육 관리
+                                </span>
+                                <span style={{
+                                    padding: '2px 10px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 700,
+                                    background: doneCount === TRAININGS.length ? '#dcfce7' : overdueCount > 0 ? '#fee2e2' : '#dbeafe',
+                                    color: doneCount === TRAININGS.length ? '#16a34a' : overdueCount > 0 ? '#dc2626' : '#2563eb'
+                                }}>
+                                    {doneCount}/{TRAININGS.length} 완료
+                                </span>
+                            </div>
+                            <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>제조업 법정 필수교육</span>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {trainingStatus.sort((a, b) => {
+                                const order = { overdue: 0, urgent: 1, warning: 2, normal: 3, done: 4 };
+                                return order[a.urgency] - order[b.urgency];
+                            }).map(t => {
+                                const c = urgencyColors[t.urgency];
+                                return (
+                                    <div key={t.code} style={{
+                                        display: 'flex', alignItems: 'center', gap: '8px',
+                                        padding: '10px 14px', borderRadius: '10px',
+                                        background: c.bg, border: `1px solid ${c.border}`,
+                                        flexWrap: 'wrap'
+                                    }}>
+                                        <span style={{ fontSize: '1rem' }}>{t.icon}</span>
+                                        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e293b', minWidth: '140px' }}>
+                                            {t.name}
+                                        </span>
+                                        <span style={{
+                                            padding: '2px 8px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: 700,
+                                            background: c.badge, color: 'white', whiteSpace: 'nowrap'
+                                        }}>
+                                            {t.urgency === 'done' ? '✅ 완료' :
+                                                t.urgency === 'overdue' ? '🚨 기한초과' :
+                                                    t.urgency === 'urgent' ? `⚠️ D-${t.dday}` :
+                                                        t.period === 'quarterly' ? '분기별' : '연 1회'}
+                                        </span>
+                                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                            {t.hours} · {t.law}
+                                        </span>
+                                        <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                                            {t.lastDate ? `최근: ${t.lastDate.toLocaleDateString('ko-KR')}` : '미실시'}
+                                            {!t.isCompleted && ` · 기한: ${t.nextDate.toLocaleDateString('ko-KR')}`}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            })()}
+
             {/* 메인 위젯 그리드 */}
             <div className="widgets-grid">
                 {/* 1. 호기별 작업 현황 */}

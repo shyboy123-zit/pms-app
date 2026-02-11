@@ -40,6 +40,24 @@ const Employees = () => {
         otherAllowance: '' // 기타 수당 (월 평균)
     });
 
+    // 의무교육 관련 상태
+    const TRAININGS = [
+        { code: 'safety', name: '산업안전보건교육', hours: '사무직 3h / 생산직 6h', law: '산업안전보건법 제29조', period: 'quarterly', icon: '🦺' },
+        { code: 'harassment', name: '성희롱 예방교육', hours: '1시간 이상', law: '남녀고용평등법 제13조', period: 'yearly', icon: '🛡️' },
+        { code: 'privacy', name: '개인정보보호 교육', hours: '1시간 이상', law: '개인정보보호법 제28조', period: 'yearly', icon: '🔒' },
+        { code: 'bullying', name: '직장 내 괴롭힘 예방교육', hours: '1시간 이상', law: '근로기준법 제76조의2', period: 'yearly', icon: '🤝' },
+        { code: 'fire', name: '소방안전교육', hours: '2시간 이상', law: '화재예방법 제17조', period: 'yearly', icon: '🧯' },
+        { code: 'disability', name: '장애인 인식개선 교육', hours: '1시간 이상', law: '장애인고용촉진법 제5조의3', period: 'yearly', icon: '♿' }
+    ];
+    const [trainingType, setTrainingType] = useState('safety');
+    const [trainingFormData, setTrainingFormData] = useState({
+        date: new Date().toISOString().split('T')[0],
+        startTime: '14:00', endTime: '15:00',
+        location: '', instructor: ''
+    });
+    const [trainingPhotos, setTrainingPhotos] = useState([]);
+    const trainingPhotoRef = useRef(null);
+
     const filteredEmployees = employees.filter(e => {
         if (viewMode === '전체') return true;
         return e.status === viewMode;
@@ -290,7 +308,8 @@ const Employees = () => {
             const fileNames = {
                 promotion: `연차사용촉진_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
                 application: `연차사용신청서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
-                retirement: `퇴직금계산서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`
+                retirement: `퇴직금계산서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
+                training: `의무교육_${TRAININGS.find(t => t.code === trainingType)?.name || ''}_${new Date().toISOString().split('T')[0]}.pdf`
             };
             const fileName = fileNames[pdfType] || fileNames.promotion;
             pdf.save(fileName);
@@ -533,7 +552,7 @@ const Employees = () => {
                         </div>
 
                         <div style={{ display: 'flex', gap: '6px', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                            {[{ key: 'promotion', icon: '📋', label: '연차사용촉진' }, { key: 'application', icon: '📝', label: '연차신청서' }, { key: 'retirement', icon: '💰', label: '퇴직금계산' }].map(t => (
+                            {[{ key: 'promotion', icon: '📋', label: '연차사용촉진' }, { key: 'application', icon: '📝', label: '연차신청서' }, { key: 'retirement', icon: '💰', label: '퇴직금계산' }, { key: 'training', icon: '📚', label: '의무교육' }].map(t => (
                                 <button key={t.key}
                                     onClick={() => setPdfType(t.key)}
                                     style={{
@@ -654,6 +673,132 @@ const Employees = () => {
                                     </div>
                                 </div>
                             </>
+                        )}
+
+                        {pdfType === 'training' && (
+                            <div>
+                                {/* 교육 유형 선택 */}
+                                <div style={{ marginBottom: '12px' }}>
+                                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: '6px', display: 'block' }}>교육 유형 선택</label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                                        {TRAININGS.map(t => (
+                                            <button key={t.code}
+                                                onClick={() => setTrainingType(t.code)}
+                                                style={{
+                                                    padding: '8px 10px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                                                    fontSize: '0.75rem', fontWeight: 600, textAlign: 'left',
+                                                    background: trainingType === t.code ? '#4f46e5' : '#f1f5f9',
+                                                    color: trainingType === t.code ? 'white' : '#64748b',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                {t.icon} {t.name}
+                                                <div style={{ fontSize: '0.65rem', opacity: 0.8, marginTop: '2px' }}>{t.law}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 교육 정보 입력 */}
+                                <div style={{ background: '#f0f9ff', padding: '14px', borderRadius: '10px', marginBottom: '12px' }}>
+                                    <div style={{ fontSize: '0.78rem', color: '#0369a1', marginBottom: '10px', fontWeight: 600 }}>
+                                        📝 {TRAININGS.find(t => t.code === trainingType)?.name} 교육 정보
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.75rem' }}>교육 날짜</label>
+                                            <input type="date" className="form-input" value={trainingFormData.date}
+                                                onChange={(e) => setTrainingFormData({ ...trainingFormData, date: e.target.value })} />
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.75rem' }}>교육 시간</label>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <input type="time" className="form-input" value={trainingFormData.startTime}
+                                                    onChange={(e) => setTrainingFormData({ ...trainingFormData, startTime: e.target.value })} style={{ flex: 1 }} />
+                                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>~</span>
+                                                <input type="time" className="form-input" value={trainingFormData.endTime}
+                                                    onChange={(e) => setTrainingFormData({ ...trainingFormData, endTime: e.target.value })} style={{ flex: 1 }} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.75rem' }}>교육 장소</label>
+                                            <input type="text" className="form-input" placeholder="예: 회의실, 교육장" value={trainingFormData.location}
+                                                onChange={(e) => setTrainingFormData({ ...trainingFormData, location: e.target.value })} />
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.75rem' }}>강사명</label>
+                                            <input type="text" className="form-input" placeholder="예: 안전관리자, 외부강사" value={trainingFormData.instructor}
+                                                onChange={(e) => setTrainingFormData({ ...trainingFormData, instructor: e.target.value })} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 사진 업로드 */}
+                                <div style={{ background: '#fefce8', padding: '14px', borderRadius: '10px', marginBottom: '12px' }}>
+                                    <div style={{ fontSize: '0.78rem', color: '#854d0e', marginBottom: '8px', fontWeight: 600 }}>📷 교육 현장 사진</div>
+                                    <input type="file" accept="image/*" multiple ref={trainingPhotoRef} style={{ display: 'none' }}
+                                        onChange={(e) => {
+                                            const files = Array.from(e.target.files);
+                                            files.forEach(file => {
+                                                const reader = new FileReader();
+                                                reader.onload = (ev) => {
+                                                    setTrainingPhotos(prev => [...prev, { name: file.name, data: ev.target.result }]);
+                                                };
+                                                reader.readAsDataURL(file);
+                                            });
+                                            e.target.value = '';
+                                        }} />
+                                    <button
+                                        onClick={() => trainingPhotoRef.current?.click()}
+                                        style={{
+                                            padding: '8px 16px', borderRadius: '8px', border: '1px dashed #d97706',
+                                            background: 'white', color: '#92400e', fontSize: '0.78rem', fontWeight: 600,
+                                            cursor: 'pointer', width: '100%', marginBottom: '8px'
+                                        }}>
+                                        📎 사진 추가 (클릭하여 선택)
+                                    </button>
+                                    {trainingPhotos.length > 0 && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                                            {trainingPhotos.map((photo, idx) => (
+                                                <div key={idx} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                                                    <img src={photo.data} alt={photo.name} style={{ width: '100%', height: '80px', objectFit: 'cover' }} />
+                                                    <button
+                                                        onClick={() => setTrainingPhotos(prev => prev.filter((_, i) => i !== idx))}
+                                                        style={{
+                                                            position: 'absolute', top: '2px', right: '2px',
+                                                            background: '#dc2626', color: 'white', border: 'none',
+                                                            borderRadius: '50%', width: '18px', height: '18px',
+                                                            fontSize: '0.6rem', cursor: 'pointer', lineHeight: 1
+                                                        }}>✕</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 교육 기록 저장 버튼 */}
+                                <button
+                                    onClick={() => {
+                                        const records = JSON.parse(localStorage.getItem('trainingRecords') || '{}');
+                                        records[trainingType] = {
+                                            lastDate: trainingFormData.date,
+                                            instructor: trainingFormData.instructor,
+                                            location: trainingFormData.location,
+                                            photos: trainingPhotos.map(p => p.data).slice(0, 3) // 최대 3장 저장
+                                        };
+                                        localStorage.setItem('trainingRecords', JSON.stringify(records));
+                                        alert(`${TRAININGS.find(t => t.code === trainingType)?.name} 교육 기록이 저장되었습니다!`);
+                                    }}
+                                    style={{
+                                        width: '100%', padding: '10px', borderRadius: '10px', border: 'none',
+                                        background: 'linear-gradient(135deg, #16a34a, #15803d)', color: 'white',
+                                        fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', marginBottom: '10px'
+                                    }}>
+                                    💾 교육 실시 기록 저장 (대시보드 D-day 갱신)
+                                </button>
+                            </div>
                         )}
 
                         <div className="modal-actions">
@@ -1027,6 +1172,117 @@ const Employees = () => {
                                 );
                             })()
                         )}
+
+                        {/* === 의무교육 출석부 === */}
+                        {pdfType === 'training' && (() => {
+                            const selTraining = TRAININGS.find(t => t.code === trainingType);
+                            const activeEmps = employees.filter(e => e.status === '재직');
+                            return (
+                                <div>
+                                    <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+                                        <h1 style={{ fontSize: '26px', fontWeight: 800, letterSpacing: '6px', marginBottom: '8px' }}>의 무 교 육 실 시 확 인 서</h1>
+                                        <div style={{ width: '60px', height: '3px', background: '#4f46e5', margin: '0 auto' }}></div>
+                                    </div>
+
+                                    {/* 교육 정보 */}
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                        <tbody>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>교육명</td>
+                                                <td style={{ ...cellStyle, width: '30%', fontWeight: 700, color: '#4f46e5' }}>{selTraining?.icon} {selTraining?.name}</td>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>법적 근거</td>
+                                                <td style={{ ...cellStyle, width: '30%' }}>{selTraining?.law}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>교육일시</td>
+                                                <td style={cellStyle}>{trainingFormData.date} {trainingFormData.startTime}~{trainingFormData.endTime}</td>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>교육시간</td>
+                                                <td style={cellStyle}>{selTraining?.hours}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>교육장소</td>
+                                                <td style={cellStyle}>{trainingFormData.location || '-'}</td>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>강사</td>
+                                                <td style={cellStyle}>{trainingFormData.instructor || '-'}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>교육주기</td>
+                                                <td style={cellStyle}>{selTraining?.period === 'quarterly' ? '분기별 (매 3개월)' : '연 1회'}</td>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>교육대상</td>
+                                                <td style={cellStyle}>전 직원 ({activeEmps.length}명)</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    {/* 출석부 */}
+                                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1e293b' }}>■ 교육 참석자 명단</div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '8%' }}>No.</th>
+                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '15%' }}>성명</th>
+                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '15%' }}>부서</th>
+                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '12%' }}>직급</th>
+                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '25%' }}>서명</th>
+                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '25%' }}>비고</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {activeEmps.map((emp, idx) => (
+                                                <tr key={emp.id}>
+                                                    <td style={{ ...cellStyle, textAlign: 'center' }}>{idx + 1}</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'center', fontWeight: 600 }}>{emp.name}</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'center' }}>{emp.department}</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'center' }}>{emp.position}</td>
+                                                    <td style={{ ...cellStyle, textAlign: 'center', height: '36px' }}></td>
+                                                    <td style={cellStyle}></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+
+                                    {/* 교육 내용 요약 */}
+                                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1e293b' }}>■ 법적 안내</div>
+                                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '24px', fontSize: '12px', lineHeight: 2, color: '#475569' }}>
+                                        <p style={{ marginBottom: '6px' }}>• <strong>{selTraining?.name}</strong>은 <strong>{selTraining?.law}</strong>에 의거하여 {selTraining?.period === 'quarterly' ? '매 분기(3개월)마다' : '연 1회 이상'} 실시하여야 합니다.</p>
+                                        <p style={{ marginBottom: '6px' }}>• 교육시간: <strong>{selTraining?.hours}</strong> (법정 최소 교육시간)</p>
+                                        <p style={{ marginBottom: '6px' }}>• 교육 미실시 시 <strong>과태료 또는 벌금</strong>이 부과될 수 있습니다.</p>
+                                        <p>• 본 확인서는 교육 실시 증빙 서류로 <strong>3년간 보관</strong>하여야 합니다.</p>
+                                    </div>
+
+                                    {/* 첨부 사진 */}
+                                    {trainingPhotos.length > 0 && (
+                                        <div>
+                                            <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1e293b' }}>■ 교육 현장 사진</div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: trainingPhotos.length === 1 ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '24px' }}>
+                                                {trainingPhotos.slice(0, 4).map((photo, idx) => (
+                                                    <img key={idx} src={photo.data} alt={`교육사진${idx + 1}`}
+                                                        style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* 서명란 */}
+                                    <div style={{ textAlign: 'center', margin: '30px 0 20px', fontSize: '14px', fontWeight: 600 }}>
+                                        {formatDate(today)}
+                                    </div>
+
+                                    <table style={{ width: '80%', margin: '0 auto', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                        <tbody>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '30%', textAlign: 'center' }}>교육 실시자</td>
+                                                <td style={{ ...cellStyle, textAlign: 'center', height: '50px' }}>{trainingFormData.instructor || ''} (인)</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>확인자 (사업주)</td>
+                                                <td style={{ ...cellStyle, textAlign: 'center', height: '50px' }}>(인)</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
             )}

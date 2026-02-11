@@ -122,8 +122,8 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
     // 2. 권한 데이터가 없으면 기본적으로 모두 보이기 (기존 호환성)
     if (!user || !user.permissions) return true;
 
-    // 3. 권한이 설정되어 있으면 해당 키의 권한 확인
-    return user.permissions[key] === true;
+    // 3. 권한이 명시적으로 false인 경우만 숨김 (키가 없으면 기본 허용)
+    return user.permissions[key] !== false;
   };
 
   return (

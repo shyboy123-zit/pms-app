@@ -135,6 +135,7 @@ const Employees = () => {
             const newId = `EMP-${String(count).padStart(3, '0')}`;
             const defaultPerms = {
                 dashboard: true,
+                board: true,
                 molds: true,
                 materials: true,
                 delivery: true,

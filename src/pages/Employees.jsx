@@ -117,8 +117,6 @@ const Employees = () => {
             // 수정 모드
             const itemToUpdate = {
                 name: newItem.name,
-                phone: newItem.phone,
-                ssn: newItem.ssn,
                 department: newItem.department,
                 position: newItem.position,
                 join_date: newItem.joinDate
@@ -154,8 +152,6 @@ const Employees = () => {
             const itemToAdd = {
                 emp_id: newId,
                 name: newItem.name,
-                phone: newItem.phone || null,
-                ssn: newItem.ssn || null,
                 department: newItem.department,
                 position: newItem.position,
                 join_date: newItem.joinDate,

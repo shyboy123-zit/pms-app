@@ -990,7 +990,7 @@ const Employees = () => {
                                     </table>
                                 </div>
                             </div>
-                        ) : (
+                        ) : pdfType === 'retirement' ? (
                             /* === 퇴직금 계산서 === */
                             (() => {
                                 const joinD = new Date(pdfTarget.join_date);
@@ -1171,79 +1171,80 @@ const Employees = () => {
                                     </div>
                                 );
                             })()
-                        )}
+                        ) : null}
 
                         {/* === 의무교육 출석부 === */}
                         {pdfType === 'training' && (() => {
                             const selTraining = TRAININGS.find(t => t.code === trainingType);
                             const activeEmps = employees.filter(e => e.status === '재직');
+                            const tCellStyle = { ...cellStyle, padding: '5px 8px', fontSize: '11px' };
                             return (
                                 <div>
-                                    <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-                                        <h1 style={{ fontSize: '26px', fontWeight: 800, letterSpacing: '6px', marginBottom: '8px' }}>의 무 교 육 실 시 확 인 서</h1>
-                                        <div style={{ width: '60px', height: '3px', background: '#4f46e5', margin: '0 auto' }}></div>
+                                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                                        <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '4px', marginBottom: '6px' }}>의 무 교 육 실 시 확 인 서</h1>
+                                        <div style={{ width: '50px', height: '2px', background: '#4f46e5', margin: '0 auto' }}></div>
                                     </div>
 
                                     {/* 교육 정보 */}
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '11px' }}>
                                         <tbody>
                                             <tr>
-                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>교육명</td>
-                                                <td style={{ ...cellStyle, width: '30%', fontWeight: 700, color: '#4f46e5' }}>{selTraining?.icon} {selTraining?.name}</td>
-                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>법적 근거</td>
-                                                <td style={{ ...cellStyle, width: '30%' }}>{selTraining?.law}</td>
+                                                <td style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700, width: '18%' }}>교육명</td>
+                                                <td style={{ ...tCellStyle, width: '32%', fontWeight: 700, color: '#4f46e5' }}>{selTraining?.icon} {selTraining?.name}</td>
+                                                <td style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700, width: '18%' }}>법적 근거</td>
+                                                <td style={{ ...tCellStyle, width: '32%' }}>{selTraining?.law}</td>
                                             </tr>
                                             <tr>
-                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>교육일시</td>
-                                                <td style={cellStyle}>{trainingFormData.date} {trainingFormData.startTime}~{trainingFormData.endTime}</td>
-                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>교육시간</td>
-                                                <td style={cellStyle}>{selTraining?.hours}</td>
+                                                <td style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700 }}>교육일시</td>
+                                                <td style={tCellStyle}>{trainingFormData.date} {trainingFormData.startTime}~{trainingFormData.endTime}</td>
+                                                <td style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700 }}>교육시간</td>
+                                                <td style={tCellStyle}>{selTraining?.hours}</td>
                                             </tr>
                                             <tr>
-                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>교육장소</td>
-                                                <td style={cellStyle}>{trainingFormData.location || '-'}</td>
-                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>강사</td>
-                                                <td style={cellStyle}>{trainingFormData.instructor || '-'}</td>
+                                                <td style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700 }}>교육장소</td>
+                                                <td style={tCellStyle}>{trainingFormData.location || '-'}</td>
+                                                <td style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700 }}>강사</td>
+                                                <td style={tCellStyle}>{trainingFormData.instructor || '-'}</td>
                                             </tr>
                                             <tr>
-                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>교육주기</td>
-                                                <td style={cellStyle}>{selTraining?.period === 'quarterly' ? '분기별 (매 3개월)' : '연 1회'}</td>
-                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>교육대상</td>
-                                                <td style={cellStyle}>전 직원 ({activeEmps.length}명)</td>
+                                                <td style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700 }}>교육주기</td>
+                                                <td style={tCellStyle}>{selTraining?.period === 'quarterly' ? '분기별 (매 3개월)' : '연 1회'}</td>
+                                                <td style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700 }}>교육대상</td>
+                                                <td style={tCellStyle}>전 직원 ({activeEmps.length}명)</td>
                                             </tr>
                                         </tbody>
                                     </table>
 
                                     {/* 출석부 */}
-                                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1e293b' }}>■ 교육 참석자 명단</div>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                    <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1e293b' }}>■ 교육 참석자 명단</div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '11px' }}>
                                         <thead>
                                             <tr>
-                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '8%' }}>No.</th>
-                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '15%' }}>성명</th>
-                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '15%' }}>부서</th>
-                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '12%' }}>직급</th>
-                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '25%' }}>서명</th>
-                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '25%' }}>비고</th>
+                                                <th style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '8%' }}>No.</th>
+                                                <th style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '15%' }}>성명</th>
+                                                <th style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '15%' }}>부서</th>
+                                                <th style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '12%' }}>직급</th>
+                                                <th style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '25%' }}>서명</th>
+                                                <th style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '25%' }}>비고</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {activeEmps.map((emp, idx) => (
                                                 <tr key={emp.id}>
-                                                    <td style={{ ...cellStyle, textAlign: 'center' }}>{idx + 1}</td>
-                                                    <td style={{ ...cellStyle, textAlign: 'center', fontWeight: 600 }}>{emp.name}</td>
-                                                    <td style={{ ...cellStyle, textAlign: 'center' }}>{emp.department}</td>
-                                                    <td style={{ ...cellStyle, textAlign: 'center' }}>{emp.position}</td>
-                                                    <td style={{ ...cellStyle, textAlign: 'center', height: '36px' }}></td>
-                                                    <td style={cellStyle}></td>
+                                                    <td style={{ ...tCellStyle, textAlign: 'center' }}>{idx + 1}</td>
+                                                    <td style={{ ...tCellStyle, textAlign: 'center', fontWeight: 600 }}>{emp.name}</td>
+                                                    <td style={{ ...tCellStyle, textAlign: 'center' }}>{emp.department}</td>
+                                                    <td style={{ ...tCellStyle, textAlign: 'center' }}>{emp.position}</td>
+                                                    <td style={{ ...tCellStyle, textAlign: 'center', height: '28px' }}></td>
+                                                    <td style={tCellStyle}></td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
 
                                     {/* 교육 내용 요약 */}
-                                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1e293b' }}>■ 법적 안내</div>
-                                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '24px', fontSize: '12px', lineHeight: 2, color: '#475569' }}>
+                                    <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1e293b' }}>■ 법적 안내</div>
+                                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 14px', marginBottom: '16px', fontSize: '10.5px', lineHeight: 1.8, color: '#475569' }}>
                                         <p style={{ marginBottom: '6px' }}>• <strong>{selTraining?.name}</strong>은 <strong>{selTraining?.law}</strong>에 의거하여 {selTraining?.period === 'quarterly' ? '매 분기(3개월)마다' : '연 1회 이상'} 실시하여야 합니다.</p>
                                         <p style={{ marginBottom: '6px' }}>• 교육시간: <strong>{selTraining?.hours}</strong> (법정 최소 교육시간)</p>
                                         <p style={{ marginBottom: '6px' }}>• 교육 미실시 시 <strong>과태료 또는 벌금</strong>이 부과될 수 있습니다.</p>
@@ -1253,30 +1254,30 @@ const Employees = () => {
                                     {/* 첨부 사진 */}
                                     {trainingPhotos.length > 0 && (
                                         <div>
-                                            <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1e293b' }}>■ 교육 현장 사진</div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: trainingPhotos.length === 1 ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '24px' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1e293b' }}>■ 교육 현장 사진</div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: trainingPhotos.length === 1 ? '1fr' : '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
                                                 {trainingPhotos.slice(0, 4).map((photo, idx) => (
                                                     <img key={idx} src={photo.data} alt={`교육사진${idx + 1}`}
-                                                        style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                                                        style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
                                                 ))}
                                             </div>
                                         </div>
                                     )}
 
                                     {/* 서명란 */}
-                                    <div style={{ textAlign: 'center', margin: '30px 0 20px', fontSize: '14px', fontWeight: 600 }}>
+                                    <div style={{ textAlign: 'center', margin: '20px 0 14px', fontSize: '12px', fontWeight: 600 }}>
                                         {formatDate(today)}
                                     </div>
 
-                                    <table style={{ width: '80%', margin: '0 auto', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                    <table style={{ width: '70%', margin: '0 auto', borderCollapse: 'collapse', fontSize: '11px' }}>
                                         <tbody>
                                             <tr>
-                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '30%', textAlign: 'center' }}>교육 실시자</td>
-                                                <td style={{ ...cellStyle, textAlign: 'center', height: '50px' }}>{trainingFormData.instructor || ''} (인)</td>
+                                                <td style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700, width: '30%', textAlign: 'center' }}>교육 실시자</td>
+                                                <td style={{ ...tCellStyle, textAlign: 'center', height: '40px' }}>{trainingFormData.instructor || ''} (인)</td>
                                             </tr>
                                             <tr>
-                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>확인자 (사업주)</td>
-                                                <td style={{ ...cellStyle, textAlign: 'center', height: '50px' }}>(인)</td>
+                                                <td style={{ ...tCellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>확인자 (사업주)</td>
+                                                <td style={{ ...tCellStyle, textAlign: 'center', height: '40px' }}>(인)</td>
                                             </tr>
                                         </tbody>
                                     </table>

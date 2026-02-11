@@ -575,38 +575,85 @@ const Employees = () => {
                         )}
 
                         {pdfType === 'retirement' && (
-                            <div style={{ background: '#fef3c7', padding: '14px', borderRadius: '10px', marginBottom: '1rem' }}>
-                                <div style={{ fontSize: '0.78rem', color: '#92400e', marginBottom: '10px', fontWeight: 600 }}>💡 퇴직금 산정을 위한 급여 정보를 입력해주세요</div>
-                                <div className="form-group" style={{ marginBottom: '8px' }}>
-                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>퇴직일</label>
-                                    <input type="date" className="form-input" value={retireData.resignDate}
-                                        onChange={(e) => setRetireData({ ...retireData, resignDate: e.target.value })} />
+                            <>
+                                <div style={{ background: '#fef3c7', padding: '14px', borderRadius: '10px', marginBottom: '1rem' }}>
+                                    <div style={{ fontSize: '0.78rem', color: '#92400e', marginBottom: '10px', fontWeight: 600 }}>💡 퇴직금 산정을 위한 급여 정보를 입력해주세요</div>
+                                    <div className="form-group" style={{ marginBottom: '8px' }}>
+                                        <label className="form-label" style={{ fontSize: '0.8rem' }}>퇴직일</label>
+                                        <input type="date" className="form-input" value={retireData.resignDate}
+                                            onChange={(e) => setRetireData({ ...retireData, resignDate: e.target.value })} />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: '8px' }}>
+                                        <label className="form-label" style={{ fontSize: '0.8rem' }}>월 기본급 (원)</label>
+                                        <input type="number" className="form-input" value={retireData.monthlyWage}
+                                            onChange={(e) => setRetireData({ ...retireData, monthlyWage: e.target.value })}
+                                            placeholder="예: 2500000" />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: '8px' }}>
+                                        <label className="form-label" style={{ fontSize: '0.8rem' }}>최근 3개월 상여금 합계 (원)</label>
+                                        <input type="number" className="form-input" value={retireData.bonus3m}
+                                            onChange={(e) => setRetireData({ ...retireData, bonus3m: e.target.value })}
+                                            placeholder="예: 500000 (없으면 0)" />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: '8px' }}>
+                                        <label className="form-label" style={{ fontSize: '0.8rem' }}>연간 상여금 총액 (원)</label>
+                                        <input type="number" className="form-input" value={retireData.annualBonus}
+                                            onChange={(e) => setRetireData({ ...retireData, annualBonus: e.target.value })}
+                                            placeholder="예: 2000000 (없으면 0)" />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label" style={{ fontSize: '0.8rem' }}>기타 수당 월평균 (원)</label>
+                                        <input type="number" className="form-input" value={retireData.otherAllowance}
+                                            onChange={(e) => setRetireData({ ...retireData, otherAllowance: e.target.value })}
+                                            placeholder="예: 200000 (교통비, 식대 등)" />
+                                    </div>
                                 </div>
-                                <div className="form-group" style={{ marginBottom: '8px' }}>
-                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>월 기본급 (원)</label>
-                                    <input type="number" className="form-input" value={retireData.monthlyWage}
-                                        onChange={(e) => setRetireData({ ...retireData, monthlyWage: e.target.value })}
-                                        placeholder="예: 2500000" />
+
+                                {/* 퇴직금 법적 안내 */}
+                                <div style={{
+                                    background: '#f8fafc', borderRadius: '10px', padding: '14px 16px',
+                                    border: '1px solid #e2e8f0', fontSize: '0.72rem',
+                                    lineHeight: 1.7, color: '#64748b'
+                                }}>
+                                    <div style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '10px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        📜 퇴직금 계산 방식 및 법적 근거
+                                    </div>
+
+                                    <div style={{ marginBottom: '8px' }}>
+                                        <span style={{ fontWeight: 700, color: '#4f46e5' }}>■ 법적 근거</span>
+                                        <ul style={{ margin: '3px 0 0 14px', padding: 0 }}>
+                                            <li><strong>근로자퇴직급여 보장법 제8조</strong>: 사용자는 퇴직하는 근로자에게 <span style={{ color: '#dc2626', fontWeight: 600 }}>계속근로기간 1년에 대하여 30일분 이상의 평균임금</span>을 퇴직금으로 지급하여야 한다.</li>
+                                            <li><strong>근로기준법 제2조 (평균임금 정의)</strong>: 평균임금이란 이를 산정하여야 할 사유가 발생한 날 이전 <strong>3개월간</strong>에 그 근로자에게 지급된 임금의 총액을 그 기간의 총일수로 나눈 금액을 말한다.</li>
+                                        </ul>
+                                    </div>
+
+                                    <div style={{ marginBottom: '8px' }}>
+                                        <span style={{ fontWeight: 700, color: '#059669' }}>■ 계산 공식</span>
+                                        <div style={{ background: 'white', padding: '8px 12px', borderRadius: '8px', margin: '4px 0', border: '1px solid #e2e8f0', fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                                            • 3개월 임금 총액 = (월 기본급 × 3) + 상여금 비례분 + (기타수당 × 3)<br />
+                                            • 1일 평균임금 = 3개월 임금 총액 ÷ 90일<br />
+                                            • <strong>퇴직금 = 1일 평균임금 × 30일 × (재직일수 ÷ 365)</strong><br />
+                                            • 예시) 월급 250만, 3년 근무 → 평균임금 83,333원 × 30 × 3 = <strong>약 750만원</strong>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ marginBottom: '8px' }}>
+                                        <span style={{ fontWeight: 700, color: '#d97706' }}>■ 지급 조건</span>
+                                        <ul style={{ margin: '3px 0 0 14px', padding: 0 }}>
+                                            <li><strong>1년 이상</strong> 계속 근로한 근로자에게 지급 (1년 미만은 의무 아님)</li>
+                                            <li>퇴직일로부터 <strong>14일 이내</strong> 지급 (특별한 사정이 있으면 당사자 합의로 연장 가능)</li>
+                                            <li>주 15시간 미만 근로자(초단시간)는 퇴직금 적용 제외</li>
+                                        </ul>
+                                    </div>
+
+                                    <div style={{
+                                        background: '#fef2f2', padding: '8px 12px', borderRadius: '8px',
+                                        border: '1px solid #fecaca', color: '#991b1b', fontSize: '0.7rem'
+                                    }}>
+                                        <span style={{ fontWeight: 700 }}>⚠️ 위반 시 제재</span>: 퇴직금 미지급 시 <strong>근로자퇴직급여 보장법 제44조</strong>에 따라 <strong>3년 이하의 징역</strong> 또는 <strong>3천만원 이하의 벌금</strong>. 14일 이내 미지급 시 <strong>연 20% 지연이자</strong> 발생.
+                                    </div>
                                 </div>
-                                <div className="form-group" style={{ marginBottom: '8px' }}>
-                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>최근 3개월 상여금 합계 (원)</label>
-                                    <input type="number" className="form-input" value={retireData.bonus3m}
-                                        onChange={(e) => setRetireData({ ...retireData, bonus3m: e.target.value })}
-                                        placeholder="예: 500000 (없으면 0)" />
-                                </div>
-                                <div className="form-group" style={{ marginBottom: '8px' }}>
-                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>연간 상여금 총액 (원)</label>
-                                    <input type="number" className="form-input" value={retireData.annualBonus}
-                                        onChange={(e) => setRetireData({ ...retireData, annualBonus: e.target.value })}
-                                        placeholder="예: 2000000 (없으면 0)" />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>기타 수당 월평균 (원)</label>
-                                    <input type="number" className="form-input" value={retireData.otherAllowance}
-                                        onChange={(e) => setRetireData({ ...retireData, otherAllowance: e.target.value })}
-                                        placeholder="예: 200000 (교통비, 식대 등)" />
-                                </div>
-                            </div>
+                            </>
                         )}
 
                         <div className="modal-actions">

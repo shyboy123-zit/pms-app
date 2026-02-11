@@ -434,7 +434,19 @@ const Employees = () => {
                 </div>
                 <div className="form-group">
                     <label className="form-label">직급</label>
-                    <input className="form-input" value={newItem.position} onChange={(e) => setNewItem({ ...newItem, position: e.target.value })} placeholder="예: 사원, 대리" />
+                    <select className="form-input" value={newItem.position} onChange={(e) => setNewItem({ ...newItem, position: e.target.value })}>
+                        <option value="사장">사장</option>
+                        <option value="전무">전무</option>
+                        <option value="상무">상무</option>
+                        <option value="부장">부장</option>
+                        <option value="차장">차장</option>
+                        <option value="과장">과장</option>
+                        <option value="대리">대리</option>
+                        <option value="주임">주임</option>
+                        <option value="사원">사원</option>
+                        <option value="반장">반장</option>
+                        <option value="조장">조장</option>
+                    </select>
                 </div>
                 <div className="form-group">
                     <label className="form-label">입사일</label>

@@ -798,6 +798,8 @@ const Employees = () => {
                                         const records = JSON.parse(localStorage.getItem('trainingRecords') || '{}');
                                         records[trainingType] = {
                                             lastDate: trainingFormData.date,
+                                            startTime: trainingFormData.startTime,
+                                            endTime: trainingFormData.endTime,
                                             instructor: trainingFormData.instructor,
                                             location: trainingFormData.location,
                                             photos: trainingPhotos.map(p => p.data).slice(0, 3) // 최대 3장 저장
@@ -812,6 +814,71 @@ const Employees = () => {
                                     }}>
                                     💾 교육 실시 기록 저장 (대시보드 D-day 갱신)
                                 </button>
+
+                                {/* 교육 이력 조회 */}
+                                {(() => {
+                                    const records = JSON.parse(localStorage.getItem('trainingRecords') || '{}');
+                                    const hasAnyRecord = Object.keys(records).length > 0;
+                                    if (!hasAnyRecord) return null;
+                                    return (
+                                        <div style={{ background: '#f0fdf4', padding: '14px', borderRadius: '10px', marginBottom: '10px', border: '1px solid #bbf7d0' }}>
+                                            <div style={{ fontSize: '0.82rem', color: '#166534', marginBottom: '10px', fontWeight: 700 }}>
+                                                📋 교육 이력 조회
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {TRAININGS.map(t => {
+                                                    const rec = records[t.code];
+                                                    if (!rec) return null;
+                                                    return (
+                                                        <div key={t.code} style={{
+                                                            background: 'white', padding: '10px 12px', borderRadius: '8px',
+                                                            border: trainingType === t.code ? '2px solid #4f46e5' : '1px solid #e2e8f0',
+                                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px'
+                                                        }}>
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1e293b', marginBottom: '3px' }}>
+                                                                    {t.icon} {t.name}
+                                                                </div>
+                                                                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                                                    📅 {rec.lastDate || '미기록'} | 👤 {rec.instructor || '미기록'} | 📍 {rec.location || '미기록'}
+                                                                </div>
+                                                                {rec.photos && rec.photos.length > 0 && (
+                                                                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
+                                                                        📷 사진 {rec.photos.length}장 첨부
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setTrainingType(t.code);
+                                                                    setTrainingFormData({
+                                                                        date: rec.lastDate || new Date().toISOString().split('T')[0],
+                                                                        startTime: rec.startTime || '14:00',
+                                                                        endTime: rec.endTime || '15:00',
+                                                                        location: rec.location || '',
+                                                                        instructor: rec.instructor || ''
+                                                                    });
+                                                                    setTrainingPhotos(
+                                                                        rec.photos ? rec.photos.map((p, i) => ({ name: `photo_${i + 1}`, data: p })) : []
+                                                                    );
+                                                                    alert(`✅ ${t.name} 기록을 불러왔습니다. PDF 다운로드 가능합니다.`);
+                                                                }}
+                                                                style={{
+                                                                    padding: '6px 12px', borderRadius: '6px', border: 'none',
+                                                                    background: '#4f46e5', color: 'white', fontSize: '0.7rem',
+                                                                    fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                                                                    flexShrink: 0
+                                                                }}
+                                                            >
+                                                                📄 불러오기
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         )}
 

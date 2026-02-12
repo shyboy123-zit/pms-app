@@ -258,10 +258,16 @@ export const DataProvider = ({ children }) => {
     // 8. Material Usage
     const addMaterialUsage = async (item) => {
         const { data, error } = await supabase.from('material_usage').insert([item]).select();
-        if (!error && data) {
-            setMaterialUsage([data[0], ...materialUsage]);
+        if (error) {
+            console.error('material_usage insert error:', error);
+        }
 
-            // Update material stock automatically
+        if (!error) {
+            // Refetch all material_usage to ensure consistency
+            const { data: refreshed } = await supabase.from('material_usage').select('*').order('usage_date', { ascending: false });
+            if (refreshed) setMaterialUsage(refreshed);
+
+            // Update material stock
             if (item.material_id) {
                 const material = materials.find(m => m.id === item.material_id);
                 if (material) {
@@ -270,6 +276,7 @@ export const DataProvider = ({ children }) => {
                 }
             }
         }
+
         return { data, error };
     };
 

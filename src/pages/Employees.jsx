@@ -535,8 +535,9 @@ const Employees = () => {
                                     type="number"
                                     className="form-input"
                                     value={leaveUsage.days}
-                                    onChange={(e) => setLeaveUsage({ ...leaveUsage, days: parseInt(e.target.value) || 0 })}
-                                    min="1"
+                                    onChange={(e) => setLeaveUsage({ ...leaveUsage, days: parseFloat(e.target.value) || 0 })}
+                                    min="0.5"
+                                    step="0.5"
                                     max={remaining}
                                 />
                             </div>

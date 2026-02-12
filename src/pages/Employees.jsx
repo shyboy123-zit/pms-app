@@ -1336,10 +1336,12 @@ const Employees = () => {
                                     {trainingPhotos.length > 0 && (
                                         <div>
                                             <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1e293b' }}>■ 교육 현장 사진</div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: trainingPhotos.length === 1 ? '1fr' : '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+                                            <div style={{ marginBottom: '16px' }}>
                                                 {trainingPhotos.slice(0, 4).map((photo, idx) => (
-                                                    <img key={idx} src={photo.data} alt={`교육사진${idx + 1}`}
-                                                        style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc' }} />
+                                                    <div key={idx} style={{ textAlign: 'center', marginBottom: '8px' }}>
+                                                        <img src={photo.data} alt={`교육사진${idx + 1}`}
+                                                            style={{ maxWidth: '100%', height: 'auto', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
+                                                    </div>
                                                 ))}
                                             </div>
                                         </div>

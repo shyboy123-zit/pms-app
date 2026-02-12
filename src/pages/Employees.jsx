@@ -29,6 +29,7 @@ const Employees = () => {
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isPdfPreview, setIsPdfPreview] = useState(false);
     const pdfRef = useRef(null);
+    const trainingPhotoPdfRef = useRef(null);
     const [leaveAppData, setLeaveAppData] = useState({
         startDate: '', endDate: '', days: 1, reason: ''
     });
@@ -281,13 +282,14 @@ const Employees = () => {
             const element = pdfRef.current;
             if (!element) return;
 
-            const canvas = await html2canvas(element, {
+            const canvasOpts = {
                 scale: 2,
                 useCORS: true,
                 allowTaint: true,
                 backgroundColor: '#ffffff'
-            });
+            };
 
+            const canvas = await html2canvas(element, canvasOpts);
             const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -297,7 +299,6 @@ const Employees = () => {
             let heightLeft = imgHeight;
             let position = 0;
 
-            // Fill white background before adding image on first page
             pdf.setFillColor(255, 255, 255);
             pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
             pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
@@ -306,11 +307,21 @@ const Employees = () => {
             while (heightLeft > 0) {
                 position = heightLeft - imgHeight;
                 pdf.addPage();
-                // Fill white background on each additional page
                 pdf.setFillColor(255, 255, 255);
                 pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
                 pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
                 heightLeft -= pdfHeight;
+            }
+
+            // Training photos on separate page
+            if (pdfType === 'training' && trainingPhotoPdfRef.current && trainingPhotos.length > 0) {
+                const photoCanvas = await html2canvas(trainingPhotoPdfRef.current, canvasOpts);
+                const photoImgData = photoCanvas.toDataURL('image/png');
+                const photoImgHeight = (photoCanvas.height * pdfWidth) / photoCanvas.width;
+                pdf.addPage();
+                pdf.setFillColor(255, 255, 255);
+                pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
+                pdf.addImage(photoImgData, 'PNG', 0, 0, pdfWidth, photoImgHeight);
             }
 
             const fileNames = {
@@ -1338,20 +1349,7 @@ const Employees = () => {
                                         <p>• 본 확인서는 교육 실시 증빙 서류로 <strong>3년간 보관</strong>하여야 합니다.</p>
                                     </div>
 
-                                    {/* 첨부 사진 */}
-                                    {trainingPhotos.length > 0 && (
-                                        <div>
-                                            <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1e293b' }}>■ 교육 현장 사진</div>
-                                            <div style={{ marginBottom: '16px' }}>
-                                                {trainingPhotos.slice(0, 4).map((photo, idx) => (
-                                                    <div key={idx} style={{ textAlign: 'center', marginBottom: '8px' }}>
-                                                        <img src={photo.data} alt={`교육사진${idx + 1}`}
-                                                            style={{ maxWidth: '100%', height: 'auto', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                                    {/* 첨부 사진은 별도 페이지로 이동 */}
 
                                     {/* 서명란 */}
                                     <div style={{ textAlign: 'center', margin: '20px 0 14px', fontSize: '12px', fontWeight: 600 }}>
@@ -1373,6 +1371,26 @@ const Employees = () => {
                                 </div>
                             );
                         })()}
+                    </div>
+                </div>
+            )}
+
+            {/* 교육 사진 별도 페이지 (숨김) */}
+            {isPdfPreview && pdfType === 'training' && trainingPhotos.length > 0 && (
+                <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+                    <div ref={trainingPhotoPdfRef} style={{
+                        width: '210mm', minHeight: '297mm', padding: '20mm',
+                        background: 'white', fontFamily: 'Malgun Gothic, sans-serif'
+                    }}>
+                        <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '16px', color: '#1e293b', textAlign: 'center' }}>
+                            ■ 교육 현장 사진
+                        </div>
+                        {trainingPhotos.slice(0, 4).map((photo, idx) => (
+                            <div key={idx} style={{ textAlign: 'center', marginBottom: '12px' }}>
+                                <img src={photo.data} alt={`교육사진${idx + 1}`}
+                                    style={{ maxWidth: '100%', height: 'auto', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}

@@ -8,8 +8,11 @@ const Materials = () => {
     const {
         materials, addMaterial, updateMaterial, deleteMaterial,
         materialUsage, addMaterialUsage, updateMaterialUsage, deleteMaterialUsage,
-        addPurchaseRequest
+        addPurchaseRequest,
+        inventoryTransactions, addInventoryTransaction
     } = useData();
+
+    const [trackingDate, setTrackingDate] = useState(new Date().toISOString().split('T')[0]);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -171,6 +174,18 @@ const Materials = () => {
         if (material) {
             const newStock = material.stock + parseFloat(incomingData.quantity);
             await updateMaterial(incomingData.materialId, { stock: newStock });
+
+            // Save incoming transaction record for tracking
+            await addInventoryTransaction({
+                material_id: incomingData.materialId,
+                item_name: incomingData.materialName,
+                transaction_type: 'IN',
+                quantity: parseFloat(incomingData.quantity),
+                unit: incomingData.unit,
+                transaction_date: incomingData.incoming_date,
+                notes: incomingData.notes || null
+            });
+
             alert(`✓ ${incomingData.materialName} ${incomingData.quantity}${incomingData.unit} 입고 처리되었습니다.\n현재 재고: ${newStock}${incomingData.unit}`);
         }
 
@@ -553,6 +568,118 @@ const Materials = () => {
                     </button>
                 </div>
             </Modal>
+
+            {/* 일일 입출고 조회 */}
+            <div className="usage-history-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '2px solid var(--border)' }}>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>📋 일일 입출고 조회</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <button
+                            onClick={() => {
+                                const d = new Date(trackingDate);
+                                d.setDate(d.getDate() - 1);
+                                setTrackingDate(d.toISOString().split('T')[0]);
+                            }}
+                            style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontSize: '0.85rem' }}
+                        >◀</button>
+                        <input
+                            type="date"
+                            value={trackingDate}
+                            onChange={(e) => setTrackingDate(e.target.value)}
+                            style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem', fontWeight: 600 }}
+                        />
+                        <button
+                            onClick={() => {
+                                const d = new Date(trackingDate);
+                                d.setDate(d.getDate() + 1);
+                                setTrackingDate(d.toISOString().split('T')[0]);
+                            }}
+                            style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontSize: '0.85rem' }}
+                        >▶</button>
+                        <button
+                            onClick={() => setTrackingDate(new Date().toISOString().split('T')[0])}
+                            style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
+                        >오늘</button>
+                    </div>
+                </div>
+
+                {(() => {
+                    // 해당 날짜 입고 (inventory_transactions)
+                    const dayIncoming = (inventoryTransactions || []).filter(t =>
+                        t.transaction_date === trackingDate && t.transaction_type === 'IN'
+                    );
+                    // 해당 날짜 출고 (material_usage)
+                    const dayOutgoing = (materialUsage || []).filter(u =>
+                        u.usage_date === trackingDate
+                    );
+
+                    const totalIn = dayIncoming.length;
+                    const totalOut = dayOutgoing.length;
+
+                    return (
+                        <div>
+                            {/* 요약 카드 */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                                <div style={{ background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)', padding: '1rem', borderRadius: '10px', border: '1px solid #a7f3d0' }}>
+                                    <div style={{ fontSize: '0.78rem', color: '#065f46', fontWeight: 600, marginBottom: '4px' }}>📥 입고</div>
+                                    <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#059669' }}>{totalIn}건</div>
+                                </div>
+                                <div style={{ background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', padding: '1rem', borderRadius: '10px', border: '1px solid #93c5fd' }}>
+                                    <div style={{ fontSize: '0.78rem', color: '#1e40af', fontWeight: 600, marginBottom: '4px' }}>📤 출고 (사용)</div>
+                                    <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#2563eb' }}>{totalOut}건</div>
+                                </div>
+                            </div>
+
+                            {totalIn === 0 && totalOut === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                    📭 {trackingDate} 입출고 기록이 없습니다.
+                                </div>
+                            ) : (
+                                <div className="usage-history-table">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                                                <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>구분</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>자재명</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>수량</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>비고</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {dayIncoming.map((t) => (
+                                                <tr key={`in-${t.id}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                        <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 700 }}>입고</span>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', fontWeight: 600 }}>{t.item_name}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: '#059669' }}>
+                                                        +{parseFloat(t.quantity).toLocaleString()} {t.unit}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{t.notes || '-'}</td>
+                                                </tr>
+                                            ))}
+                                            {dayOutgoing.map((u) => (
+                                                <tr key={`out-${u.id}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                        <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 700 }}>출고</span>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', fontWeight: 600 }}>{u.material_name}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: '#2563eb' }}>
+                                                        -{parseFloat(u.quantity).toLocaleString()} {u.unit}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                                        {u.work_order ? `작업: ${u.work_order}` : ''}{u.work_order && u.notes ? ' / ' : ''}{u.notes || (!u.work_order ? '-' : '')}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
+            </div>
 
             {/* Material Usage History Section */}
             {materialUsage && materialUsage.length > 0 && (

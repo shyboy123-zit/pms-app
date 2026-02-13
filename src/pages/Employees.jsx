@@ -434,7 +434,7 @@ const Employees = () => {
                 const firstDay = new Date(year, month - 1, 1).getDay(); // 0=Sun
 
                 // Filter attendance for this employee+month
-                const empAttendance = attendance.filter(a =>
+                const empAttendance = (attendance || []).filter(a =>
                     a.employee_id === attEmpId && a.date?.startsWith(attMonth)
                 );
 

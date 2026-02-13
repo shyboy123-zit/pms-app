@@ -26,6 +26,7 @@ export const DataProvider = ({ children }) => {
     const [productionLogs, setProductionLogs] = useState([]);
     const [boardPosts, setBoardPosts] = useState([]);
     const [boardComments, setBoardComments] = useState([]);
+    const [attendance, setAttendance] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -142,6 +143,13 @@ export const DataProvider = ({ children }) => {
                 if (comments) setBoardComments(comments);
             } catch (e) {
                 console.warn('board_comments table not available:', e.message);
+            }
+
+            try {
+                const { data: att } = await supabase.from('attendance').select('*').order('date', { ascending: false });
+                if (att) setAttendance(att);
+            } catch (e) {
+                console.warn('attendance table not available:', e.message);
             }
 
         } catch (error) {
@@ -843,6 +851,22 @@ export const DataProvider = ({ children }) => {
         if (!error) setBoardComments(prev => prev.filter(c => c.id !== id));
     };
 
+    // Attendance
+    const addAttendance = async (item) => {
+        const { data, error } = await supabase.from('attendance').insert([item]).select();
+        if (!error && data) setAttendance(prev => [data[0], ...prev]);
+        return { data, error };
+    };
+    const updateAttendance = async (id, fields) => {
+        const { error } = await supabase.from('attendance').update(fields).eq('id', id);
+        if (!error) setAttendance(prev => prev.map(a => a.id === id ? { ...a, ...fields } : a));
+        return { error };
+    };
+    const deleteAttendance = async (id) => {
+        const { error } = await supabase.from('attendance').delete().eq('id', id);
+        if (!error) setAttendance(prev => prev.filter(a => a.id !== id));
+    };
+
     return (
         <DataContext.Provider value={{
             loading,
@@ -868,7 +892,8 @@ export const DataProvider = ({ children }) => {
             suppliers, addSupplier, updateSupplier, deleteSupplier,
             purchaseRequests, addPurchaseRequest, updatePurchaseRequest, deletePurchaseRequest,
             productionLogs, addProductionLog,
-            boardPosts, boardComments, addBoardPost, updateBoardPost, deleteBoardPost, addBoardComment, deleteBoardComment
+            boardPosts, boardComments, addBoardPost, updateBoardPost, deleteBoardPost, addBoardComment, deleteBoardComment,
+            attendance, addAttendance, updateAttendance, deleteAttendance
         }}>
             {children}
         </DataContext.Provider>

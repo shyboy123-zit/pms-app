@@ -8,7 +8,7 @@ import jsPDF from 'jspdf';
 
 const Employees = () => {
     // Consume global data from Supabase via DataContext
-    const { employees, addEmployee, updateEmployee, deleteEmployee } = useData();
+    const { employees, addEmployee, updateEmployee, deleteEmployee, attendance, addAttendance, updateAttendance, deleteAttendance } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isPermModalOpen, setIsPermModalOpen] = useState(false);
@@ -39,6 +39,13 @@ const Employees = () => {
         bonus3m: '', // 최근 3개월 상여금 합계
         annualBonus: '', // 연간 상여금 총액
         otherAllowance: '' // 기타 수당 (월 평균)
+    });
+
+    // 근태 관련 상태
+    const [attEmpId, setAttEmpId] = useState(null);
+    const [attMonth, setAttMonth] = useState(() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     });
 
     // 의무교육 관련 상태
@@ -404,6 +411,213 @@ const Employees = () => {
                     </div>
                 )}
             />
+
+            {/* ===== 근태계 ===== */}
+            {(() => {
+                const activeEmployees = employees.filter(e => e.status === '재직');
+
+                const attEmp = employees.find(e => e.id === attEmpId);
+
+                const STATUS_MAP = {
+                    '출근': { color: '#059669', bg: '#dcfce7', icon: '✅' },
+                    '지각': { color: '#d97706', bg: '#fef3c7', icon: '⏰' },
+                    '조퇴': { color: '#ea580c', bg: '#ffedd5', icon: '🚪' },
+                    '결근': { color: '#dc2626', bg: '#fee2e2', icon: '❌' },
+                    '휴가': { color: '#7c3aed', bg: '#ede9fe', icon: '🌴' },
+                    '반차': { color: '#2563eb', bg: '#dbeafe', icon: '🌗' },
+                    '공휴일': { color: '#6b7280', bg: '#f3f4f6', icon: '🏖️' }
+                };
+
+                // Get days in month
+                const [year, month] = attMonth.split('-').map(Number);
+                const daysInMonth = new Date(year, month, 0).getDate();
+                const firstDay = new Date(year, month - 1, 1).getDay(); // 0=Sun
+
+                // Filter attendance for this employee+month
+                const empAttendance = attendance.filter(a =>
+                    a.employee_id === attEmpId && a.date?.startsWith(attMonth)
+                );
+
+                const getStatusForDate = (day) => {
+                    const dateStr = `${attMonth}-${String(day).padStart(2, '0')}`;
+                    return empAttendance.find(a => a.date === dateStr);
+                };
+
+                const handleAttClick = async (day) => {
+                    if (!attEmpId) return alert('직원을 선택해주세요.');
+                    const dateStr = `${attMonth}-${String(day).padStart(2, '0')}`;
+                    const existing = empAttendance.find(a => a.date === dateStr);
+
+                    const statusList = Object.keys(STATUS_MAP);
+                    const choice = prompt(
+                        `${attEmp?.name} - ${dateStr}\n근태 상태를 선택하세요:\n${statusList.map((s, i) => `${i + 1}. ${STATUS_MAP[s].icon} ${s}`).join('\n')}\n\n번호를 입력하세요 (삭제: 0):`,
+                        existing ? String(statusList.indexOf(existing.status) + 1) : '1'
+                    );
+                    if (choice === null) return;
+                    const num = parseInt(choice);
+
+                    if (num === 0 && existing) {
+                        await deleteAttendance(existing.id);
+                        return;
+                    }
+                    if (num < 1 || num > statusList.length) return;
+
+                    const newStatus = statusList[num - 1];
+                    if (existing) {
+                        await updateAttendance(existing.id, { status: newStatus });
+                    } else {
+                        await addAttendance({
+                            employee_id: attEmpId,
+                            employee_name: attEmp?.name,
+                            date: dateStr,
+                            status: newStatus
+                        });
+                    }
+                };
+
+                // Summary stats
+                const stats = {};
+                Object.keys(STATUS_MAP).forEach(s => { stats[s] = empAttendance.filter(a => a.status === s).length; });
+
+                const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+                return (
+                    <div style={{
+                        marginTop: '2rem', background: 'white', padding: '1.5rem',
+                        borderRadius: '12px', border: '1px solid var(--border)',
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '2px solid var(--border)' }}>
+                            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
+                                📅 근태 관리
+                            </h3>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <select
+                                    value={attEmpId || ''}
+                                    onChange={(e) => setAttEmpId(e.target.value)}
+                                    style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem', fontWeight: 600 }}
+                                >
+                                    <option value="">직원 선택</option>
+                                    {activeEmployees.map(emp => (
+                                        <option key={emp.id} value={emp.id}>{emp.name} ({emp.department})</option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={() => {
+                                        const d = new Date(year, month - 2);
+                                        setAttMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                                    }}
+                                    style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer' }}
+                                >◀</button>
+                                <span style={{ fontWeight: 700, fontSize: '1rem', minWidth: '100px', textAlign: 'center' }}>
+                                    {year}년 {month}월
+                                </span>
+                                <button
+                                    onClick={() => {
+                                        const d = new Date(year, month);
+                                        setAttMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                                    }}
+                                    style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer' }}
+                                >▶</button>
+                            </div>
+                        </div>
+
+                        {attEmpId ? (
+                            <>
+                                {/* Summary cards */}
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                                    {Object.entries(STATUS_MAP).map(([status, s]) => (
+                                        <div key={status} style={{
+                                            background: s.bg, padding: '0.5rem 0.75rem', borderRadius: '8px',
+                                            display: 'flex', alignItems: 'center', gap: '0.3rem',
+                                            fontSize: '0.8rem', fontWeight: 600, color: s.color,
+                                            border: `1px solid ${s.color}22`
+                                        }}>
+                                            {s.icon} {status}: <strong>{stats[status]}일</strong>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Calendar grid */}
+                                <div style={{
+                                    display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px',
+                                    background: '#e2e8f0', borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0'
+                                }}>
+                                    {/* Day headers */}
+                                    {dayNames.map(d => (
+                                        <div key={d} style={{
+                                            background: '#f8fafc', padding: '0.5rem', textAlign: 'center',
+                                            fontWeight: 700, fontSize: '0.8rem',
+                                            color: d === '일' ? '#dc2626' : d === '토' ? '#2563eb' : '#475569'
+                                        }}>
+                                            {d}
+                                        </div>
+                                    ))}
+                                    {/* Empty cells before first day */}
+                                    {Array.from({ length: firstDay }).map((_, i) => (
+                                        <div key={`empty-${i}`} style={{ background: '#f8fafc', padding: '0.5rem' }} />
+                                    ))}
+                                    {/* Day cells */}
+                                    {Array.from({ length: daysInMonth }).map((_, i) => {
+                                        const day = i + 1;
+                                        const record = getStatusForDate(day);
+                                        const dayOfWeek = (firstDay + i) % 7;
+                                        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                                        const statusInfo = record ? STATUS_MAP[record.status] : null;
+                                        const todayStr = new Date().toISOString().split('T')[0];
+                                        const dateStr = `${attMonth}-${String(day).padStart(2, '0')}`;
+                                        const isToday = dateStr === todayStr;
+
+                                        return (
+                                            <div
+                                                key={day}
+                                                onClick={() => handleAttClick(day)}
+                                                style={{
+                                                    background: statusInfo ? statusInfo.bg : 'white',
+                                                    padding: '0.4rem',
+                                                    textAlign: 'center',
+                                                    cursor: 'pointer',
+                                                    minHeight: '52px',
+                                                    display: 'flex', flexDirection: 'column',
+                                                    alignItems: 'center', justifyContent: 'center',
+                                                    transition: 'all 0.15s',
+                                                    border: isToday ? '2px solid #4f46e5' : 'none',
+                                                    borderRadius: isToday ? '4px' : '0'
+                                                }}
+                                                title={record ? `${record.status}` : '클릭하여 근태 등록'}
+                                            >
+                                                <div style={{
+                                                    fontSize: '0.8rem', fontWeight: isToday ? 800 : 500,
+                                                    color: dayOfWeek === 0 ? '#dc2626' : dayOfWeek === 6 ? '#2563eb' : '#334155',
+                                                    marginBottom: '2px'
+                                                }}>
+                                                    {day}
+                                                </div>
+                                                {record && (
+                                                    <div style={{
+                                                        fontSize: '0.65rem', fontWeight: 700,
+                                                        color: statusInfo?.color, lineHeight: 1
+                                                    }}>
+                                                        {statusInfo?.icon}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                                    💡 날짜를 클릭하여 근태를 등록/수정하세요 (0 입력 시 삭제)
+                                </div>
+                            </>
+                        ) : (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                👆 직원을 선택하면 월별 근태 현황이 표시됩니다.
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
 
             {/* Add Employee Modal */}
             <Modal

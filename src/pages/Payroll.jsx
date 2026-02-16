@@ -93,7 +93,9 @@ const Payroll = () => {
         hourlyWage: '',       // 시급 (시급제)
         workedHours: '',      // 근무시간 (시급제 - 직접입력 모드)
         weeklyWorkedHours: ['', '', '', '', ''],  // 주별 근무시간 (시급제 - 주별입력 모드)
+        weeklyWorkedDays: ['', '', '', '', ''],    // 주별 출근일수
         weeklyHours: '40',    // 주간 소정근로시간 (주휴수당 계산용)
+        scheduledDays: '5',   // 주간 소정근로일수 (개근 판단용, 기본 5일)
         overtimeHours: '',    // 연장근로시간
         nightHours: '',       // 야간근로시간
         holidayHours: '',     // 휴일근로시간
@@ -189,6 +191,7 @@ const Payroll = () => {
         if (payType === 'hourly') {
             // 주별 근무시간이 입력되었는지 확인
             const hasWeeklyInput = payData.weeklyWorkedHours.some(h => parseFloat(h) > 0);
+            const scheduledDays = parseInt(payData.scheduledDays) || 5;
 
             if (hasWeeklyInput) {
                 // 주별 계산 모드
@@ -196,9 +199,13 @@ const Payroll = () => {
                 payData.weeklyWorkedHours.forEach((wh, idx) => {
                     const hours = parseFloat(wh) || 0;
                     if (hours <= 0) return;
-                    const qualifies = hours >= 15; // 주 15시간 이상인지
+                    const days = parseInt(payData.weeklyWorkedDays[idx]) || 0;
+                    const hoursOk = hours >= 15;      // 조건 1: 주 15시간 이상
+                    const daysOk = days >= scheduledDays; // 조건 2: 소정근로일 개근
+                    const qualifies = hoursOk && daysOk;
                     const weekPay = qualifies ? Math.round(dailyScheduledHours * hourlyWage) : 0;
-                    weeklyBreakdown.push({ week: idx + 1, hours, qualifies, pay: weekPay });
+                    const reason = !hoursOk ? '15h미만' : !daysOk ? `${days}/${scheduledDays}일 미개근` : '지급';
+                    weeklyBreakdown.push({ week: idx + 1, hours, days, qualifies, pay: weekPay, reason });
                     weeklyHolidayPay += weekPay;
                 });
             } else if (workedHours > 0) {
@@ -410,7 +417,7 @@ const Payroll = () => {
                         </div>
                     ) : (
                         <>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                                 <div>
                                     <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>시급</label>
                                     <input type="number" placeholder="0" value={payData.hourlyWage}
@@ -421,6 +428,12 @@ const Payroll = () => {
                                     <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>주간 소정근로 (h)</label>
                                     <input type="number" placeholder="40" value={payData.weeklyHours}
                                         onChange={(e) => setPayData({ ...payData, weeklyHours: e.target.value })}
+                                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>주간 소정근로일수</label>
+                                    <input type="number" placeholder="5" min="1" max="7" value={payData.scheduledDays}
+                                        onChange={(e) => setPayData({ ...payData, scheduledDays: e.target.value })}
                                         style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
                                 </div>
                             </div>
@@ -441,7 +454,12 @@ const Payroll = () => {
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
                                     {payData.weeklyWorkedHours.map((wh, idx) => {
                                         const hours = parseFloat(wh) || 0;
-                                        const qualifies = hours >= 15;
+                                        const days = parseInt(payData.weeklyWorkedDays[idx]) || 0;
+                                        const scheduled = parseInt(payData.scheduledDays) || 5;
+                                        const hoursOk = hours >= 15;
+                                        const daysOk = days >= scheduled;
+                                        const qualifies = hoursOk && daysOk;
+                                        const hasInput = hours > 0;
                                         return (
                                             <div key={idx} style={{ textAlign: 'center' }}>
                                                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '3px', fontWeight: 600 }}>
@@ -449,7 +467,7 @@ const Payroll = () => {
                                                 </div>
                                                 <input
                                                     type="number"
-                                                    placeholder="0"
+                                                    placeholder="시간"
                                                     value={wh}
                                                     onChange={(e) => {
                                                         const arr = [...payData.weeklyWorkedHours];
@@ -457,26 +475,44 @@ const Payroll = () => {
                                                         setPayData({ ...payData, weeklyWorkedHours: arr, workedHours: '' });
                                                     }}
                                                     style={{
-                                                        width: '100%', padding: '6px 4px', borderRadius: '6px',
-                                                        border: `1.5px solid ${hours > 0 ? (qualifies ? '#059669' : '#f59e0b') : 'var(--border)'}`,
+                                                        width: '100%', padding: '5px 3px', borderRadius: '6px',
+                                                        border: `1.5px solid ${hasInput ? (qualifies ? '#059669' : '#f59e0b') : 'var(--border)'}`,
                                                         background: 'var(--card)', color: 'var(--text)',
-                                                        fontSize: '0.85rem', textAlign: 'center'
+                                                        fontSize: '0.82rem', textAlign: 'center', marginBottom: '3px'
                                                     }}
                                                 />
-                                                {hours > 0 && (
+                                                <input
+                                                    type="number"
+                                                    placeholder="일"
+                                                    min="0" max="7"
+                                                    value={payData.weeklyWorkedDays[idx]}
+                                                    onChange={(e) => {
+                                                        const arr = [...payData.weeklyWorkedDays];
+                                                        arr[idx] = e.target.value;
+                                                        setPayData({ ...payData, weeklyWorkedDays: arr });
+                                                    }}
+                                                    style={{
+                                                        width: '100%', padding: '4px 3px', borderRadius: '6px',
+                                                        border: `1.5px solid ${hasInput && days > 0 ? (daysOk ? '#059669' : '#ef4444') : 'var(--border)'}`,
+                                                        background: 'var(--card)', color: 'var(--text)',
+                                                        fontSize: '0.75rem', textAlign: 'center'
+                                                    }}
+                                                />
+                                                {hasInput && (
                                                     <div style={{
-                                                        fontSize: '0.6rem', marginTop: '2px', fontWeight: 700,
-                                                        color: qualifies ? '#059669' : '#d97706'
+                                                        fontSize: '0.55rem', marginTop: '2px', fontWeight: 700,
+                                                        color: qualifies ? '#059669' : '#dc2626', lineHeight: 1.2
                                                     }}>
-                                                        {qualifies ? '✅주휴O' : '❌15h미만'}
+                                                        {!hoursOk ? '15h미만' : !daysOk ? `미개근` : '✅주휴O'}
                                                     </div>
                                                 )}
                                             </div>
                                         );
                                     })}
                                 </div>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '6px', textAlign: 'center' }}>
-                                    기입 시 근무시간 및 주휴수당 자동계산 • 주 15h 이상 개근 시 주휴수당 지급
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                                    <span>↑시간 / ↓출근일수</span>
+                                    <span>주 15h 이상 + {payData.scheduledDays || 5}일 개근 시 주휴수당 지급</span>
                                 </div>
                             </div>
 
@@ -646,7 +682,7 @@ const Payroll = () => {
                                 <div style={{ fontWeight: 700, color: '#059669', marginBottom: '4px' }}>📊 주별 주휴수당 상세</div>
                                 {calculation.weeklyBreakdown.map(w => (
                                     <div key={w.week} style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0', color: w.qualifies ? '#065f46' : '#92400e' }}>
-                                        <span>{w.week}주차: {w.hours}h {w.qualifies ? '✅' : '❌(15h 미만)'}</span>
+                                        <span>{w.week}주차: {w.hours}h / {w.days || 0}일 {w.qualifies ? '✅' : `❌(${w.reason})`}</span>
                                         <span style={{ fontWeight: 600 }}>{w.qualifies ? `${fmt(w.pay)}원` : '미지급'}</span>
                                     </div>
                                 ))}

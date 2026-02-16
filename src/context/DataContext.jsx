@@ -27,6 +27,7 @@ export const DataProvider = ({ children }) => {
     const [boardPosts, setBoardPosts] = useState([]);
     const [boardComments, setBoardComments] = useState([]);
     const [attendance, setAttendance] = useState([]);
+    const [payrollRecords, setPayrollRecords] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -150,6 +151,13 @@ export const DataProvider = ({ children }) => {
                 if (att) setAttendance(att);
             } catch (e) {
                 console.warn('attendance table not available:', e.message);
+            }
+
+            try {
+                const { data: pr } = await supabase.from('payroll_records').select('*').order('created_at', { ascending: false });
+                if (pr) setPayrollRecords(pr);
+            } catch (e) {
+                console.warn('payroll_records table not available:', e.message);
             }
 
         } catch (error) {
@@ -867,6 +875,23 @@ export const DataProvider = ({ children }) => {
         if (!error) setAttendance(prev => prev.filter(a => a.id !== id));
     };
 
+    // --- Payroll Records CRUD ---
+    const addPayrollRecord = async (item) => {
+        const { data, error } = await supabase.from('payroll_records').insert([item]).select();
+        if (!error && data) setPayrollRecords(prev => [data[0], ...prev]);
+        return { data, error };
+    };
+    const updatePayrollRecord = async (id, fields) => {
+        const { error } = await supabase.from('payroll_records').update(fields).eq('id', id);
+        if (!error) setPayrollRecords(prev => prev.map(r => r.id === id ? { ...r, ...fields } : r));
+        return { error };
+    };
+    const deletePayrollRecord = async (id) => {
+        const { error } = await supabase.from('payroll_records').delete().eq('id', id);
+        if (!error) setPayrollRecords(prev => prev.filter(r => r.id !== id));
+        return { error };
+    };
+
     return (
         <DataContext.Provider value={{
             loading,
@@ -893,7 +918,8 @@ export const DataProvider = ({ children }) => {
             purchaseRequests, addPurchaseRequest, updatePurchaseRequest, deletePurchaseRequest,
             productionLogs, addProductionLog,
             boardPosts, boardComments, addBoardPost, updateBoardPost, deleteBoardPost, addBoardComment, deleteBoardComment,
-            attendance, addAttendance, updateAttendance, deleteAttendance
+            attendance, addAttendance, updateAttendance, deleteAttendance,
+            payrollRecords, addPayrollRecord, updatePayrollRecord, deletePayrollRecord
         }}>
             {children}
         </DataContext.Provider>

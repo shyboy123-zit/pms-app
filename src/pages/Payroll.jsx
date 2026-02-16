@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useData } from '../context/DataContext';
-import { Calculator, FileText, Download, Users, ChevronDown, ChevronUp, DollarSign, Clock } from 'lucide-react';
+import { Calculator, FileText, Download, Users, ChevronDown, ChevronUp, DollarSign, Clock, Save, History, Trash2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -81,9 +81,13 @@ const getIncomeTax = (monthlySalary, dependents = 1) => {
 };
 
 const Payroll = () => {
-    const { employees } = useData();
+    const { employees, payrollRecords, addPayrollRecord, deletePayrollRecord } = useData();
     const [selectedEmpId, setSelectedEmpId] = useState('');
     const [payType, setPayType] = useState('monthly'); // monthly | hourly
+    const [showHistory, setShowHistory] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [showContract, setShowContract] = useState(false);
+    const contractRef = useRef(null);
     const [yearMonth, setYearMonth] = useState(() => {
         const now = new Date();
         return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -285,6 +289,88 @@ const Payroll = () => {
         } catch (err) {
             console.error('PDF 생성 실패:', err);
             alert('PDF 생성에 실패했습니다.');
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    };
+
+    // === 급여 저장 ===
+    const savePayroll = async () => {
+        if (!selectedEmpId || calculation.totalPay <= 0) {
+            alert('직원을 선택하고 급여를 입력해주세요.');
+            return;
+        }
+        setIsSaving(true);
+        try {
+            // Check for existing record
+            const existing = (payrollRecords || []).find(r => r.employee_id === selectedEmpId && r.year_month === yearMonth);
+            if (existing) {
+                if (!confirm(`${selectedEmp?.name}의 ${yearMonth} 급여가 이미 존재합니다. 덮어쓰시겠습니까?`)) {
+                    setIsSaving(false);
+                    return;
+                }
+                await deletePayrollRecord(existing.id);
+            }
+            const record = {
+                employee_id: selectedEmpId,
+                employee_name: selectedEmp?.name || '',
+                year_month: yearMonth,
+                pay_type: payType,
+                pay_data: JSON.stringify(payData),
+                calculation: JSON.stringify(calculation),
+                total_pay: calculation.totalPay,
+                net_pay: calculation.netPay,
+                total_deduction: calculation.totalDeduction
+            };
+            const { error } = await addPayrollRecord(record);
+            if (error) throw error;
+            alert(`${selectedEmp?.name} ${yearMonth} 급여가 저장되었습니다.`);
+        } catch (err) {
+            console.error('급여 저장 실패:', err);
+            alert('급여 저장에 실패했습니다.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // === 저장된 급여 불러오기 ===
+    const loadPayroll = (record) => {
+        try {
+            const savedData = JSON.parse(record.pay_data);
+            setSelectedEmpId(record.employee_id);
+            setPayType(record.pay_type || 'monthly');
+            setYearMonth(record.year_month);
+            // Ensure weeklyWorkedHours/Days arrays exist
+            setPayData({
+                ...savedData,
+                weeklyWorkedHours: savedData.weeklyWorkedHours || ['', '', '', '', ''],
+                weeklyWorkedDays: savedData.weeklyWorkedDays || ['', '', '', '', ''],
+                scheduledDays: savedData.scheduledDays || '5'
+            });
+            setShowHistory(false);
+        } catch (err) {
+            console.error('불러오기 실패:', err);
+            alert('급여 데이터를 불러올 수 없습니다.');
+        }
+    };
+
+    // === 근로계약서 PDF ===
+    const generateContractPdf = async () => {
+        if (!contractRef.current || !selectedEmp) return;
+        setIsGeneratingPdf(true);
+        setShowContract(true);
+        await new Promise(r => setTimeout(r, 500));
+        try {
+            const canvas = await html2canvas(contractRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`근로계약서_${selectedEmp.name}.pdf`);
+        } catch (err) {
+            console.error('근로계약서 PDF 생성 실패:', err);
+            alert('근로계약서 PDF 생성에 실패했습니다.');
         } finally {
             setIsGeneratingPdf(false);
         }
@@ -742,17 +828,41 @@ const Payroll = () => {
 
                     {/* PDF 버튼 */}
                     {selectedEmp && calculation.totalPay > 0 && (
-                        <button onClick={generatePdf} disabled={isGeneratingPdf}
-                            style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                                width: '100%', marginTop: '12px', padding: '12px',
-                                borderRadius: '10px', border: 'none', cursor: 'pointer',
-                                background: '#4f46e5', color: 'white', fontWeight: 700, fontSize: '0.9rem',
-                                opacity: isGeneratingPdf ? 0.7 : 1
-                            }}>
-                            <Download size={16} />
-                            {isGeneratingPdf ? '생성 중...' : '급여명세서 PDF 다운로드'}
-                        </button>
+                        <>
+                            <button onClick={generatePdf} disabled={isGeneratingPdf}
+                                style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                    width: '100%', marginTop: '12px', padding: '12px',
+                                    borderRadius: '10px', border: 'none', cursor: 'pointer',
+                                    background: '#4f46e5', color: 'white', fontWeight: 700, fontSize: '0.9rem',
+                                    opacity: isGeneratingPdf ? 0.7 : 1
+                                }}>
+                                <Download size={16} />
+                                {isGeneratingPdf ? '생성 중...' : '급여명세서 PDF 다운로드'}
+                            </button>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                <button onClick={savePayroll} disabled={isSaving}
+                                    style={{
+                                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                        padding: '10px', borderRadius: '10px', border: '1px solid #059669',
+                                        cursor: 'pointer', background: '#f0fdf4', color: '#059669',
+                                        fontWeight: 700, fontSize: '0.85rem', opacity: isSaving ? 0.7 : 1
+                                    }}>
+                                    <Save size={14} />
+                                    {isSaving ? '저장 중...' : 'DB에 저장'}
+                                </button>
+                                <button onClick={generateContractPdf} disabled={isGeneratingPdf}
+                                    style={{
+                                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                        padding: '10px', borderRadius: '10px', border: '1px solid #d97706',
+                                        cursor: 'pointer', background: '#fffbeb', color: '#d97706',
+                                        fontWeight: 700, fontSize: '0.85rem'
+                                    }}>
+                                    <FileText size={14} />
+                                    근로계약서
+                                </button>
+                            </div>
+                        </>
                     )}
                     {!selectedEmp && (
                         <div style={{ fontSize: '0.78rem', color: '#f59e0b', textAlign: 'center', marginTop: '8px', fontWeight: 500 }}>
@@ -955,6 +1065,224 @@ const Payroll = () => {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* ===== 근로계약서 PDF 템플릿 (숨김) ===== */}
+            <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+                <div ref={contractRef} style={{
+                    width: '800px', padding: '50px 45px', fontFamily: "'Malgun Gothic', '맑은 고딕', sans-serif",
+                    background: 'white', color: '#1e293b', fontSize: '13px', lineHeight: 1.8
+                }}>
+                    <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                        <div style={{ fontSize: '28px', fontWeight: 800, color: '#1e293b', letterSpacing: '8px', marginBottom: '4px' }}>근 로 계 약 서</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>(근로기준법 제17조에 의한 근로조건 명시)</div>
+                    </div>
+
+                    <div style={{ marginBottom: '20px', fontSize: '13px', lineHeight: 2 }}>
+                        <strong>사용자</strong> (이하 "갑"이라 함)와 <strong>{selectedEmp?.name || '________'}</strong> (이하 "을"이라 함)은
+                        다음과 같이 근로계약을 체결하고 이를 성실히 이행할 것을 약정한다.
+                    </div>
+
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+                        <tbody>
+                            {[
+                                ['계약기간', `${year}년 ${month}월 ____일 부터  ${year}년 ____월 ____일 까지`],
+                                ['근무장소', '____________________'],
+                                ['직무내용', `${selectedEmp?.position || '____'} / ${selectedEmp?.department || '____'} 소속 업무 전반`],
+                            ].map(([label, value]) => (
+                                <tr key={label}>
+                                    <td style={{ padding: '10px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 700, width: '18%', textAlign: 'center' }}>{label}</td>
+                                    <td style={{ padding: '10px 14px', border: '1px solid #e2e8f0' }}>{value}</td>
+                                </tr>
+                            ))}
+                            <tr>
+                                <td style={{ padding: '10px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 700, textAlign: 'center' }}>소정근로시간</td>
+                                <td style={{ padding: '10px 14px', border: '1px solid #e2e8f0' }}>
+                                    ____시 ____분부터 ____시 ____분까지 (휴게시간: ____시 ____분 ~ ____시 ____분)
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style={{ padding: '10px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 700, textAlign: 'center' }}>근무일</td>
+                                <td style={{ padding: '10px 14px', border: '1px solid #e2e8f0' }}>
+                                    주 {payData.scheduledDays || 5}일 (주 {payData.weeklyHours || 40}시간)
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style={{ padding: '10px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 700, textAlign: 'center' }}>휴일</td>
+                                <td style={{ padding: '10px 14px', border: '1px solid #e2e8f0' }}>
+                                    주휴일 (매주 ____요일), 근로자의 날, 관공서 공휴일
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>
+                        제2조 (임금)
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+                        <tbody>
+                            <tr>
+                                <td style={{ padding: '10px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 700, width: '18%', textAlign: 'center' }}>임금형태</td>
+                                <td style={{ padding: '10px 14px', border: '1px solid #e2e8f0' }}>
+                                    {payType === 'monthly' ? `월급 ${fmt(payData.baseSalary || 0)}원` : `시급 ${fmt(payData.hourlyWage || 0)}원`}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style={{ padding: '10px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 700, textAlign: 'center' }}>임금구성</td>
+                                <td style={{ padding: '10px 14px', border: '1px solid #e2e8f0' }}>
+                                    기본급 + 제수당 (연장·야간·휴일근로수당 등 별도 지급)
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style={{ padding: '10px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 700, textAlign: 'center' }}>임금지급일</td>
+                                <td style={{ padding: '10px 14px', border: '1px solid #e2e8f0' }}>
+                                    매월 ____일 (해당일이 휴일인 경우 전일 지급)
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style={{ padding: '10px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 700, textAlign: 'center' }}>지급방법</td>
+                                <td style={{ padding: '10px 14px', border: '1px solid #e2e8f0' }}>
+                                    근로자 명의 통장에 입금
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>
+                        제3조 (연차유급휴가)
+                    </div>
+                    <div style={{ marginBottom: '20px', paddingLeft: '10px' }}>
+                        근로기준법에서 정하는 바에 따라 연차유급휴가를 부여한다.
+                    </div>
+
+                    <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>
+                        제4조 (사회보험)
+                    </div>
+                    <div style={{ marginBottom: '20px', paddingLeft: '10px' }}>
+                        사용자는 관계법령에 따라 국민연금, 건강보험, 고용보험, 산재보험에 가입한다.
+                    </div>
+
+                    <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>
+                        제5조 (근로계약 해지)
+                    </div>
+                    <div style={{ marginBottom: '20px', paddingLeft: '10px' }}>
+                        "갑"과 "을"은 근로기준법 등 관계 법령에서 정한 절차에 따라 본 계약을 해지할 수 있다.
+                    </div>
+
+                    <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>
+                        제6조 (기타)
+                    </div>
+                    <div style={{ marginBottom: '30px', paddingLeft: '10px' }}>
+                        본 계약에 정하지 아니한 사항은 근로기준법 등 관계법령에 따른다.
+                    </div>
+
+                    <div style={{ textAlign: 'center', marginBottom: '30px', fontSize: '13px', color: '#64748b' }}>
+                        본 계약의 성립을 증명하기 위하여 계약서 2부를 작성하여 당사자가 각각 1부씩 보관한다.
+                    </div>
+
+                    <div style={{ textAlign: 'center', fontSize: '15px', fontWeight: 700, marginBottom: '30px', color: '#1e293b' }}>
+                        {year}년 {month}월 ____일
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '10px' }}>
+                        <div style={{ width: '45%' }}>
+                            <div style={{ fontWeight: 700, marginBottom: '10px', fontSize: '14px', color: '#4f46e5' }}>(갑) 사용자</div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                                <tbody>
+                                    {[
+                                        ['사업체명', '____________________'],
+                                        ['주    소', '____________________'],
+                                        ['대 표 자', '________ (인)'],
+                                    ].map(([label, value]) => (
+                                        <tr key={label}>
+                                            <td style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontWeight: 600, width: '35%' }}>{label}</td>
+                                            <td style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{value}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style={{ width: '45%' }}>
+                            <div style={{ fontWeight: 700, marginBottom: '10px', fontSize: '14px', color: '#059669' }}>(을) 근로자</div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                                <tbody>
+                                    {[
+                                        ['성    명', `${selectedEmp?.name || '________'} (인)`],
+                                        ['주    소', '____________________'],
+                                        ['연 락 처', `${selectedEmp?.phone || '____________________'}`],
+                                    ].map(([label, value]) => (
+                                        <tr key={label}>
+                                            <td style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontWeight: 600, width: '35%' }}>{label}</td>
+                                            <td style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{value}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* ===== 급여 이력 조회 ===== */}
+            <div style={{
+                background: 'var(--card)', borderRadius: '14px', padding: '18px 20px',
+                border: '1px solid var(--border)', marginBottom: '1.5rem'
+            }}>
+                <div
+                    onClick={() => setShowHistory(!showHistory)}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '0.95rem' }}>
+                        <History size={18} /> 📋 급여 이력 조회
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>({(payrollRecords || []).length}건)</span>
+                    </div>
+                    {showHistory ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </div>
+
+                {showHistory && (
+                    <div style={{ marginTop: '12px' }}>
+                        {(payrollRecords || []).length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                저장된 급여 이력이 없습니다. 급여 계산 후 "DB에 저장" 버튼을 눌러주세요.
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {(payrollRecords || []).map(record => (
+                                    <div key={record.id} style={{
+                                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                        padding: '10px 14px', borderRadius: '10px',
+                                        background: 'var(--bg)', border: '1px solid var(--border)',
+                                        fontSize: '0.82rem'
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <span style={{ fontWeight: 700, color: '#4f46e5', minWidth: '70px' }}>{record.year_month}</span>
+                                            <span style={{ fontWeight: 600 }}>{record.employee_name}</span>
+                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                                {record.pay_type === 'monthly' ? '월급제' : '시급제'}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <div style={{ fontWeight: 700, color: '#059669' }}>{fmt(record.net_pay || 0)}원</div>
+                                                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                                    지급 {fmt(record.total_pay || 0)} / 공제 {fmt(record.total_deduction || 0)}
+                                                </div>
+                                            </div>
+                                            <button onClick={() => loadPayroll(record)}
+                                                style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #4f46e5', background: '#eef2ff', color: '#4f46e5', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
+                                                불러오기
+                                            </button>
+                                            <button onClick={() => { if (confirm('삭제하시겠습니까?')) deletePayrollRecord(record.id); }}
+                                                style={{ padding: '4px 6px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}>
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

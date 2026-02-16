@@ -57,22 +57,27 @@ const calcWeeklyHolidayPay = (hourlyWage, weeklyHours) => {
 };
 
 // ===== 간이세액표 (월급여 기준, 부양가족 1인 기준) =====
-// 근사 계산: 실제는 국세청 간이세액표를 사용해야 하나, 구간별 근사치 적용
+// 근사 계산: 실제 국세청 간이세액표 기준 구간별 세율 적용
+// 2024년 3월 개정 간이세액표 기준 (부양가족 1인)
 const getIncomeTax = (monthlySalary, dependents = 1) => {
     const taxableIncome = monthlySalary;
-    if (taxableIncome <= 1060000) return 0;
-    if (taxableIncome <= 1500000) return Math.round((taxableIncome - 1060000) * 0.06);
-    if (taxableIncome <= 2000000) return Math.round(26400 + (taxableIncome - 1500000) * 0.06);
-    if (taxableIncome <= 2500000) return Math.round(56400 + (taxableIncome - 2000000) * 0.06);
-    if (taxableIncome <= 3000000) return Math.round(56400 + (taxableIncome - 2000000) * 0.15);
-    if (taxableIncome <= 3500000) return Math.round(131400 + (taxableIncome - 3000000) * 0.15);
-    if (taxableIncome <= 4000000) return Math.round(206400 + (taxableIncome - 3500000) * 0.15);
-    if (taxableIncome <= 5000000) return Math.round(281400 + (taxableIncome - 4000000) * 0.15);
-    if (taxableIncome <= 6000000) return Math.round(431400 + (taxableIncome - 5000000) * 0.24);
-    if (taxableIncome <= 7000000) return Math.round(671400 + (taxableIncome - 6000000) * 0.24);
-    if (taxableIncome <= 8000000) return Math.round(911400 + (taxableIncome - 7000000) * 0.24);
-    if (taxableIncome <= 10000000) return Math.round(1151400 + (taxableIncome - 8000000) * 0.35);
-    return Math.round(1851400 + (taxableIncome - 10000000) * 0.38);
+    // 부양가족 수에 따른 비과세 기준 조정 (간이세액표 근사)
+    const exemptionPerDependent = 150000; // 부양가족 1인당 약 15만원 공제 근사
+    const adjustedIncome = Math.max(0, taxableIncome - (dependents - 1) * exemptionPerDependent);
+
+    if (adjustedIncome <= 1060000) return 0;
+    if (adjustedIncome <= 1500000) return Math.round((adjustedIncome - 1060000) * 0.06);
+    if (adjustedIncome <= 2000000) return Math.round(26400 + (adjustedIncome - 1500000) * 0.06);
+    if (adjustedIncome <= 2500000) return Math.round(56400 + (adjustedIncome - 2000000) * 0.06);
+    if (adjustedIncome <= 3000000) return Math.round(86400 + (adjustedIncome - 2500000) * 0.15);
+    if (adjustedIncome <= 3500000) return Math.round(161400 + (adjustedIncome - 3000000) * 0.15);
+    if (adjustedIncome <= 4000000) return Math.round(236400 + (adjustedIncome - 3500000) * 0.15);
+    if (adjustedIncome <= 5000000) return Math.round(311400 + (adjustedIncome - 4000000) * 0.15);
+    if (adjustedIncome <= 6000000) return Math.round(461400 + (adjustedIncome - 5000000) * 0.24);
+    if (adjustedIncome <= 7000000) return Math.round(701400 + (adjustedIncome - 6000000) * 0.24);
+    if (adjustedIncome <= 8000000) return Math.round(941400 + (adjustedIncome - 7000000) * 0.24);
+    if (adjustedIncome <= 10000000) return Math.round(1181400 + (adjustedIncome - 8000000) * 0.35);
+    return Math.round(1881400 + (adjustedIncome - 10000000) * 0.38);
 };
 
 const Payroll = () => {
@@ -173,7 +178,11 @@ const Payroll = () => {
         const calculatedAnnualPay = annualLeaveDays > 0 ? (dailyWage * annualLeaveDays) : annualLeavePay;
 
         // 주휴수당 (시급제 & 주 15시간 이상)
-        const weeklyHolidayPay = payType === 'hourly' ? calcWeeklyHolidayPay(hourlyWage, weeklyHours) : 0;
+        // 중요: workedHours가 209(= 40h × 52주 ÷ 12개월)인 경우,
+        // 이미 주휴시간이 포함된 시간이므로 주휴수당을 별도로 계산하지 않음
+        const monthlyFullHours = Math.round(weeklyHours * 52 / 12); // 주휴 포함 월 근무시간 (40h → 209)
+        const is209Pattern = payType === 'hourly' && workedHours > 0 && workedHours >= monthlyFullHours;
+        const weeklyHolidayPay = (payType === 'hourly' && !is209Pattern) ? calcWeeklyHolidayPay(hourlyWage, weeklyHours) : 0;
 
         // 과세 총액
         const taxableTotal = grossBase + overtimePay + nightPay + holidayPay + bonus + calculatedAnnualPay + holidayBonus + performanceBonus + weeklyHolidayPay;
@@ -210,7 +219,7 @@ const Payroll = () => {
             taxableTotal, nonTaxMeal, nonTaxTransport, nonTaxTotal, totalPay,
             nationalPension, healthInsurance, longTermCare, employmentInsurance, totalInsurance,
             incomeTax, localIncomeTax, totalDeduction, netPay,
-            effectiveHourly
+            effectiveHourly, is209Pattern
         };
     }, [payData, payType, rates]);
 
@@ -509,7 +518,7 @@ const Payroll = () => {
                             { label: '연장근로수당 (×1.5)', value: calculation.overtimePay },
                             { label: '야간근로수당 (×0.5 가산)', value: calculation.nightPay },
                             { label: '휴일근로수당 (×1.5)', value: calculation.holidayPay },
-                            { label: `주휴수당 (주${payData.weeklyHours || 40}h)`, value: calculation.weeklyHolidayPay },
+                            { label: calculation.is209Pattern ? `주휴수당 (${payData.workedHours}h에 주휴 포함 → 별도 미계산)` : `주휴수당 (주${payData.weeklyHours || 40}h)`, value: calculation.weeklyHolidayPay },
                             { label: '상여금', value: calculation.bonus },
                             { label: `연차수당${calculation.annualLeaveDays > 0 ? ` (1일급 ${fmt(calculation.dailyWage)}원×${calculation.annualLeaveDays}일)` : ''}`, value: calculation.annualLeavePay },
                             { label: '명절수당', value: calculation.holidayBonus },
@@ -527,6 +536,16 @@ const Payroll = () => {
                             <span>{fmt(calculation.totalPay)}원</span>
                         </div>
                     </div>
+
+                    {calculation.is209Pattern && (
+                        <div style={{
+                            background: '#fffbeb', border: '1px solid #fbbf24', borderRadius: '8px',
+                            padding: '0.6rem 0.8rem', marginBottom: '14px', fontSize: '0.78rem', color: '#92400e'
+                        }}>
+                            ⚠️ <strong>근무시간 {payData.workedHours}h</strong>는 주휴시간이 포함된 시간입니다 (주{payData.weeklyHours || 40}h × 52주 ÷ 12개월).
+                            주휴수당이 이중 계산되지 않도록 별도 주휴수당을 ₩0으로 처리했습니다.
+                        </div>
+                    )}
 
                     {/* 공제 합계 */}
                     <div style={{ marginBottom: '14px' }}>

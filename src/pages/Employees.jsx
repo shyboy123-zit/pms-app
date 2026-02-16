@@ -66,6 +66,15 @@ const Employees = () => {
     const [trainingPhotos, setTrainingPhotos] = useState([]);
     const trainingPhotoRef = useRef(null);
 
+    // 근로계약서 관련 상태
+    const [contractData, setContractData] = useState({
+        payType: 'monthly', baseSalary: '', hourlyWage: '',
+        workStart: '09:00', workEnd: '18:00', breakStart: '12:00', breakEnd: '13:00',
+        weeklyDays: '5', weeklyHours: '40', restDay: '일', payDay: '10',
+        contractStart: new Date().toISOString().split('T')[0], contractEnd: '',
+        workplace: ''
+    });
+
     const filteredEmployees = employees.filter(e => {
         if (viewMode === '전체') return true;
         return e.status === viewMode;
@@ -335,7 +344,8 @@ const Employees = () => {
                 promotion: `연차사용촉진_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
                 application: `연차사용신청서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
                 retirement: `퇴직금계산서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
-                training: `의무교육_${TRAININGS.find(t => t.code === trainingType)?.name || ''}_${new Date().toISOString().split('T')[0]}.pdf`
+                training: `의무교육_${TRAININGS.find(t => t.code === trainingType)?.name || ''}_${new Date().toISOString().split('T')[0]}.pdf`,
+                contract: `근로계약서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`
             };
             const fileName = fileNames[pdfType] || fileNames.promotion;
             pdf.save(fileName);
@@ -798,7 +808,7 @@ const Employees = () => {
                         </div>
 
                         <div style={{ display: 'flex', gap: '6px', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                            {[{ key: 'promotion', icon: '📋', label: '연차사용촉진' }, { key: 'application', icon: '📝', label: '연차신청서' }, { key: 'retirement', icon: '💰', label: '퇴직금계산' }, { key: 'training', icon: '📚', label: '의무교육' }].map(t => (
+                            {[{ key: 'promotion', icon: '📋', label: '연차사용촉진' }, { key: 'application', icon: '📝', label: '연차신청서' }, { key: 'retirement', icon: '💰', label: '퇴직금계산' }, { key: 'training', icon: '📚', label: '의무교육' }, { key: 'contract', icon: '📄', label: '근로계약서' }].map(t => (
                                 <button key={t.key}
                                     onClick={() => setPdfType(t.key)}
                                     style={{
@@ -1111,6 +1121,97 @@ const Employees = () => {
                                         </div>
                                     );
                                 })()}
+                            </div>
+                        )}
+
+                        {/* ===== 근로계약서 입력 ===== */}
+                        {pdfType === 'contract' && (
+                            <div style={{ marginBottom: '1rem' }}>
+                                <div style={{ background: '#fffbeb', padding: '14px', borderRadius: '10px', marginBottom: '12px', border: '1px solid #fde68a' }}>
+                                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#92400e', marginBottom: '10px' }}>📄 근로계약서 정보 입력</div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.75rem' }}>임금형태</label>
+                                            <select className="form-input" value={contractData.payType}
+                                                onChange={(e) => setContractData({ ...contractData, payType: e.target.value })}>
+                                                <option value="monthly">월급제</option>
+                                                <option value="hourly">시급제</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.75rem' }}>{contractData.payType === 'monthly' ? '월급 (원)' : '시급 (원)'}</label>
+                                            <input type="number" className="form-input"
+                                                value={contractData.payType === 'monthly' ? contractData.baseSalary : contractData.hourlyWage}
+                                                onChange={(e) => setContractData({ ...contractData, [contractData.payType === 'monthly' ? 'baseSalary' : 'hourlyWage']: e.target.value })}
+                                                placeholder={contractData.payType === 'monthly' ? '예: 2500000' : '예: 10030'} />
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.75rem' }}>계약 시작일</label>
+                                            <input type="date" className="form-input" value={contractData.contractStart}
+                                                onChange={(e) => setContractData({ ...contractData, contractStart: e.target.value })} />
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.75rem' }}>계약 종료일</label>
+                                            <input type="date" className="form-input" value={contractData.contractEnd}
+                                                onChange={(e) => setContractData({ ...contractData, contractEnd: e.target.value })} />
+                                        </div>
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: '8px' }}>
+                                        <label className="form-label" style={{ fontSize: '0.75rem' }}>근무장소</label>
+                                        <input type="text" className="form-input" value={contractData.workplace}
+                                            onChange={(e) => setContractData({ ...contractData, workplace: e.target.value })}
+                                            placeholder="예: 본사 사무실, 공장" />
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px', marginBottom: '8px' }}>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>출근시간</label>
+                                            <input type="time" className="form-input" value={contractData.workStart}
+                                                onChange={(e) => setContractData({ ...contractData, workStart: e.target.value })} />
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>퇴근시간</label>
+                                            <input type="time" className="form-input" value={contractData.workEnd}
+                                                onChange={(e) => setContractData({ ...contractData, workEnd: e.target.value })} />
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>휴게시작</label>
+                                            <input type="time" className="form-input" value={contractData.breakStart}
+                                                onChange={(e) => setContractData({ ...contractData, breakStart: e.target.value })} />
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>휴게종료</label>
+                                            <input type="time" className="form-input" value={contractData.breakEnd}
+                                                onChange={(e) => setContractData({ ...contractData, breakEnd: e.target.value })} />
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px' }}>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>주 근무일</label>
+                                            <input type="number" className="form-input" value={contractData.weeklyDays}
+                                                onChange={(e) => setContractData({ ...contractData, weeklyDays: e.target.value })} />
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>주 근로시간</label>
+                                            <input type="number" className="form-input" value={contractData.weeklyHours}
+                                                onChange={(e) => setContractData({ ...contractData, weeklyHours: e.target.value })} />
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>주휴일</label>
+                                            <select className="form-input" value={contractData.restDay}
+                                                onChange={(e) => setContractData({ ...contractData, restDay: e.target.value })}>
+                                                {['일', '월', '화', '수', '목', '금', '토'].map(d => <option key={d} value={d}>{d}요일</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>급여일</label>
+                                            <input type="number" className="form-input" value={contractData.payDay}
+                                                onChange={(e) => setContractData({ ...contractData, payDay: e.target.value })}
+                                                min="1" max="31" />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
@@ -1586,9 +1687,150 @@ const Employees = () => {
                                 </div>
                             );
                         })()}
+
+                        {/* === 근로계약서 서식 === */}
+                        {pdfType === 'contract' && (() => {
+                            const today = new Date();
+                            const formatDate = (d) => `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+                            const fmtWon = (n) => Number(n || 0).toLocaleString('ko-KR');
+                            const cStart = contractData.contractStart ? new Date(contractData.contractStart) : null;
+                            const cEnd = contractData.contractEnd ? new Date(contractData.contractEnd) : null;
+                            return (
+                                <div>
+                                    <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+                                        <h1 style={{ fontSize: '28px', fontWeight: 800, letterSpacing: '8px', marginBottom: '8px' }}>근 로 계 약 서</h1>
+                                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>(근로기준법 제17조에 의한 근로조건 명시)</div>
+                                    </div>
+
+                                    <div style={{ marginBottom: '20px', fontSize: '13px', lineHeight: 2 }}>
+                                        <strong>사용자</strong> (이하 "갑"이라 함)와 <strong>{pdfTarget.name}</strong> (이하 "을"이라 함)은
+                                        다음과 같이 근로계약을 체결하고 이를 성실히 이행할 것을 약정한다.
+                                    </div>
+
+                                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>제1조 (근로조건)</div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                                        <tbody>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, width: '20%', textAlign: 'center' }}>계약기간</td>
+                                                <td style={cellStyle}>
+                                                    {cStart ? formatDate(cStart) : '____년 __월 __일'} 부터 {cEnd ? formatDate(cEnd) : '____년 __월 __일'} 까지
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>근무장소</td>
+                                                <td style={cellStyle}>{contractData.workplace || '____________________'}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>직무내용</td>
+                                                <td style={cellStyle}>{pdfTarget.position || '____'} / {pdfTarget.department || '____'} 소속 업무 전반</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>소정근로시간</td>
+                                                <td style={cellStyle}>
+                                                    {contractData.workStart || '__:__'}부터 {contractData.workEnd || '__:__'}까지
+                                                    (휴게시간: {contractData.breakStart || '__:__'} ~ {contractData.breakEnd || '__:__'})
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>근무일</td>
+                                                <td style={cellStyle}>주 {contractData.weeklyDays || 5}일 (주 {contractData.weeklyHours || 40}시간)</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>휴일</td>
+                                                <td style={cellStyle}>주휴일 (매주 {contractData.restDay || '일'}요일), 근로자의 날, 관공서 공휴일</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>제2조 (임금)</div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                                        <tbody>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, width: '20%', textAlign: 'center' }}>임금형태</td>
+                                                <td style={cellStyle}>
+                                                    {contractData.payType === 'monthly'
+                                                        ? `월급 ${fmtWon(contractData.baseSalary)}원`
+                                                        : `시급 ${fmtWon(contractData.hourlyWage)}원`}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>임금구성</td>
+                                                <td style={cellStyle}>기본급 + 제수당 (연장·야간·휴일근로수당 등 별도 지급)</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>임금지급일</td>
+                                                <td style={cellStyle}>매월 {contractData.payDay || '____'}일 (해당일이 휴일인 경우 전일 지급)</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>지급방법</td>
+                                                <td style={cellStyle}>근로자 명의 통장에 입금</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>제3조 (연차유급휴가)</div>
+                                    <div style={{ marginBottom: '20px', paddingLeft: '10px', fontSize: '13px' }}>근로기준법에서 정하는 바에 따라 연차유급휴가를 부여한다.</div>
+
+                                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>제4조 (사회보험)</div>
+                                    <div style={{ marginBottom: '20px', paddingLeft: '10px', fontSize: '13px' }}>사용자는 관계법령에 따라 국민연금, 건강보험, 고용보험, 산재보험에 가입한다.</div>
+
+                                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>제5조 (근로계약 해지)</div>
+                                    <div style={{ marginBottom: '20px', paddingLeft: '10px', fontSize: '13px' }}>"갑"과 "을"은 근로기준법 등 관계 법령에서 정한 절차에 따라 본 계약을 해지할 수 있다.</div>
+
+                                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>제6조 (기타)</div>
+                                    <div style={{ marginBottom: '30px', paddingLeft: '10px', fontSize: '13px' }}>본 계약에 정하지 아니한 사항은 근로기준법 등 관계법령에 따른다.</div>
+
+                                    <div style={{ textAlign: 'center', marginBottom: '30px', fontSize: '12px', color: '#64748b' }}>본 계약의 성립을 증명하기 위하여 계약서 2부를 작성하여 당사자가 각각 1부씩 보관한다.</div>
+
+                                    <div style={{ textAlign: 'center', fontSize: '15px', fontWeight: 700, marginBottom: '30px' }}>{formatDate(today)}</div>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '10px' }}>
+                                        <div style={{ width: '45%' }}>
+                                            <div style={{ fontWeight: 700, marginBottom: '10px', fontSize: '14px', color: '#4f46e5' }}>(갑) 사용자</div>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                                                <tbody>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 600, width: '35%' }}>사업체명</td>
+                                                        <td style={cellStyle}>____________________</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 600 }}>주    소</td>
+                                                        <td style={cellStyle}>____________________</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 600 }}>대 표 자</td>
+                                                        <td style={cellStyle}>________ (인)</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div style={{ width: '45%' }}>
+                                            <div style={{ fontWeight: 700, marginBottom: '10px', fontSize: '14px', color: '#059669' }}>(을) 근로자</div>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                                                <tbody>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 600, width: '35%' }}>성    명</td>
+                                                        <td style={cellStyle}>{pdfTarget.name} (인)</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 600 }}>주    소</td>
+                                                        <td style={cellStyle}>____________________</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 600 }}>연 락 처</td>
+                                                        <td style={cellStyle}>{pdfTarget.phone || '____________________'}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
             )}
+
 
             {/* 교육 사진 별도 페이지 (숨김) */}
             {isPdfPreview && pdfType === 'training' && trainingPhotos.length > 0 && (

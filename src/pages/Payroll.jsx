@@ -91,7 +91,8 @@ const Payroll = () => {
     const [payData, setPayData] = useState({
         baseSalary: '',       // 기본급 (월급제)
         hourlyWage: '',       // 시급 (시급제)
-        workedHours: '',      // 근무시간 (시급제)
+        workedHours: '',      // 근무시간 (시급제 - 직접입력 모드)
+        weeklyWorkedHours: ['', '', '', '', ''],  // 주별 근무시간 (시급제 - 주별입력 모드)
         weeklyHours: '40',    // 주간 소정근로시간 (주휴수당 계산용)
         overtimeHours: '',    // 연장근로시간
         nightHours: '',       // 야간근로시간
@@ -162,7 +163,10 @@ const Payroll = () => {
         if (payType === 'monthly') {
             grossBase = baseSalary;
         } else {
-            grossBase = hourlyWage * workedHours;
+            // 주별 입력이 있으면 합산, 아니면 월 총시간 사용
+            const weeklySum = payData.weeklyWorkedHours.reduce((s, h) => s + (parseFloat(h) || 0), 0);
+            const totalHours = weeklySum > 0 ? weeklySum : workedHours;
+            grossBase = hourlyWage * totalHours;
         }
 
         // 연장/야간/휴일 수당
@@ -177,12 +181,35 @@ const Payroll = () => {
         // 연차수당: 일수 입력 시 자동계산, 없으면 직접입력 금액 사용
         const calculatedAnnualPay = annualLeaveDays > 0 ? (dailyWage * annualLeaveDays) : annualLeavePay;
 
-        // 주휴수당 (시급제 & 주 15시간 이상)
-        // 중요: workedHours가 209(= 40h × 52주 ÷ 12개월)인 경우,
-        // 이미 주휴시간이 포함된 시간이므로 주휴수당을 별도로 계산하지 않음
-        const monthlyFullHours = Math.round(weeklyHours * 52 / 12); // 주휴 포함 월 근무시간 (40h → 209)
-        const is209Pattern = payType === 'hourly' && workedHours > 0 && workedHours >= monthlyFullHours;
-        const weeklyHolidayPay = (payType === 'hourly' && !is209Pattern) ? calcWeeklyHolidayPay(hourlyWage, weeklyHours) : 0;
+        // 주휴수당 (시급제) - 주별 계산
+        let weeklyHolidayPay = 0;
+        let weeklyBreakdown = [];
+        let is209Pattern = false;
+
+        if (payType === 'hourly') {
+            // 주별 근무시간이 입력되었는지 확인
+            const hasWeeklyInput = payData.weeklyWorkedHours.some(h => parseFloat(h) > 0);
+
+            if (hasWeeklyInput) {
+                // 주별 계산 모드
+                const dailyScheduledHours = Math.min(weeklyHours, 40) / 5;
+                payData.weeklyWorkedHours.forEach((wh, idx) => {
+                    const hours = parseFloat(wh) || 0;
+                    if (hours <= 0) return;
+                    const qualifies = hours >= 15; // 주 15시간 이상인지
+                    const weekPay = qualifies ? Math.round(dailyScheduledHours * hourlyWage) : 0;
+                    weeklyBreakdown.push({ week: idx + 1, hours, qualifies, pay: weekPay });
+                    weeklyHolidayPay += weekPay;
+                });
+            } else if (workedHours > 0) {
+                // 월 총시간 직접입력 모드
+                const monthlyFullHours = Math.round(weeklyHours * 52 / 12);
+                is209Pattern = workedHours >= monthlyFullHours;
+                if (!is209Pattern) {
+                    weeklyHolidayPay = calcWeeklyHolidayPay(hourlyWage, weeklyHours);
+                }
+            }
+        }
 
         // 과세 총액
         const taxableTotal = grossBase + overtimePay + nightPay + holidayPay + bonus + calculatedAnnualPay + holidayBonus + performanceBonus + weeklyHolidayPay;
@@ -219,7 +246,7 @@ const Payroll = () => {
             taxableTotal, nonTaxMeal, nonTaxTransport, nonTaxTotal, totalPay,
             nationalPension, healthInsurance, longTermCare, employmentInsurance, totalInsurance,
             incomeTax, localIncomeTax, totalDeduction, netPay,
-            effectiveHourly, is209Pattern
+            effectiveHourly, is209Pattern, weeklyBreakdown
         };
     }, [payData, payType, rates]);
 
@@ -382,26 +409,89 @@ const Payroll = () => {
                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
                         </div>
                     ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-                            <div>
-                                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>시급</label>
-                                <input type="number" placeholder="0" value={payData.hourlyWage}
-                                    onChange={(e) => setPayData({ ...payData, hourlyWage: e.target.value })}
-                                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
+                        <>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>시급</label>
+                                    <input type="number" placeholder="0" value={payData.hourlyWage}
+                                        onChange={(e) => setPayData({ ...payData, hourlyWage: e.target.value })}
+                                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>주간 소정근로 (h)</label>
+                                    <input type="number" placeholder="40" value={payData.weeklyHours}
+                                        onChange={(e) => setPayData({ ...payData, weeklyHours: e.target.value })}
+                                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
+                                </div>
                             </div>
-                            <div>
-                                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>근무시간 (월)</label>
-                                <input type="number" placeholder="209" value={payData.workedHours}
-                                    onChange={(e) => setPayData({ ...payData, workedHours: e.target.value })}
-                                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
+
+                            {/* 주별 근무시간 입력 */}
+                            <div style={{
+                                background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px',
+                                padding: '12px', marginBottom: '10px'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text)' }}>
+                                        📅 주별 근무시간 입력
+                                    </label>
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                        ∑ {payData.weeklyWorkedHours.reduce((s, h) => s + (parseFloat(h) || 0), 0)}h
+                                    </span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
+                                    {payData.weeklyWorkedHours.map((wh, idx) => {
+                                        const hours = parseFloat(wh) || 0;
+                                        const qualifies = hours >= 15;
+                                        return (
+                                            <div key={idx} style={{ textAlign: 'center' }}>
+                                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '3px', fontWeight: 600 }}>
+                                                    {idx + 1}주상
+                                                </div>
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    value={wh}
+                                                    onChange={(e) => {
+                                                        const arr = [...payData.weeklyWorkedHours];
+                                                        arr[idx] = e.target.value;
+                                                        setPayData({ ...payData, weeklyWorkedHours: arr, workedHours: '' });
+                                                    }}
+                                                    style={{
+                                                        width: '100%', padding: '6px 4px', borderRadius: '6px',
+                                                        border: `1.5px solid ${hours > 0 ? (qualifies ? '#059669' : '#f59e0b') : 'var(--border)'}`,
+                                                        background: 'var(--card)', color: 'var(--text)',
+                                                        fontSize: '0.85rem', textAlign: 'center'
+                                                    }}
+                                                />
+                                                {hours > 0 && (
+                                                    <div style={{
+                                                        fontSize: '0.6rem', marginTop: '2px', fontWeight: 700,
+                                                        color: qualifies ? '#059669' : '#d97706'
+                                                    }}>
+                                                        {qualifies ? '✅주휴O' : '❌15h미만'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '6px', textAlign: 'center' }}>
+                                    기입 시 근무시간 및 주휴수당 자동계산 • 주 15h 이상 개근 시 주휴수당 지급
+                                </div>
                             </div>
-                            <div>
-                                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>주간 소정근로 (h)</label>
-                                <input type="number" placeholder="40" value={payData.weeklyHours}
-                                    onChange={(e) => setPayData({ ...payData, weeklyHours: e.target.value })}
-                                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
-                            </div>
-                        </div>
+
+                            {/* 또는 월 총시간 직접입력 */}
+                            {!payData.weeklyWorkedHours.some(h => parseFloat(h) > 0) && (
+                                <div style={{ marginBottom: '10px' }}>
+                                    <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                                        또는 월 총 근무시간 직접입력
+                                    </label>
+                                    <input type="number" placeholder="예: 174 (주휴 미포함) 또는 209 (주휴 포함)" value={payData.workedHours}
+                                        onChange={(e) => setPayData({ ...payData, workedHours: e.target.value })}
+                                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
+                                </div>
+                            )}
+                        </>
                     )}
 
                     {/* 최저임금 경고 */}
@@ -514,11 +604,26 @@ const Payroll = () => {
                     <div style={{ marginBottom: '14px' }}>
                         <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginBottom: '6px' }}>[ 지급 합계 ]</div>
                         {[
-                            { label: payType === 'monthly' ? '기본급' : `기본급 (${fmt(calculation.effectiveHourly)}원 × ${payData.workedHours || 0}h)`, value: calculation.grossBase },
+                            {
+                                label: payType === 'monthly' ? '기본급' : (() => {
+                                    const weeklySum = payData.weeklyWorkedHours.reduce((s, h) => s + (parseFloat(h) || 0), 0);
+                                    const displayHours = weeklySum > 0 ? weeklySum : (payData.workedHours || 0);
+                                    return `기본급 (${fmt(calculation.effectiveHourly)}원 × ${displayHours}h)`;
+                                })(), value: calculation.grossBase
+                            },
                             { label: '연장근로수당 (×1.5)', value: calculation.overtimePay },
                             { label: '야간근로수당 (×0.5 가산)', value: calculation.nightPay },
                             { label: '휴일근로수당 (×1.5)', value: calculation.holidayPay },
-                            { label: calculation.is209Pattern ? `주휴수당 (${payData.workedHours}h에 주휴 포함 → 별도 미계산)` : `주휴수당 (주${payData.weeklyHours || 40}h)`, value: calculation.weeklyHolidayPay },
+                            {
+                                label: (() => {
+                                    if (calculation.weeklyBreakdown?.length > 0) {
+                                        const eligible = calculation.weeklyBreakdown.filter(w => w.qualifies).length;
+                                        return `주휴수당 (${eligible}/${calculation.weeklyBreakdown.length}주 해당)`;
+                                    }
+                                    if (calculation.is209Pattern) return `주휴수당 (${payData.workedHours}h에 주휴 포함)`;
+                                    return `주휴수당 (주${payData.weeklyHours || 40}h)`;
+                                })(), value: calculation.weeklyHolidayPay
+                            },
                             { label: '상여금', value: calculation.bonus },
                             { label: `연차수당${calculation.annualLeaveDays > 0 ? ` (1일급 ${fmt(calculation.dailyWage)}원×${calculation.annualLeaveDays}일)` : ''}`, value: calculation.annualLeavePay },
                             { label: '명절수당', value: calculation.holidayBonus },
@@ -531,6 +636,27 @@ const Payroll = () => {
                                 <span style={{ fontWeight: 600 }}>{fmt(row.value)}원</span>
                             </div>
                         ))}
+
+                        {/* 주별 주휴수당 상세 */}
+                        {calculation.weeklyBreakdown?.length > 0 && (
+                            <div style={{
+                                background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px',
+                                padding: '8px 10px', marginTop: '6px', fontSize: '0.72rem'
+                            }}>
+                                <div style={{ fontWeight: 700, color: '#059669', marginBottom: '4px' }}>📊 주별 주휴수당 상세</div>
+                                {calculation.weeklyBreakdown.map(w => (
+                                    <div key={w.week} style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0', color: w.qualifies ? '#065f46' : '#92400e' }}>
+                                        <span>{w.week}주차: {w.hours}h {w.qualifies ? '✅' : '❌(15h 미만)'}</span>
+                                        <span style={{ fontWeight: 600 }}>{w.qualifies ? `${fmt(w.pay)}원` : '미지급'}</span>
+                                    </div>
+                                ))}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #bbf7d0', paddingTop: '3px', marginTop: '3px', fontWeight: 700, color: '#059669' }}>
+                                    <span>주휴수당 합계</span>
+                                    <span>{fmt(calculation.weeklyHolidayPay)}원</span>
+                                </div>
+                            </div>
+                        )}
+
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '0.85rem', borderTop: '1px solid var(--border)', marginTop: '4px', fontWeight: 700, color: '#059669' }}>
                             <span>지급총액</span>
                             <span>{fmt(calculation.totalPay)}원</span>

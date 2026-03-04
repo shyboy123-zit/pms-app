@@ -78,7 +78,7 @@ export const DataProvider = ({ children }) => {
             }
 
             try {
-                const { data: trans } = await supabase.from('inventory_transactions').select('*').order('transaction_date', { ascending: false });
+                const { data: trans } = await supabase.from('inventory_transactions').select('*').order('transaction_date', { ascending: false }).order('created_at', { ascending: false });
                 if (trans) setInventoryTransactions(trans);
             } catch (e) {
                 console.warn('inventory_transactions table not available:', e.message);

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, ShoppingCart, AlertCircle, PlayCircle, Edit, Trash2 } from 'lucide-react';
+import { Plus, ShoppingCart, AlertCircle, PlayCircle, Edit, Trash2, Calendar, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Materials = () => {
@@ -9,7 +9,8 @@ const Materials = () => {
         materials, addMaterial, updateMaterial, deleteMaterial,
         materialUsage, addMaterialUsage, updateMaterialUsage, deleteMaterialUsage,
         addPurchaseRequest,
-        inventoryTransactions, addInventoryTransaction
+        inventoryTransactions, addInventoryTransaction,
+        addVoucher
     } = useData();
 
     const [trackingDate, setTrackingDate] = useState(new Date().toISOString().split('T')[0]);
@@ -18,7 +19,7 @@ const Materials = () => {
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
     const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
 
-    const [newItem, setNewItem] = useState({ name: '', type: '플라스틱', stock: 0, unit: 'kg', minStock: 0, supplier: '' });
+    const [newItem, setNewItem] = useState({ name: '', type: '플라스틱', stock: 0, unit: 'kg', minStock: 0, unit_price: '', supplier: '' });
     const [orderItem, setOrderItem] = useState(null);
     const [usageItem, setUsageItem] = useState({
         materialId: '',
@@ -60,6 +61,7 @@ const Materials = () => {
                 stock: newItem.stock,
                 unit: newItem.unit,
                 min_stock: newItem.minStock,
+                unit_price: parseFloat(newItem.unit_price) || 0,
                 supplier: newItem.supplier
             };
             updateMaterial(editingMaterialId, itemToUpdate);
@@ -72,6 +74,7 @@ const Materials = () => {
                 stock: newItem.stock,
                 unit: newItem.unit,
                 min_stock: newItem.minStock,
+                unit_price: parseFloat(newItem.unit_price) || 0,
                 supplier: newItem.supplier
             };
             addMaterial(itemToAdd);
@@ -81,7 +84,7 @@ const Materials = () => {
         setIsModalOpen(false);
         setIsEditingMaterial(false);
         setEditingMaterialId(null);
-        setNewItem({ name: '', type: '플라스틱', stock: 0, unit: 'kg', minStock: 0, supplier: '' });
+        setNewItem({ name: '', type: '플라스틱', stock: 0, unit: 'kg', minStock: 0, unit_price: '', supplier: '' });
     };
 
     const handleEditMaterial = (material) => {
@@ -91,6 +94,7 @@ const Materials = () => {
             stock: material.stock,
             unit: material.unit,
             minStock: material.min_stock,
+            unit_price: material.unit_price || '',
             supplier: material.supplier
         });
         setIsEditingMaterial(true);
@@ -147,21 +151,39 @@ const Materials = () => {
         materialId: null,
         materialName: '',
         quantity: 0,
+        ordered_quantity: '',
         unit: 'kg',
+        unit_price: '',
+        supplier: '',
         incoming_date: new Date().toISOString().split('T')[0],
         notes: ''
     });
+
+    // 월별 요약
+    const [summaryMonth, setSummaryMonth] = useState(new Date().toISOString().slice(0, 7));
 
     const handleIncoming = (material) => {
         setIncomingData({
             materialId: material.id,
             materialName: material.name,
             quantity: 0,
+            ordered_quantity: '',
             unit: material.unit,
+            unit_price: material.unit_price || '',
+            supplier: material.supplier || '',
             incoming_date: new Date().toISOString().split('T')[0],
             notes: ''
         });
         setIsIncomingModalOpen(true);
+    };
+
+    // 입고 검수 상태 계산
+    const getVerificationStatus = (received, ordered) => {
+        if (!ordered || ordered <= 0) return null;
+        const diff = received - ordered;
+        if (Math.abs(diff) < 0.01) return { status: '일치', color: '#059669', bg: '#dcfce7', icon: '✅' };
+        if (diff < 0) return { status: '부족', color: '#dc2626', bg: '#fee2e2', icon: '⚠️', diff: Math.abs(diff) };
+        return { status: '초과', color: '#d97706', bg: '#fef3c7', icon: '⚠️', diff: Math.abs(diff) };
     };
 
     const confirmIncoming = async () => {
@@ -169,32 +191,78 @@ const Materials = () => {
             return alert('입고 수량을 입력해주세요.');
         }
 
-        // Update material stock directly
         const material = materials.find(m => m.id === incomingData.materialId);
-        if (material) {
-            const newStock = material.stock + parseFloat(incomingData.quantity);
-            await updateMaterial(incomingData.materialId, { stock: newStock });
+        if (!material) return;
 
-            // Save incoming transaction record for tracking
+        const newStock = material.stock + parseFloat(incomingData.quantity);
+        await updateMaterial(incomingData.materialId, { stock: newStock });
+
+        // 검수 상태 계산
+        const orderedQty = incomingData.ordered_quantity ? parseFloat(incomingData.ordered_quantity) : null;
+        const receivedQty = parseFloat(incomingData.quantity);
+        const unitPrice = parseFloat(incomingData.unit_price) || 0;
+        const supplierName = incomingData.supplier || '';
+        let verificationStatus = null;
+        if (orderedQty && orderedQty > 0) {
+            const diff = receivedQty - orderedQty;
+            if (Math.abs(diff) < 0.01) verificationStatus = '일치';
+            else if (diff < 0) verificationStatus = '부족';
+            else verificationStatus = '초과';
+        }
+
+        // 1) 입출고 기록 저장
+        try {
             await addInventoryTransaction({
-                material_id: incomingData.materialId,
                 item_name: incomingData.materialName,
                 transaction_type: 'IN',
-                quantity: parseFloat(incomingData.quantity),
+                quantity: receivedQty,
                 unit: incomingData.unit,
+                unit_price: unitPrice,
                 transaction_date: incomingData.incoming_date,
+                client: supplierName,
+                ordered_quantity: orderedQty,
+                verification_status: verificationStatus,
+                supplier: supplierName,
                 notes: incomingData.notes || null
             });
-
-            alert(`✓ ${incomingData.materialName} ${incomingData.quantity}${incomingData.unit} 입고 처리되었습니다.\n현재 재고: ${newStock}${incomingData.unit}`);
+        } catch (e) {
+            console.error('입고 기록 저장 실패:', e);
         }
+
+        // 2) 매입 전표 자동 생성 (업체별 매입으로 잡힘)
+        try {
+            const { error: voucherError } = await addVoucher({
+                voucher_date: incomingData.incoming_date,
+                voucher_type: '매입',
+                item_name: incomingData.materialName,
+                item_code: '',
+                quantity: receivedQty,
+                unit: incomingData.unit,
+                unit_price: unitPrice,
+                client: supplierName,
+                notes: `[자동-원재료] ${incomingData.materialName} ${receivedQty}${incomingData.unit} 입고`
+            });
+            if (voucherError) {
+                console.error('매입 전표 생성 실패:', voucherError);
+                alert('⚠️ 입고는 처리되었으나 매입 전표 생성에 실패했습니다.');
+            }
+        } catch (e) {
+            console.error('매입 전표 생성 예외:', e);
+            alert('⚠️ 입고는 처리되었으나 매입 전표 생성에 실패했습니다.');
+        }
+
+        const statusMsg = verificationStatus ? ` [검수: ${verificationStatus}]` : '';
+        alert(`✓ ${incomingData.materialName} ${incomingData.quantity}${incomingData.unit} 입고 처리되었습니다.${statusMsg}\n현재 재고: ${newStock}${incomingData.unit}\n📋 매입 전표가 ${supplierName || '(미지정)'} 업체로 자동 등록되었습니다.`);
 
         setIsIncomingModalOpen(false);
         setIncomingData({
             materialId: null,
             materialName: '',
             quantity: 0,
+            ordered_quantity: '',
             unit: 'kg',
+            unit_price: '',
+            supplier: '',
             incoming_date: new Date().toISOString().split('T')[0],
             notes: ''
         });
@@ -398,6 +466,10 @@ const Materials = () => {
                     <input type="number" className="form-input" value={newItem.minStock} onChange={(e) => setNewItem({ ...newItem, minStock: parseInt(e.target.value) || 0 })} />
                 </div>
                 <div className="form-group">
+                    <label className="form-label">단가 (₩)</label>
+                    <input type="number" className="form-input" value={newItem.unit_price} onChange={(e) => setNewItem({ ...newItem, unit_price: e.target.value })} placeholder="단위당 가격" />
+                </div>
+                <div className="form-group">
                     <label className="form-label">공급사</label>
                     <input className="form-input" value={newItem.supplier} onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })} />
                 </div>
@@ -517,9 +589,9 @@ const Materials = () => {
                 </div>
             </Modal>
 
-            {/* 원재료 입고 등록 모달 */}
+            {/* 원재료 입고 검수 모달 */}
             <Modal
-                title="원재료 입고 등록"
+                title="원재료 입고 검수"
                 isOpen={isIncomingModalOpen}
                 onClose={() => setIsIncomingModalOpen(false)}
             >
@@ -528,18 +600,91 @@ const Materials = () => {
                     <input className="form-input" value={incomingData.materialName} disabled />
                 </div>
                 <div className="form-group">
-                    <label className="form-label">입고 수량</label>
+                    <label className="form-label">공급사</label>
+                    <input
+                        className="form-input"
+                        value={incomingData.supplier}
+                        onChange={(e) => setIncomingData({ ...incomingData, supplier: e.target.value })}
+                        placeholder="공급사명"
+                    />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">발주 수량 <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(주문한 수량)</span></label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={incomingData.ordered_quantity}
+                            onChange={(e) => setIncomingData({ ...incomingData, ordered_quantity: e.target.value })}
+                            placeholder="발주 수량 입력"
+                        />
+                        <input className="form-input" style={{ width: '80px' }} value={incomingData.unit} disabled />
+                    </div>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">실입고 수량</label>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <input
                             type="number"
                             className="form-input"
                             value={incomingData.quantity}
                             onChange={(e) => setIncomingData({ ...incomingData, quantity: parseFloat(e.target.value) || 0 })}
-                            placeholder="입고 수량"
+                            placeholder="실제 입고된 수량"
                         />
                         <input className="form-input" style={{ width: '80px' }} value={incomingData.unit} disabled />
                     </div>
                 </div>
+                <div className="form-group">
+                    <label className="form-label">단가 (₩)</label>
+                    <input
+                        type="number"
+                        className="form-input"
+                        value={incomingData.unit_price}
+                        onChange={(e) => setIncomingData({ ...incomingData, unit_price: e.target.value })}
+                        placeholder="kg당 / EA당 단가"
+                    />
+                    {incomingData.unit_price && incomingData.quantity > 0 && (
+                        <p style={{ fontSize: '0.82rem', color: '#2563eb', fontWeight: 600, marginTop: '0.3rem' }}>
+                            합계: ₩{(parseFloat(incomingData.unit_price) * parseFloat(incomingData.quantity)).toLocaleString()}
+                        </p>
+                    )}
+                </div>
+
+                {/* 검수 결과 표시 */}
+                {incomingData.ordered_quantity && incomingData.quantity > 0 && (() => {
+                    const verification = getVerificationStatus(
+                        parseFloat(incomingData.quantity),
+                        parseFloat(incomingData.ordered_quantity)
+                    );
+                    if (!verification) return null;
+                    return (
+                        <div style={{
+                            background: verification.bg,
+                            border: `1px solid ${verification.color}30`,
+                            borderLeft: `4px solid ${verification.color}`,
+                            borderRadius: '10px',
+                            padding: '0.875rem 1.25rem',
+                            marginBottom: '1rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem'
+                        }}>
+                            <span style={{ fontSize: '1.2rem' }}>{verification.icon}</span>
+                            <div>
+                                <div style={{ fontWeight: 700, color: verification.color, fontSize: '0.95rem' }}>
+                                    검수 결과: {verification.status}
+                                </div>
+                                <div style={{ fontSize: '0.85rem', color: verification.color, opacity: 0.85, marginTop: '2px' }}>
+                                    {verification.status === '일치'
+                                        ? `발주 ${incomingData.ordered_quantity}${incomingData.unit} = 입고 ${incomingData.quantity}${incomingData.unit}`
+                                        : `발주 ${incomingData.ordered_quantity}${incomingData.unit} → 입고 ${incomingData.quantity}${incomingData.unit} (${verification.status === '부족' ? '-' : '+'}${verification.diff.toFixed(1)}${incomingData.unit})`
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 <div className="form-group">
                     <label className="form-label">입고일</label>
                     <input
@@ -563,8 +708,8 @@ const Materials = () => {
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={() => setIsIncomingModalOpen(false)}>취소</button>
                     <button className="btn-submit" onClick={confirmIncoming}>
-                        <Plus size={16} style={{ marginRight: '0.5rem' }} />
-                        입고 처리
+                        <CheckCircle size={16} style={{ marginRight: '0.5rem' }} />
+                        입고 검수 완료
                     </button>
                 </div>
             </Modal>
@@ -605,8 +750,9 @@ const Materials = () => {
 
                 {(() => {
                     // 해당 날짜 입고 (inventory_transactions)
+                    const materialNames = new Set((materials || []).map(m => m.name));
                     const dayIncoming = (inventoryTransactions || []).filter(t =>
-                        t.transaction_date === trackingDate && t.transaction_type === 'IN'
+                        t.transaction_date === trackingDate && t.transaction_type === 'IN' && materialNames.has(t.item_name)
                     );
                     // 해당 날짜 출고 (material_usage)
                     const dayOutgoing = (materialUsage || []).filter(u =>
@@ -736,6 +882,180 @@ const Materials = () => {
                     </div>
                 </div>
             )}
+
+            {/* 월별 원재료 입고/사용량 요약 */}
+            <div className="usage-history-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '2px solid var(--border)' }}>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
+                        📊 월별 원재료 입고/사용량 요약
+                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <button
+                            onClick={() => {
+                                const [y, m] = summaryMonth.split('-').map(Number);
+                                const prev = new Date(y, m - 2, 1);
+                                setSummaryMonth(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
+                            }}
+                            style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontSize: '0.85rem' }}
+                        >◀</button>
+                        <input
+                            type="month"
+                            value={summaryMonth}
+                            onChange={(e) => setSummaryMonth(e.target.value)}
+                            style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem', fontWeight: 600 }}
+                        />
+                        <button
+                            onClick={() => {
+                                const [y, m] = summaryMonth.split('-').map(Number);
+                                const next = new Date(y, m, 1);
+                                setSummaryMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+                            }}
+                            style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontSize: '0.85rem' }}
+                        >▶</button>
+                    </div>
+                </div>
+
+                {(() => {
+                    // 해당 월의 원재료 입고 (원재료 목록에 있는 항목만)
+                    const materialNames = new Set((materials || []).map(m => m.name));
+                    const monthIncoming = (inventoryTransactions || []).filter(t =>
+                        t.transaction_type === 'IN' && materialNames.has(t.item_name) && t.transaction_date && t.transaction_date.startsWith(summaryMonth)
+                    );
+                    // 해당 월의 사용 (material_usage)
+                    const monthUsage = (materialUsage || []).filter(u =>
+                        u.usage_date && u.usage_date.startsWith(summaryMonth)
+                    );
+
+                    // 원재료별 집계
+                    const summaryMap = {};
+
+                    // materials 기준으로 초기화
+                    (materials || []).forEach(mat => {
+                        summaryMap[mat.id] = {
+                            name: mat.name,
+                            unit: mat.unit,
+                            incomingQty: 0,
+                            orderedQty: 0,
+                            usageQty: 0,
+                            incomingCount: 0,
+                            usageCount: 0,
+                            mismatchCount: 0
+                        };
+                    });
+
+                    monthIncoming.forEach(t => {
+                        const key = t.material_id || t.item_name;
+                        if (!summaryMap[key]) {
+                            summaryMap[key] = { name: t.item_name, unit: t.unit, incomingQty: 0, orderedQty: 0, usageQty: 0, incomingCount: 0, usageCount: 0, mismatchCount: 0 };
+                        }
+                        summaryMap[key].incomingQty += parseFloat(t.quantity) || 0;
+                        summaryMap[key].orderedQty += parseFloat(t.ordered_quantity) || 0;
+                        summaryMap[key].incomingCount += 1;
+                        if (t.verification_status && t.verification_status !== '일치') {
+                            summaryMap[key].mismatchCount += 1;
+                        }
+                    });
+
+                    monthUsage.forEach(u => {
+                        const key = u.material_id;
+                        if (!summaryMap[key]) {
+                            summaryMap[key] = { name: u.material_name, unit: u.unit, incomingQty: 0, orderedQty: 0, usageQty: 0, incomingCount: 0, usageCount: 0, mismatchCount: 0 };
+                        }
+                        summaryMap[key].usageQty += parseFloat(u.quantity) || 0;
+                        summaryMap[key].usageCount += 1;
+                    });
+
+                    // 활동이 있는 원재료만 필터
+                    const summaryRows = Object.values(summaryMap).filter(
+                        row => row.incomingQty > 0 || row.usageQty > 0
+                    );
+
+                    const totalIncoming = summaryRows.reduce((s, r) => s + r.incomingCount, 0);
+                    const totalUsage = summaryRows.reduce((s, r) => s + r.usageCount, 0);
+                    const totalMismatch = summaryRows.reduce((s, r) => s + r.mismatchCount, 0);
+
+                    return (
+                        <div>
+                            {/* 요약 카드 */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                                <div style={{ background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)', padding: '1rem', borderRadius: '10px', border: '1px solid #a7f3d0' }}>
+                                    <div style={{ fontSize: '0.78rem', color: '#065f46', fontWeight: 600, marginBottom: '4px' }}>📥 입고 건수</div>
+                                    <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#059669' }}>{totalIncoming}건</div>
+                                </div>
+                                <div style={{ background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', padding: '1rem', borderRadius: '10px', border: '1px solid #93c5fd' }}>
+                                    <div style={{ fontSize: '0.78rem', color: '#1e40af', fontWeight: 600, marginBottom: '4px' }}>📤 사용 건수</div>
+                                    <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#2563eb' }}>{totalUsage}건</div>
+                                </div>
+                                <div style={{ background: totalMismatch > 0 ? 'linear-gradient(135deg, #fef3c7, #fde68a)' : 'linear-gradient(135deg, #f0fdf4, #dcfce7)', padding: '1rem', borderRadius: '10px', border: `1px solid ${totalMismatch > 0 ? '#fbbf24' : '#86efac'}` }}>
+                                    <div style={{ fontSize: '0.78rem', color: totalMismatch > 0 ? '#92400e' : '#166534', fontWeight: 600, marginBottom: '4px' }}>🔍 검수 불일치</div>
+                                    <div style={{ fontSize: '1.3rem', fontWeight: 800, color: totalMismatch > 0 ? '#d97706' : '#16a34a' }}>{totalMismatch}건</div>
+                                </div>
+                            </div>
+
+                            {summaryRows.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                    📭 {summaryMonth} 월 입출고 기록이 없습니다.
+                                </div>
+                            ) : (
+                                <div className="usage-history-table">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                                                <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>원재료명</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>발주수량</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>실입고수량</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>과부족</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>사용량</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>재고 변동</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {summaryRows.map((row, idx) => {
+                                                const diff = row.orderedQty > 0 ? row.incomingQty - row.orderedQty : null;
+                                                const stockChange = row.incomingQty - row.usageQty;
+                                                return (
+                                                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                        <td style={{ padding: '0.75rem', fontWeight: 600 }}>{row.name}</td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'right', color: row.orderedQty > 0 ? '#374151' : 'var(--text-muted)' }}>
+                                                            {row.orderedQty > 0 ? `${row.orderedQty.toLocaleString()} ${row.unit}` : '-'}
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: '#059669' }}>
+                                                            {row.incomingQty > 0 ? `${row.incomingQty.toLocaleString()} ${row.unit}` : '-'}
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                            {diff !== null ? (
+                                                                <span style={{
+                                                                    padding: '2px 10px',
+                                                                    borderRadius: '12px',
+                                                                    fontSize: '0.8rem',
+                                                                    fontWeight: 700,
+                                                                    background: Math.abs(diff) < 0.01 ? '#dcfce7' : diff < 0 ? '#fee2e2' : '#fef3c7',
+                                                                    color: Math.abs(diff) < 0.01 ? '#166534' : diff < 0 ? '#dc2626' : '#d97706'
+                                                                }}>
+                                                                    {Math.abs(diff) < 0.01 ? '✅ 일치' : diff < 0 ? `▼ ${Math.abs(diff).toFixed(1)} 부족` : `▲ ${diff.toFixed(1)} 초과`}
+                                                                </span>
+                                                            ) : (
+                                                                <span style={{ color: 'var(--text-muted)' }}>-</span>
+                                                            )}
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: '#2563eb' }}>
+                                                            {row.usageQty > 0 ? `${row.usageQty.toLocaleString()} ${row.unit}` : '-'}
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: stockChange >= 0 ? '#059669' : '#dc2626' }}>
+                                                            {stockChange >= 0 ? '+' : ''}{stockChange.toFixed(1)} {row.unit}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
+            </div>
+
 
             <style>{`
                 .page-container { 

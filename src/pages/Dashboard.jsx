@@ -17,7 +17,24 @@ import {
 } from 'lucide-react';
 
 const Dashboard = () => {
-    const { equipments, materials, inspections, products, workOrders, molds, moldMovement, injectionConditions, productionLogs, employees } = useData();
+    const { equipments, materials, inspections, products, workOrders, molds, moldMovement, injectionConditions, productionLogs, employees, inventoryTransactions } = useData();
+
+    // 입출고 데이터로 제품 재고 계산
+    const getProductStock = (product) => {
+        const key = product.product_code || product.name;
+        let stock = 0;
+        (inventoryTransactions || []).forEach(t => {
+            const tKey = t.item_code || t.item_name;
+            if (tKey === key) {
+                if (t.transaction_type === 'IN' || t.transaction_type === 'ADJUST') {
+                    stock += parseFloat(t.quantity);
+                } else if (t.transaction_type === 'OUT') {
+                    stock -= parseFloat(t.quantity);
+                }
+            }
+        });
+        return stock;
+    };
 
     // 뉴스 속보 상태
     const [newsItems, setNewsItems] = useState([]);
@@ -91,6 +108,9 @@ const Dashboard = () => {
 
     // 2. 안전재고 미달 원재료
     const lowStockMaterials = materials.filter(m => m.stock < m.min_stock);
+
+    // 2-1. 안전재고 미달 완제품
+    const lowStockProducts = products.filter(p => p.min_stock > 0 && getProductStock(p) < p.min_stock);
 
     // 3. 일일 불량 현황
     const todayInspections = inspections.filter(i => i.date === today);
@@ -227,14 +247,14 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div className={`stat-card stock ${lowStockMaterials.length > 0 ? 'alert' : ''}`}>
+                <div className={`stat-card stock ${(lowStockMaterials.length + lowStockProducts.length) > 0 ? 'alert' : ''}`}>
                     <div className="stat-icon">
                         <AlertTriangle />
                     </div>
                     <div className="stat-content">
                         <p className="stat-label">재고 부족</p>
-                        <h3 className="stat-value">{lowStockMaterials.length}건</h3>
-                        <p className="stat-desc">안전재고 미달</p>
+                        <h3 className="stat-value">{lowStockMaterials.length + lowStockProducts.length}건</h3>
+                        <p className="stat-desc">안전재고 미달 (원재료 {lowStockMaterials.length} / 제품 {lowStockProducts.length})</p>
                     </div>
                 </div>
 
@@ -627,10 +647,59 @@ const Dashboard = () => {
                                     );
                                 })}
                             </div>
-                        ) : (
+                        ) : null}
+
+                        {/* 완제품 안전재고 미달 */}
+                        {lowStockProducts.length > 0 && (
+                            <div className="stock-alert-list" style={{ marginTop: lowStockMaterials.length > 0 ? '0.75rem' : 0 }}>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem', padding: '0 0.25rem' }}>📦 완제품 안전재고 미달</div>
+                                {lowStockProducts.map(product => {
+                                    const currentStock = getProductStock(product);
+                                    const shortage = product.min_stock - currentStock;
+                                    const severity = currentStock === 0 ? 'critical' :
+                                        currentStock < (product.min_stock * 0.3) ? 'high' : 'medium';
+
+                                    return (
+                                        <div key={product.id} className={`stock-alert-item ${severity}`}>
+                                            <div className="alert-header">
+                                                <span className="material-name">{product.name}</span>
+                                                <span className={`severity-badge ${severity}`}>
+                                                    {severity === 'critical' ? '재고 없음' : severity === 'high' ? '긴급' : '주의'}
+                                                </span>
+                                            </div>
+                                            <div className="stock-info">
+                                                <div className="stock-numbers">
+                                                    <span className="current-stock">
+                                                        현재: <strong>{currentStock.toLocaleString()}</strong> {product.unit}
+                                                    </span>
+                                                    <span className="min-stock">
+                                                        안전: {product.min_stock.toLocaleString()} {product.unit}
+                                                    </span>
+                                                </div>
+                                                <div className="shortage">
+                                                    부족량: <strong className="shortage-value">▼ {shortage.toLocaleString()} {product.unit}</strong>
+                                                </div>
+                                            </div>
+                                            <div className="stock-progress-bar">
+                                                <div
+                                                    className="stock-progress-fill"
+                                                    style={{
+                                                        width: `${Math.min((currentStock / product.min_stock) * 100, 100)}%`,
+                                                        background: severity === 'critical' ? '#dc2626' :
+                                                            severity === 'high' ? '#ea580c' : '#f59e0b'
+                                                    }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {lowStockMaterials.length === 0 && lowStockProducts.length === 0 && (
                             <div className="empty-state success">
                                 <CheckCircle2 size={48} color="#10b981" />
-                                <p>모든 원재료 재고가 안전 수준입니다</p>
+                                <p>모든 재고가 안전 수준입니다</p>
                             </div>
                         )}
                     </div>

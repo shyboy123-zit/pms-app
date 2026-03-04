@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import DateRangePicker from '../components/DateRangePicker';
-import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const InventoryInOut = () => {
@@ -13,7 +13,7 @@ const InventoryInOut = () => {
         updateInventoryTransaction,
         deleteInventoryTransaction,
         getTransactionsByDateRange,
-        addSalesRecord
+        addVoucher
     } = useData();
 
     const [activeTab, setActiveTab] = useState('all'); // 'all', 'in', 'out', 'adjust', 'status'
@@ -39,6 +39,32 @@ const InventoryInOut = () => {
         client: '',
         notes: ''
     });
+
+    // 다건 등록용 state
+    const [batchCommon, setBatchCommon] = useState({
+        transactionType: 'IN',
+        transactionDate: new Date().toISOString().split('T')[0],
+        client: '',
+        notes: ''
+    });
+    const emptyBatchItem = { productId: '', itemName: '', itemCode: '', quantity: 0, unit: 'EA', unitPrice: 0 };
+    const [batchItems, setBatchItems] = useState([{ ...emptyBatchItem }]);
+    const [activeBatchDropdown, setActiveBatchDropdown] = useState(-1);
+
+    const addBatchItemRow = () => setBatchItems(prev => [...prev, { ...emptyBatchItem }]);
+    const removeBatchItemRow = (idx) => { if (batchItems.length > 1) setBatchItems(prev => prev.filter((_, i) => i !== idx)); };
+    const updateBatchItem = (idx, field, value) => setBatchItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
+    const selectBatchProduct = (idx, product) => {
+        setBatchItems(prev => prev.map((item, i) => i === idx ? {
+            ...item,
+            productId: product.id,
+            itemName: product.name,
+            itemCode: product.product_code || '',
+            unitPrice: product.unit_price || 0,
+            unit: product.unit || 'EA'
+        } : item));
+        setActiveBatchDropdown(-1);
+    };
 
     // 제품 선택 시 정보 자동 적용
     const handleProductSelect = (productId) => {
@@ -149,67 +175,94 @@ const InventoryInOut = () => {
     ];
 
     const handleSave = async () => {
-        if (newItem.transactionType === 'ADJUST') {
+        // ── 수정 모드 (단일) ──
+        if (isEditMode && editingId) {
+            if (newItem.transactionType === 'ADJUST') {
+                if (!newItem.itemName) return alert('품목을 선택해주세요.');
+                const diff = actualStock - systemStock;
+                if (diff === 0) return alert('조정할 수량 차이가 없습니다.');
+                await updateInventoryTransaction(editingId, {
+                    transaction_type: 'ADJUST',
+                    item_name: newItem.itemName,
+                    item_code: newItem.itemCode,
+                    quantity: diff,
+                    unit: newItem.unit,
+                    unit_price: parseFloat(newItem.unitPrice) || 0,
+                    transaction_date: newItem.transactionDate,
+                    client: '',
+                    notes: `[재고조정] 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff})${newItem.notes ? ' / ' + newItem.notes : ''}`
+                });
+            } else {
+                if (!newItem.itemName || newItem.quantity <= 0) return alert('품목명과 수량을 입력해주세요.');
+                await updateInventoryTransaction(editingId, {
+                    transaction_type: newItem.transactionType,
+                    item_name: newItem.itemName,
+                    item_code: newItem.itemCode,
+                    quantity: parseFloat(newItem.quantity),
+                    unit: newItem.unit,
+                    unit_price: parseFloat(newItem.unitPrice),
+                    transaction_date: newItem.transactionDate,
+                    client: newItem.client,
+                    notes: newItem.notes
+                });
+            }
+            resetForm();
+            return;
+        }
+
+        // ── 신규 등록 (다건 배치) ──
+        if (batchCommon.transactionType === 'ADJUST') {
+            // 재고조정은 단일만 지원
             if (!newItem.itemName) return alert('품목을 선택해주세요.');
             const diff = actualStock - systemStock;
             if (diff === 0) return alert('조정할 수량 차이가 없습니다.');
-
-            const itemToSave = {
+            await addInventoryTransaction({
                 transaction_type: 'ADJUST',
                 item_name: newItem.itemName,
                 item_code: newItem.itemCode,
                 quantity: diff,
                 unit: newItem.unit,
                 unit_price: parseFloat(newItem.unitPrice) || 0,
-                transaction_date: newItem.transactionDate,
+                transaction_date: batchCommon.transactionDate,
                 client: '',
-                notes: `[재고조정] 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff})${newItem.notes ? ' / ' + newItem.notes : ''}`
-            };
-
-            if (isEditMode && editingId) {
-                await updateInventoryTransaction(editingId, itemToSave);
-            } else {
-                await addInventoryTransaction(itemToSave);
-            }
+                notes: `[재고조정] 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff})${batchCommon.notes ? ' / ' + batchCommon.notes : ''}`
+            });
             resetForm();
             return;
         }
 
-        if (!newItem.itemName || newItem.quantity <= 0) {
-            return alert('품목명과 수량을 입력해주세요.');
-        }
+        const validItems = batchItems.filter(item => item.itemName && item.quantity > 0);
+        if (validItems.length === 0) return alert('최소 1개 이상의 품목을 입력해주세요.');
 
-        const itemToSave = {
-            transaction_type: newItem.transactionType,
-            item_name: newItem.itemName,
-            item_code: newItem.itemCode,
-            quantity: parseFloat(newItem.quantity),
-            unit: newItem.unit,
-            unit_price: parseFloat(newItem.unitPrice),
-            transaction_date: newItem.transactionDate,
-            client: newItem.client,
-            notes: newItem.notes
-        };
+        for (const item of validItems) {
+            await addInventoryTransaction({
+                transaction_type: batchCommon.transactionType,
+                item_name: item.itemName,
+                item_code: item.itemCode,
+                quantity: parseFloat(item.quantity),
+                unit: item.unit,
+                unit_price: parseFloat(item.unitPrice),
+                transaction_date: batchCommon.transactionDate,
+                client: batchCommon.client,
+                notes: batchCommon.notes
+            });
 
-        if (isEditMode && editingId) {
-            await updateInventoryTransaction(editingId, itemToSave);
-        } else {
-            await addInventoryTransaction(itemToSave);
-
-            // 매출/매입 기록 자동 등록 (재고조정은 제외)
-            if (addSalesRecord) {
-                const salesRecord = {
-                    date: newItem.transactionDate,
-                    client: newItem.client,
-                    item: newItem.itemName,
-                    amount: parseFloat(newItem.quantity) * parseFloat(newItem.unitPrice),
-                    type: newItem.transactionType === 'OUT' ? '매출' : '매입',
-                    notes: `[자동] ${newItem.itemName} ${newItem.quantity}개 ${newItem.transactionType === 'OUT' ? '출고' : '입고'}`
-                };
-                await addSalesRecord(salesRecord);
+            // 출고 → 매출 전표 자동 생성 (입고는 제품 입고이므로 매입 아님)
+            if (addVoucher && batchCommon.transactionType === 'OUT') {
+                await addVoucher({
+                    voucher_date: batchCommon.transactionDate,
+                    voucher_type: '매출',
+                    item_name: item.itemName,
+                    item_code: item.itemCode,
+                    quantity: parseFloat(item.quantity),
+                    unit: item.unit,
+                    unit_price: parseFloat(item.unitPrice),
+                    client: batchCommon.client,
+                    notes: `[자동-입출고] ${item.itemName} ${item.quantity}${item.unit} 출고`
+                });
             }
         }
-
+        alert(`${validItems.length}건의 거래가 등록되었습니다.`);
         resetForm();
     };
 
@@ -254,6 +307,14 @@ const InventoryInOut = () => {
             client: '',
             notes: ''
         });
+        setBatchCommon({
+            transactionType: 'IN',
+            transactionDate: new Date().toISOString().split('T')[0],
+            client: '',
+            notes: ''
+        });
+        setBatchItems([{ ...emptyBatchItem }]);
+        setActiveBatchDropdown(-1);
     };
 
     // 재고현황에서 직접 재고조정 시작
@@ -500,171 +561,259 @@ const InventoryInOut = () => {
 
             {/* Transaction Modal */}
             <Modal
-                title={isEditMode ? '거래 수정' : '신규 거래 등록'}
+                title={isEditMode ? '거래 수정' : '거래 일괄 등록'}
                 isOpen={isModalOpen}
                 onClose={resetForm}
             >
-                <div className="form-group">
-                    <label className="form-label">거래 구분</label>
-                    <select
-                        className="form-input"
-                        value={newItem.transactionType}
-                        onChange={(e) => setNewItem({ ...newItem, transactionType: e.target.value, productId: '', itemName: '', itemCode: '', unitPrice: 0 })}
-                    >
-                        <option value="IN">입고</option>
-                        <option value="OUT">출고</option>
-                        <option value="ADJUST">재고조정</option>
-                    </select>
-                </div>
-                <div className="form-group">
-                    <label className="form-label">제품 선택 *</label>
-                    <select
-                        className="form-input"
-                        value={newItem.productId}
-                        onChange={(e) => {
-                            handleProductSelect(e.target.value);
-                            if (newItem.transactionType === 'ADJUST') {
-                                const product = products.find(p => p.id === e.target.value);
-                                if (product) {
-                                    const stock = getSystemStock(product.product_code, product.name);
-                                    setSystemStock(stock);
-                                    setActualStock(stock);
-                                }
-                            }
-                        }}
-                    >
-                        <option value="">제품을 선택하세요</option>
-                        {products.filter(p => p.status !== '단종' && (
-                            newItem.transactionType === 'ADJUST' ? true :
-                                newItem.transactionType === 'IN' ? p.product_type === '매입' : p.product_type === '매출'
-                        )).map(p => (
-                            <option key={p.id} value={p.id}>
-                                {p.product_code ? `[${p.product_code}] ` : ''}{p.name} ({p.model || '규격 없음'}) {p.unit_price ? `- ₩${Number(p.unit_price).toLocaleString()}` : ''}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                {newItem.productId && (
-                    <div style={{ padding: '0.6rem 0.75rem', background: '#f0f9ff', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #bae6fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.85rem', color: '#0369a1', fontWeight: 600 }}>📦 {newItem.itemName}</span>
-                        <span style={{ fontSize: '0.85rem', color: '#0ea5e9', fontWeight: 700 }}>단가: ₩{Number(newItem.unitPrice).toLocaleString()}</span>
-                    </div>
-                )}
-                {newItem.transactionType === 'ADJUST' ? (
+                {isEditMode ? (
+                    /* ──── 수정 모드: 단일 품목 ──── */
                     <>
-                        <div className="adjust-info-card">
-                            <div className="adjust-info-row">
-                                <span className="adjust-label">📦 시스템 재고</span>
-                                <span className="adjust-system-value">{systemStock.toLocaleString()} {newItem.unit}</span>
-                            </div>
-                            <div className="adjust-info-row">
-                                <span className="adjust-label">✏️ 실제 재고</span>
-                                <input
-                                    type="number"
-                                    className="form-input adjust-actual-input"
-                                    value={actualStock}
-                                    onChange={(e) => setActualStock(parseFloat(e.target.value) || 0)}
-                                    style={{ width: '120px', textAlign: 'right', fontWeight: 700 }}
-                                />
-                            </div>
-                            <div className="adjust-info-row adjust-diff-row">
-                                <span className="adjust-label">📊 조정 수량</span>
-                                <span className={`adjust-diff-value ${(actualStock - systemStock) > 0 ? 'positive' : (actualStock - systemStock) < 0 ? 'negative' : ''}`}>
-                                    {(actualStock - systemStock) > 0 ? '+' : ''}{(actualStock - systemStock).toLocaleString()} {newItem.unit}
-                                </span>
-                            </div>
+                        <div className="form-group">
+                            <label className="form-label">거래 구분</label>
+                            <select className="form-input" value={newItem.transactionType}
+                                onChange={(e) => setNewItem({ ...newItem, transactionType: e.target.value, productId: '', itemName: '', itemCode: '', unitPrice: 0 })}>
+                                <option value="IN">입고</option>
+                                <option value="OUT">출고</option>
+                                <option value="ADJUST">재고조정</option>
+                            </select>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">단가</label>
-                            <input
-                                type="number"
-                                className="form-input"
-                                value={newItem.unitPrice}
-                                onChange={(e) => setNewItem({ ...newItem, unitPrice: parseFloat(e.target.value) || 0 })}
-                                placeholder="0"
-                            />
+                            <label className="form-label">제품 선택 *</label>
+                            <select className="form-input" value={newItem.productId}
+                                onChange={(e) => {
+                                    handleProductSelect(e.target.value);
+                                    if (newItem.transactionType === 'ADJUST') {
+                                        const product = products.find(p => p.id === e.target.value);
+                                        if (product) {
+                                            const stock = getSystemStock(product.product_code, product.name);
+                                            setSystemStock(stock);
+                                            setActualStock(stock);
+                                        }
+                                    }
+                                }}>
+                                <option value="">제품을 선택하세요</option>
+                                {products.filter(p => p.status !== '단종').map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.product_code ? `[${p.product_code}] ` : ''}{p.name} ({p.model || '규격 없음'}) {p.unit_price ? `- ₩${Number(p.unit_price).toLocaleString()}` : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        {newItem.transactionType === 'ADJUST' ? (
+                            <>
+                                <div className="adjust-info-card">
+                                    <div className="adjust-info-row">
+                                        <span className="adjust-label">📦 시스템 재고</span>
+                                        <span className="adjust-system-value">{systemStock.toLocaleString()} {newItem.unit}</span>
+                                    </div>
+                                    <div className="adjust-info-row">
+                                        <span className="adjust-label">✏️ 실제 재고</span>
+                                        <input type="number" className="form-input adjust-actual-input" value={actualStock}
+                                            onChange={(e) => setActualStock(parseFloat(e.target.value) || 0)}
+                                            style={{ width: '120px', textAlign: 'right', fontWeight: 700 }} />
+                                    </div>
+                                    <div className="adjust-info-row adjust-diff-row">
+                                        <span className="adjust-label">📊 조정 수량</span>
+                                        <span className={`adjust-diff-value ${(actualStock - systemStock) > 0 ? 'positive' : (actualStock - systemStock) < 0 ? 'negative' : ''}`}>
+                                            {(actualStock - systemStock) > 0 ? '+' : ''}{(actualStock - systemStock).toLocaleString()} {newItem.unit}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">단가</label>
+                                    <input type="number" className="form-input" value={newItem.unitPrice}
+                                        onChange={(e) => setNewItem({ ...newItem, unitPrice: parseFloat(e.target.value) || 0 })} placeholder="0" />
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="form-group">
+                                    <label className="form-label">수량 *</label>
+                                    <input type="number" className="form-input" value={newItem.quantity}
+                                        onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">단가</label>
+                                    <input type="number" className="form-input" value={newItem.unitPrice}
+                                        onChange={(e) => setNewItem({ ...newItem, unitPrice: parseFloat(e.target.value) || 0 })} placeholder="0" />
+                                </div>
+                            </>
+                        )}
+                        <div className="form-group">
+                            <label className="form-label">거래일자</label>
+                            <input type="date" className="form-input" value={newItem.transactionDate}
+                                onChange={(e) => setNewItem({ ...newItem, transactionDate: e.target.value })} />
+                        </div>
+                        {newItem.transactionType !== 'ADJUST' && (
+                            <div className="form-group">
+                                <label className="form-label">거래처</label>
+                                <input className="form-input" value={newItem.client}
+                                    onChange={(e) => setNewItem({ ...newItem, client: e.target.value })} placeholder="공급사 또는 고객사" />
+                            </div>
+                        )}
+                        <div className="form-group">
+                            <label className="form-label">비고</label>
+                            <textarea className="form-input" value={newItem.notes}
+                                onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })} rows="2" placeholder="메모사항" />
                         </div>
                     </>
                 ) : (
+                    /* ──── 신규 등록 모드: 다건 배치 ──── */
                     <>
-                        <div className="form-group">
-                            <label className="form-label">수량 *</label>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <input
-                                    type="number"
-                                    className="form-input"
-                                    value={newItem.quantity}
-                                    onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })}
-                                />
-                                <select
-                                    className="form-input"
-                                    style={{ width: '100px' }}
-                                    value={newItem.unit}
-                                    onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
-                                >
-                                    <option value="EA">EA</option>
-                                    <option value="Box">Box</option>
-                                    <option value="Set">Set</option>
-                                    <option value="Pallet">Pallet</option>
+                        {/* 공통 정보 */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                            <div className="form-group" style={{ margin: 0 }}>
+                                <label className="form-label">거래 구분 *</label>
+                                <select className="form-input" value={batchCommon.transactionType}
+                                    onChange={(e) => setBatchCommon({ ...batchCommon, transactionType: e.target.value })}>
+                                    <option value="IN">입고</option>
+                                    <option value="OUT">출고</option>
+                                    <option value="ADJUST">재고조정</option>
                                 </select>
                             </div>
+                            <div className="form-group" style={{ margin: 0 }}>
+                                <label className="form-label">거래일자 *</label>
+                                <input type="date" className="form-input" value={batchCommon.transactionDate}
+                                    onChange={(e) => setBatchCommon({ ...batchCommon, transactionDate: e.target.value })} />
+                            </div>
                         </div>
-                        <div className="form-group">
-                            <label className="form-label">단가</label>
-                            <input
-                                type="number"
-                                className="form-input"
-                                value={newItem.unitPrice}
-                                onChange={(e) => setNewItem({ ...newItem, unitPrice: parseFloat(e.target.value) || 0 })}
-                                placeholder="0"
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">총 금액</label>
-                            <input
-                                className="form-input"
-                                value={`₩${(newItem.quantity * newItem.unitPrice).toLocaleString()}`}
-                                disabled
-                                style={{ background: '#f8fafc', fontWeight: 600 }}
-                            />
+                        {batchCommon.transactionType !== 'ADJUST' && (
+                            <div className="form-group">
+                                <label className="form-label">거래처</label>
+                                <input className="form-input" value={batchCommon.client}
+                                    onChange={(e) => setBatchCommon({ ...batchCommon, client: e.target.value })} placeholder="공급사 또는 고객사" />
+                            </div>
+                        )}
+
+                        {batchCommon.transactionType === 'ADJUST' ? (
+                            /* 재고조정은 단일 품목만 */
+                            <>
+                                <div className="form-group">
+                                    <label className="form-label">제품 선택 *</label>
+                                    <select className="form-input" value={newItem.productId}
+                                        onChange={(e) => {
+                                            handleProductSelect(e.target.value);
+                                            const product = products.find(p => p.id === e.target.value);
+                                            if (product) {
+                                                const stock = getSystemStock(product.product_code, product.name);
+                                                setSystemStock(stock);
+                                                setActualStock(stock);
+                                            }
+                                        }}>
+                                        <option value="">제품을 선택하세요</option>
+                                        {products.filter(p => p.status !== '단종').map(p => (
+                                            <option key={p.id} value={p.id}>
+                                                {p.product_code ? `[${p.product_code}] ` : ''}{p.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="adjust-info-card">
+                                    <div className="adjust-info-row">
+                                        <span className="adjust-label">📦 시스템 재고</span>
+                                        <span className="adjust-system-value">{systemStock.toLocaleString()} {newItem.unit}</span>
+                                    </div>
+                                    <div className="adjust-info-row">
+                                        <span className="adjust-label">✏️ 실제 재고</span>
+                                        <input type="number" className="form-input adjust-actual-input" value={actualStock}
+                                            onChange={(e) => setActualStock(parseFloat(e.target.value) || 0)}
+                                            style={{ width: '120px', textAlign: 'right', fontWeight: 700 }} />
+                                    </div>
+                                    <div className="adjust-info-row adjust-diff-row">
+                                        <span className="adjust-label">📊 조정 수량</span>
+                                        <span className={`adjust-diff-value ${(actualStock - systemStock) > 0 ? 'positive' : (actualStock - systemStock) < 0 ? 'negative' : ''}`}>
+                                            {(actualStock - systemStock) > 0 ? '+' : ''}{(actualStock - systemStock).toLocaleString()} {newItem.unit}
+                                        </span>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            /* 입고/출고: 다건 품목 */
+                            <>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0.75rem 0 0.5rem' }}>
+                                    <label className="form-label" style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem' }}>📦 제품 목록 ({batchItems.filter(i => i.itemName).length}건)</label>
+                                    <button type="button" onClick={addBatchItemRow}
+                                        style={{ background: '#4f46e5', color: 'white', border: 'none', borderRadius: '6px', padding: '0.35rem 0.75rem', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Plus size={14} /> 제품 추가
+                                    </button>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '340px', overflowY: 'auto', paddingRight: '4px' }}>
+                                    {batchItems.map((item, idx) => (
+                                        <div key={idx} style={{ background: item.itemName ? '#f8fafc' : '#fff', border: `1px solid ${item.itemName ? '#e2e8f0' : '#fca5a5'}`, borderRadius: '10px', padding: '0.6rem 0.75rem', position: 'relative' }}>
+                                            {batchItems.length > 1 && (
+                                                <button type="button" onClick={() => removeBatchItemRow(idx)}
+                                                    style={{ position: 'absolute', top: '4px', right: '4px', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '2px' }} title="삭제">
+                                                    <X size={14} />
+                                                </button>
+                                            )}
+                                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.35rem' }}>#{idx + 1}</div>
+                                            {/* 제품 드롭다운 */}
+                                            <select className="form-input" value={item.productId} style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem', marginBottom: '0.4rem' }}
+                                                onChange={(e) => {
+                                                    const product = products.find(p => p.id === e.target.value);
+                                                    if (product) selectBatchProduct(idx, product);
+                                                    else updateBatchItem(idx, 'productId', '');
+                                                }}>
+                                                <option value="">제품 선택...</option>
+                                                {products.filter(p => p.status !== '단종').map(p => (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.product_code ? `[${p.product_code}] ` : ''}{p.name} {p.unit_price ? `₩${Number(p.unit_price).toLocaleString()}` : ''}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {/* 수량 / 단가 / 금액 */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', alignItems: 'center' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>수량</div>
+                                                    <input type="number" className="form-input" value={item.quantity}
+                                                        style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem' }}
+                                                        onFocus={(e) => e.target.select()}
+                                                        onChange={(e) => updateBatchItem(idx, 'quantity', parseFloat(e.target.value) || 0)} />
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>단가</div>
+                                                    <input type="number" className="form-input" value={item.unitPrice}
+                                                        style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem' }}
+                                                        onFocus={(e) => e.target.select()}
+                                                        onChange={(e) => updateBatchItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} />
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>금액</div>
+                                                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#4f46e5', padding: '0.35rem 0' }}>
+                                                        ₩{(item.quantity * item.unitPrice).toLocaleString()}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* 합계 */}
+                                {batchItems.some(i => i.itemName) && (
+                                    <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', background: batchCommon.transactionType === 'OUT' ? '#ecfdf5' : '#eff6ff', borderRadius: '10px', border: `1px solid ${batchCommon.transactionType === 'OUT' ? '#a7f3d0' : '#93c5fd'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>
+                                            총 {batchItems.filter(i => i.itemName).length}건
+                                        </span>
+                                        <span style={{ fontWeight: 800, fontSize: '1.15rem', color: batchCommon.transactionType === 'OUT' ? '#059669' : '#2563eb' }}>
+                                            ₩{batchItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0).toLocaleString()}
+                                        </span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                            <label className="form-label">비고</label>
+                            <textarea className="form-input" value={batchCommon.notes}
+                                onChange={(e) => setBatchCommon({ ...batchCommon, notes: e.target.value })} rows="2" placeholder="메모사항" />
                         </div>
                     </>
                 )}
-                <div className="form-group">
-                    <label className="form-label">거래일자</label>
-                    <input
-                        type="date"
-                        className="form-input"
-                        value={newItem.transactionDate}
-                        onChange={(e) => setNewItem({ ...newItem, transactionDate: e.target.value })}
-                    />
-                </div>
-                {newItem.transactionType !== 'ADJUST' && (
-                    <div className="form-group">
-                        <label className="form-label">거래처</label>
-                        <input
-                            className="form-input"
-                            value={newItem.client}
-                            onChange={(e) => setNewItem({ ...newItem, client: e.target.value })}
-                            placeholder="공급사 또는 고객사"
-                        />
-                    </div>
-                )}
-                <div className="form-group">
-                    <label className="form-label">비고</label>
-                    <textarea
-                        className="form-input"
-                        value={newItem.notes}
-                        onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
-                        rows="2"
-                        placeholder="메모사항"
-                    />
-                </div>
 
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={resetForm}>취소</button>
                     <button className="btn-submit" onClick={handleSave}>
-                        {isEditMode ? '수정' : '등록'}
+                        {isEditMode ? '수정' : (batchCommon.transactionType === 'ADJUST' ? '조정' : `${batchItems.filter(i => i.itemName && i.quantity > 0).length}건 일괄 등록`)}
                     </button>
                 </div>
             </Modal>

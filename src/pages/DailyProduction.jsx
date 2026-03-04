@@ -5,7 +5,7 @@ import { Plus, Calendar, TrendingUp, Edit } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const DailyProduction = () => {
-    const { workOrders, equipments, products, materials, employees, updateWorkOrder, addNotification, addProductionLog } = useData();
+    const { workOrders, equipments, products, materials, employees, updateWorkOrder, addNotification, addProductionLog, productionLogs } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -18,23 +18,28 @@ const DailyProduction = () => {
     const [filterEndDate, setFilterEndDate] = useState('');
     const [showAllOrders, setShowAllOrders] = useState(false);
 
+    // UTC → 로컬 날짜 변환 (KST 기준)
+    const toLocalDate = (dateValue) => {
+        const d = new Date(dateValue);
+        return d.toLocaleDateString('sv-SE'); // yyyy-MM-dd 형식 (로컬 타임존)
+    };
+
     // 진행중인 작업지시만 필터
     const activeOrders = workOrders.filter(wo => wo.status === '진행중');
 
-    // 필터링된 작업지시
-    const filteredOrders = (showAllOrders ? workOrders : activeOrders).filter(wo => {
-        if (!filterStartDate && !filterEndDate) return true;
+    // 날짜 필터가 있는지 여부
+    const isDateFiltered = filterStartDate || filterEndDate;
 
-        const productionDate = wo.last_production_date || wo.updated_at;
-        if (!productionDate) return false;
-
-        const dateStr = new Date(productionDate).toISOString().split('T')[0];
-
-        if (filterStartDate && dateStr < filterStartDate) return false;
-        if (filterEndDate && dateStr > filterEndDate) return false;
-
+    // 날짜 필터 시: production_logs에서 해당 날짜의 일일 기록을 조회
+    const filteredLogs = isDateFiltered ? (productionLogs || []).filter(log => {
+        const logDate = log.production_date;
+        if (filterStartDate && logDate < filterStartDate) return false;
+        if (filterEndDate && logDate > filterEndDate) return false;
         return true;
-    });
+    }) : [];
+
+    // 날짜 필터 없을 때: 진행중 작업지시 표시 (기존 방식)
+    const filteredOrders = (showAllOrders ? workOrders : activeOrders);
 
     const columns = [
         {
@@ -138,16 +143,14 @@ const DailyProduction = () => {
 
     // 오늘 업데이트 확인 함수
     const isUpdatedToday = (order) => {
-        // last_production_date나 updated_at이 있으면 그것으로 체크
         const updateDate = order.last_production_date || order.updated_at;
 
         if (updateDate) {
-            const today = new Date().toISOString().split('T')[0];
-            const lastUpdate = new Date(updateDate).toISOString().split('T')[0];
+            const today = toLocalDate(new Date());
+            const lastUpdate = toLocalDate(updateDate);
             return lastUpdate === today;
         }
 
-        // 업데이트 기록이 없으면 false (오늘 생산 수량 미기입)
         return false;
     };
 
@@ -306,57 +309,153 @@ const DailyProduction = () => {
                 )}
             </div>
 
-            <div className="stats-row">
-                <div className="glass-panel simple-stat">
-                    <span className="label">{showAllOrders ? '전체 작업' : '진행중 작업'}</span>
-                    <span className="value">{filteredOrders.length}건</span>
-                </div>
-                <div className="glass-panel simple-stat">
-                    <span className="label">완료 임박</span>
-                    <span className="value" style={{ color: 'var(--warning)' }}>
-                        {activeOrders.filter(wo => {
-                            const progress = wo.target_quantity > 0
-                                ? (wo.produced_quantity / wo.target_quantity) * 100
-                                : 0;
-                            return progress >= 90 && progress < 100;
-                        }).length}건
-                    </span>
-                </div>
-                <div className="glass-panel simple-stat">
-                    <span className="label">오늘 날짜</span>
-                    <span className="value" style={{ fontSize: '1rem', color: 'var(--text-main)' }}>
-                        {new Date().toLocaleDateString('ko-KR')}
-                    </span>
-                </div>
-            </div>
-
-            <Table
-                columns={columns}
-                data={filteredOrders.map(order => ({
-                    ...order,
-                    equipment_name: getEquipmentName(order.equipment_id),
-                    product_name: getProductName(order.product_id)
-                }))}
-                actions={(row) => (
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button
-                            className="icon-btn"
-                            onClick={() => handleOpenEditModal(row)}
-                            title="생산량 수정"
-                        >
-                            <Edit size={16} />
-                        </button>
-                        <button
-                            className="btn-action"
-                            onClick={() => handleOpenModal(row)}
-                            title="수량 추가"
-                        >
-                            <Plus size={16} />
-                            수량 기록
-                        </button>
+            {isDateFiltered ? (
+                /* ===== 날짜 필터 활성 → 일일 생산 기록(production_logs) 표시 ===== */
+                <>
+                    <div className="stats-row">
+                        <div className="glass-panel simple-stat">
+                            <span className="label">📋 일일 기록 건수</span>
+                            <span className="value">{filteredLogs.length}건</span>
+                        </div>
+                        <div className="glass-panel simple-stat">
+                            <span className="label">�icing 총 생산수량</span>
+                            <span className="value" style={{ color: '#059669' }}>
+                                {filteredLogs.reduce((sum, log) => sum + (log.daily_quantity || 0), 0).toLocaleString()}개
+                            </span>
+                        </div>
+                        <div className="glass-panel simple-stat">
+                            <span className="label">📅 조회 기간</span>
+                            <span className="value" style={{ fontSize: '0.95rem', color: 'var(--text-main)' }}>
+                                {filterStartDate}{filterEndDate && filterEndDate !== filterStartDate ? ` ~ ${filterEndDate}` : ''}
+                            </span>
+                        </div>
                     </div>
-                )}
-            />
+
+                    {filteredLogs.length === 0 ? (
+                        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📭</div>
+                            <div style={{ fontSize: '1rem' }}>해당 날짜에 기록된 생산 내역이 없습니다.</div>
+                            <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: '#94a3b8' }}>
+                                일일작업현황에서 "수량 기록" 버튼으로 생산수량을 먼저 입력해주세요.
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="glass-panel" style={{ overflow: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>생산일</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>설비명</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>제품명</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>원재료명</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>당일 생산수량</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>원재료 소모량</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredLogs.map((log, idx) => {
+                                        const equipment = equipments.find(eq => eq.id === log.equipment_id);
+                                        const product = products.find(p => p.id === log.product_id);
+                                        const material = product?.material_id ? materials.find(m => m.id === product.material_id) : null;
+                                        const shotWeight = product ? (product.product_weight || 0) + (product.runner_weight || 0) : 0;
+                                        const consumptionKg = (shotWeight * (log.daily_quantity || 0)) / 1000;
+                                        return (
+                                            <tr key={log.id || idx} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}
+                                                onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                                                onMouseLeave={(e) => e.currentTarget.style.background = ''}
+                                            >
+                                                <td style={{ padding: '0.75rem', fontWeight: 500 }}>{log.production_date}</td>
+                                                <td style={{ padding: '0.75rem', fontWeight: 600 }}>{equipment?.name || '-'}</td>
+                                                <td style={{ padding: '0.75rem' }}>{product?.name || '-'}</td>
+                                                <td style={{ padding: '0.75rem', color: '#0369a1', fontWeight: 600 }}>{material?.name || '-'}</td>
+                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: '#4f46e5', fontSize: '1.05rem' }}>
+                                                    {(log.daily_quantity || 0).toLocaleString()}개
+                                                </td>
+                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: consumptionKg >= 1 ? '#059669' : '#64748b' }}>
+                                                    {consumptionKg > 0 ? `${consumptionKg.toFixed(2)} kg` : '-'}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                                <tfoot>
+                                    <tr style={{ borderTop: '2px solid #e2e8f0', background: '#f8fafc' }}>
+                                        <td colSpan={4} style={{ padding: '0.75rem', fontWeight: 700, textAlign: 'right' }}>합계</td>
+                                        <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 800, color: '#4f46e5', fontSize: '1.1rem' }}>
+                                            {filteredLogs.reduce((sum, log) => sum + (log.daily_quantity || 0), 0).toLocaleString()}개
+                                        </td>
+                                        <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                                            {(() => {
+                                                const totalKg = filteredLogs.reduce((sum, log) => {
+                                                    const product = products.find(p => p.id === log.product_id);
+                                                    const shotWeight = product ? (product.product_weight || 0) + (product.runner_weight || 0) : 0;
+                                                    return sum + (shotWeight * (log.daily_quantity || 0)) / 1000;
+                                                }, 0);
+                                                return totalKg > 0 ? `${totalKg.toFixed(2)} kg` : '-';
+                                            })()}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    )}
+                </>
+            ) : (
+                /* ===== 날짜 필터 없음 → 기존 작업지시 목록 표시 ===== */
+                <>
+                    <div className="stats-row">
+                        <div className="glass-panel simple-stat">
+                            <span className="label">{showAllOrders ? '전체 작업' : '진행중 작업'}</span>
+                            <span className="value">{filteredOrders.length}건</span>
+                        </div>
+                        <div className="glass-panel simple-stat">
+                            <span className="label">완료 임박</span>
+                            <span className="value" style={{ color: 'var(--warning)' }}>
+                                {activeOrders.filter(wo => {
+                                    const progress = wo.target_quantity > 0
+                                        ? (wo.produced_quantity / wo.target_quantity) * 100
+                                        : 0;
+                                    return progress >= 90 && progress < 100;
+                                }).length}건
+                            </span>
+                        </div>
+                        <div className="glass-panel simple-stat">
+                            <span className="label">오늘 날짜</span>
+                            <span className="value" style={{ fontSize: '1rem', color: 'var(--text-main)' }}>
+                                {new Date().toLocaleDateString('ko-KR')}
+                            </span>
+                        </div>
+                    </div>
+
+                    <Table
+                        columns={columns}
+                        data={filteredOrders.map(order => ({
+                            ...order,
+                            equipment_name: getEquipmentName(order.equipment_id),
+                            product_name: getProductName(order.product_id)
+                        }))}
+                        actions={(row) => (
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                    className="icon-btn"
+                                    onClick={() => handleOpenEditModal(row)}
+                                    title="생산량 수정"
+                                >
+                                    <Edit size={16} />
+                                </button>
+                                <button
+                                    className="btn-action"
+                                    onClick={() => handleOpenModal(row)}
+                                    title="수량 추가"
+                                >
+                                    <Plus size={16} />
+                                    수량 기록
+                                </button>
+                            </div>
+                        )}
+                    />
+                </>
+            )}
 
             {/* 일일 생산 수량 입력 모달 */}
             <Modal

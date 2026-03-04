@@ -5,7 +5,24 @@ import { Plus, Package, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Products = () => {
-    const { products, materials, addProduct, updateProduct, deleteProduct } = useData();
+    const { products, materials, inventoryTransactions, addProduct, updateProduct, deleteProduct } = useData();
+
+    // 입출고 데이터로 제품 재고 계산
+    const getProductStock = (product) => {
+        const key = product.product_code || product.name;
+        let stock = 0;
+        (inventoryTransactions || []).forEach(t => {
+            const tKey = t.item_code || t.item_name;
+            if (tKey === key) {
+                if (t.transaction_type === 'IN' || t.transaction_type === 'ADJUST') {
+                    stock += parseFloat(t.quantity);
+                } else if (t.transaction_type === 'OUT') {
+                    stock -= parseFloat(t.quantity);
+                }
+            }
+        });
+        return stock;
+    };
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
@@ -22,6 +39,7 @@ const Products = () => {
         runner_weight: 0,
         cavity_count: 1,
         material_id: '',
+        min_stock: 0,
         status: '생산중'
     });
 
@@ -68,6 +86,25 @@ const Products = () => {
             }
         },
         {
+            header: '재고', accessor: 'stock', render: (row) => {
+                const currentStock = getProductStock(row);
+                const isLow = row.min_stock > 0 && currentStock < row.min_stock;
+                return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontWeight: 600, color: isLow ? '#dc2626' : 'inherit' }}>
+                            {currentStock.toLocaleString()} {row.unit}
+                        </span>
+                        {isLow && (
+                            <span style={{ padding: '1px 6px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: 700, background: '#fee2e2', color: '#dc2626' }}>
+                                부족
+                            </span>
+                        )}
+                    </div>
+                );
+            }
+        },
+        { header: '안전재고', accessor: 'min_stock', render: (row) => row.min_stock > 0 ? `${(row.min_stock).toLocaleString()} ${row.unit}` : '-' },
+        {
             header: '상태', accessor: 'status', render: (row) => (
                 <span className={`status-badge ${row.status === '생산중' ? 'status-active' : 'status-danger'}`}>
                     {row.status}
@@ -102,6 +139,7 @@ const Products = () => {
             runner_weight: product.runner_weight || 0,
             cavity_count: product.cavity_count || 1,
             material_id: product.material_id || '',
+            min_stock: product.min_stock || 0,
             status: product.status
         });
         setIsEditMode(true);
@@ -126,6 +164,7 @@ const Products = () => {
             runner_weight: 0,
             cavity_count: 1,
             material_id: '',
+            min_stock: 0,
             status: '생산중'
         });
         setCurrentProduct(null);
@@ -160,6 +199,12 @@ const Products = () => {
                     <span className="label">단종</span>
                     <span className="value" style={{ color: 'var(--text-muted)' }}>
                         {products.filter(p => p.status === '단종').length}개
+                    </span>
+                </div>
+                <div className="glass-panel simple-stat">
+                    <span className="label">⚠️ 안전재고 미달</span>
+                    <span className="value" style={{ color: 'var(--danger)' }}>
+                        {products.filter(p => p.min_stock > 0 && getProductStock(p) < p.min_stock).length}개
                     </span>
                 </div>
             </div>
@@ -317,6 +362,19 @@ const Products = () => {
                             <option key={m.id} value={m.id}>{m.name}</option>
                         ))}
                     </select>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">안전재고 수량</label>
+                    <input
+                        type="number"
+                        className="form-input"
+                        value={formData.min_stock}
+                        onChange={(e) => setFormData({ ...formData, min_stock: parseInt(e.target.value) || 0 })}
+                        onFocus={(e) => e.target.select()}
+                        min="0"
+                        placeholder="예: 100"
+                    />
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>현재 재고는 입출고관리 재고현황에서 자동 계산됩니다</span>
                 </div>
                 <div className="form-group">
                     <label className="form-label">상태</label>

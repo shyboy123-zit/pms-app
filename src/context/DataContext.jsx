@@ -28,6 +28,7 @@ export const DataProvider = ({ children }) => {
     const [boardComments, setBoardComments] = useState([]);
     const [attendance, setAttendance] = useState([]);
     const [payrollRecords, setPayrollRecords] = useState([]);
+    const [vouchers, setVouchers] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -158,6 +159,13 @@ export const DataProvider = ({ children }) => {
                 if (pr) setPayrollRecords(pr);
             } catch (e) {
                 console.warn('payroll_records table not available:', e.message);
+            }
+
+            try {
+                const { data: v } = await supabase.from('vouchers').select('*').order('voucher_date', { ascending: false });
+                if (v) setVouchers(v);
+            } catch (e) {
+                console.warn('vouchers table not available:', e.message);
             }
 
         } catch (error) {
@@ -341,18 +349,18 @@ export const DataProvider = ({ children }) => {
     // 9. Inventory Transactions
     const addInventoryTransaction = async (item) => {
         const { data, error } = await supabase.from('inventory_transactions').insert([item]).select();
-        if (!error && data) setInventoryTransactions([data[0], ...inventoryTransactions]);
+        if (!error && data) setInventoryTransactions(prev => [data[0], ...prev]);
         return { data, error };
     };
 
     const updateInventoryTransaction = async (id, fields) => {
         const { error } = await supabase.from('inventory_transactions').update(fields).eq('id', id);
-        if (!error) setInventoryTransactions(inventoryTransactions.map(t => t.id === id ? { ...t, ...fields } : t));
+        if (!error) setInventoryTransactions(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t));
     };
 
     const deleteInventoryTransaction = async (id) => {
         const { error } = await supabase.from('inventory_transactions').delete().eq('id', id);
-        if (!error) setInventoryTransactions(inventoryTransactions.filter(t => t.id !== id));
+        if (!error) setInventoryTransactions(prev => prev.filter(t => t.id !== id));
     };
 
     const getTransactionsByDateRange = async (startDate, endDate) => {
@@ -545,6 +553,7 @@ export const DataProvider = ({ children }) => {
             runner_weight: item.runner_weight || 0,
             cavity_count: item.cavity_count || 1,
             material_id: item.material_id || null,
+            min_stock: item.min_stock || 0,
             status: item.status || '생산중'
         }]).select();
 
@@ -892,6 +901,23 @@ export const DataProvider = ({ children }) => {
         return { error };
     };
 
+    // --- Vouchers (전표) CRUD ---
+    const addVoucher = async (item) => {
+        const { data, error } = await supabase.from('vouchers').insert([item]).select();
+        if (!error && data) setVouchers(prev => [data[0], ...prev]);
+        return { data, error };
+    };
+    const updateVoucher = async (id, fields) => {
+        const { error } = await supabase.from('vouchers').update(fields).eq('id', id);
+        if (!error) setVouchers(prev => prev.map(v => v.id === id ? { ...v, ...fields } : v));
+        return { error };
+    };
+    const deleteVoucher = async (id) => {
+        const { error } = await supabase.from('vouchers').delete().eq('id', id);
+        if (!error) setVouchers(prev => prev.filter(v => v.id !== id));
+        return { error };
+    };
+
     return (
         <DataContext.Provider value={{
             loading,
@@ -919,7 +945,8 @@ export const DataProvider = ({ children }) => {
             productionLogs, addProductionLog,
             boardPosts, boardComments, addBoardPost, updateBoardPost, deleteBoardPost, addBoardComment, deleteBoardComment,
             attendance, addAttendance, updateAttendance, deleteAttendance,
-            payrollRecords, addPayrollRecord, updatePayrollRecord, deletePayrollRecord
+            payrollRecords, addPayrollRecord, updatePayrollRecord, deletePayrollRecord,
+            vouchers, addVoucher, updateVoucher, deleteVoucher
         }}>
             {children}
         </DataContext.Provider>

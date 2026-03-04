@@ -336,7 +336,10 @@ const Sales = () => {
             if (!clientMap[client]) clientMap[client] = { client, txSales: 0, txPurchases: 0, vSales: 0, vPurchases: 0 };
             const amount = parseFloat(v.total_amount || v.quantity * v.unit_price || 0);
             if (v.voucher_type === '매출') clientMap[client].vSales += amount;
-            else if (v.voucher_type === '매입') clientMap[client].vPurchases += amount;
+            else if (v.voucher_type === '매입') {
+                clientMap[client].vPurchases += amount;
+                clientMap[client].txPurchases += amount; // 원재료 매입은 전표가 유일 소스
+            }
         });
         return Object.values(clientMap).map(c => ({
             ...c,

@@ -131,11 +131,14 @@ const Sales = () => {
     }, [vouchers, selectedYear]);
 
     const voucherStats = useMemo(() => {
-        const yearVouchers = (vouchers || []).filter(v => new Date(v.voucher_date).getFullYear() === selectedYear);
+        let yearVouchers = (vouchers || []).filter(v => new Date(v.voucher_date).getFullYear() === selectedYear);
+        if (clientFilter && clientFilter !== 'all') {
+            yearVouchers = yearVouchers.filter(v => v.client === clientFilter);
+        }
         const totalSales = yearVouchers.filter(v => v.voucher_type === '매출').reduce((s, v) => s + parseFloat(v.total_amount || v.quantity * v.unit_price || 0), 0);
         const totalPurchases = yearVouchers.filter(v => v.voucher_type === '매입').reduce((s, v) => s + parseFloat(v.total_amount || v.quantity * v.unit_price || 0), 0);
         return { totalSales, totalPurchases, count: yearVouchers.length };
-    }, [vouchers, selectedYear]);
+    }, [vouchers, selectedYear, clientFilter]);
 
     const handleVoucherSave = async () => {
         if (isEditMode && editingId) {

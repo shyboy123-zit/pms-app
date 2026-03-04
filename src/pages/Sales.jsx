@@ -273,9 +273,6 @@ const Sales = () => {
             const txSales = monthTxs
                 .filter(t => t.transaction_type === 'OUT')
                 .reduce((sum, t) => sum + ((t.quantity || 0) * (t.unit_price || 0)), 0);
-            const txPurchases = monthTxs
-                .filter(t => t.transaction_type === 'IN')
-                .reduce((sum, t) => sum + ((t.quantity || 0) * (t.unit_price || 0)), 0);
 
             // 전표 기반
             const monthVouchers = (vouchers || []).filter(v =>
@@ -287,6 +284,9 @@ const Sales = () => {
             const vPurchases = monthVouchers
                 .filter(v => v.voucher_type === '매입')
                 .reduce((sum, v) => sum + parseFloat(v.total_amount || v.quantity * v.unit_price || 0), 0);
+
+            // 원재료 매입은 전표가 유일 소스 (입출고 IN은 제품입고라 매입 아님)
+            const txPurchases = vPurchases;
 
             months.push({
                 month: m,

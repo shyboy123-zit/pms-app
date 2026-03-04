@@ -317,16 +317,15 @@ const Sales = () => {
     // 거래처별 대사 데이터
     const clientReconciliationData = useMemo(() => {
         const clientMap = {};
-        // 입출고 데이터에서 거래처별 집계
+        // 입출고 데이터에서 거래처별 집계 (OUT=매출만, IN은 제품입고라 매입 아님)
         (inventoryTransactions || []).filter(t => {
             const y = new Date(t.transaction_date).getFullYear();
-            return y === selectedYear && t.client;
+            return y === selectedYear && t.client && t.transaction_type === 'OUT';
         }).forEach(t => {
             const client = t.client;
             if (!clientMap[client]) clientMap[client] = { client, txSales: 0, txPurchases: 0, vSales: 0, vPurchases: 0 };
             const amount = (t.quantity || 0) * (t.unit_price || 0);
-            if (t.transaction_type === 'OUT') clientMap[client].txSales += amount;
-            else if (t.transaction_type === 'IN') clientMap[client].txPurchases += amount;
+            clientMap[client].txSales += amount;
         });
         // 전표 데이터에서 거래처별 집계
         (vouchers || []).filter(v => {

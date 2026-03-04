@@ -9,7 +9,7 @@ const Materials = () => {
         materials, addMaterial, updateMaterial, deleteMaterial,
         materialUsage, addMaterialUsage, updateMaterialUsage, deleteMaterialUsage,
         addPurchaseRequest,
-        inventoryTransactions, addInventoryTransaction,
+        inventoryTransactions,
         addVoucher
     } = useData();
 
@@ -210,26 +210,7 @@ const Materials = () => {
             else verificationStatus = '초과';
         }
 
-        // 1) 입출고 기록 저장
-        try {
-            await addInventoryTransaction({
-                item_name: incomingData.materialName,
-                transaction_type: 'IN',
-                quantity: receivedQty,
-                unit: incomingData.unit,
-                unit_price: unitPrice,
-                transaction_date: incomingData.incoming_date,
-                client: supplierName,
-                ordered_quantity: orderedQty,
-                verification_status: verificationStatus,
-                supplier: supplierName,
-                notes: incomingData.notes || null
-            });
-        } catch (e) {
-            console.error('입고 기록 저장 실패:', e);
-        }
-
-        // 2) 매입 전표 자동 생성 (업체별 매입으로 잡힘)
+        // 매입 전표 생성 (업체별 매입으로 잡힘 - 입출고관리에는 기록하지 않음)
         try {
             const { error: voucherError } = await addVoucher({
                 voucher_date: incomingData.incoming_date,

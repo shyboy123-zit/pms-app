@@ -382,23 +382,28 @@ export const DataProvider = ({ children }) => {
             .lte('transaction_date', targetDate)
             .order('transaction_date', { ascending: false });
 
-        // Calculate stock by item
+        // Calculate stock by item (item_name 기준 그룹핑)
         const stockByItem = {};
         if (data) {
             data.reverse().forEach(trans => {
-                if (!stockByItem[trans.item_code || trans.item_name]) {
-                    stockByItem[trans.item_code || trans.item_name] = {
+                const key = trans.item_name;
+                if (!key) return;
+                if (!stockByItem[key]) {
+                    stockByItem[key] = {
                         itemName: trans.item_name,
                         itemCode: trans.item_code,
                         stock: 0,
                         unit: trans.unit
                     };
                 }
+                if (trans.item_code && !stockByItem[key].itemCode) {
+                    stockByItem[key].itemCode = trans.item_code;
+                }
 
-                if (trans.transaction_type === 'IN') {
-                    stockByItem[trans.item_code || trans.item_name].stock += parseFloat(trans.quantity);
-                } else {
-                    stockByItem[trans.item_code || trans.item_name].stock -= parseFloat(trans.quantity);
+                if (trans.transaction_type === 'IN' || trans.transaction_type === 'ADJUST') {
+                    stockByItem[key].stock += parseFloat(trans.quantity);
+                } else if (trans.transaction_type === 'OUT') {
+                    stockByItem[key].stock -= parseFloat(trans.quantity);
                 }
             });
         }
@@ -540,14 +545,25 @@ export const DataProvider = ({ children }) => {
 
     // --- Products Management ---
     const addProduct = async (item) => {
-        const count = products.length + 1;
-        const productCode = `PRD-${String(count).padStart(4, '0')}`;
+        // Generate product code by finding max existing code to avoid collisions
+        let nextNum = 1;
+        if (products.length > 0) {
+            const nums = products.map(p => {
+                const match = (p.product_code || '').match(/PRD-(\d+)/);
+                return match ? parseInt(match[1], 10) : 0;
+            });
+            nextNum = Math.max(...nums, 0) + 1;
+        }
+        const productCode = `PRD-${String(nextNum).padStart(4, '0')}`;
 
         const { data, error } = await supabase.from('products').insert([{
             product_code: productCode,
             name: item.name,
             model: item.model || '',
             unit: item.unit || 'EA',
+            unit_price: item.unit_price || 0,
+            product_type: item.product_type || '매출',
+            company_name: item.company_name || '',
             standard_cycle_time: item.standard_cycle_time || 30,
             product_weight: item.product_weight || 0,
             runner_weight: item.runner_weight || 0,
@@ -559,7 +575,7 @@ export const DataProvider = ({ children }) => {
 
         if (error) {
             console.error('Error adding product:', error);
-            alert('제품 등록에 실패했습니다.');
+            alert('제품 등록에 실패했습니다: ' + error.message);
             return;
         }
         if (data) setProducts([...products, ...data]);
@@ -833,6 +849,38 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    const updateProductionLog = async (id, fields) => {
+        try {
+            const { error } = await supabase
+                .from('production_logs')
+                .update(fields)
+                .eq('id', id);
+            if (error) throw error;
+            setProductionLogs(prev => prev.map(l => l.id === id ? { ...l, ...fields } : l));
+            return { success: true };
+        } catch (error) {
+            console.error('Error updating production log:', error);
+            alert('생산기록 수정에 실패했습니다.');
+            return { error };
+        }
+    };
+
+    const deleteProductionLog = async (id) => {
+        try {
+            const { error } = await supabase
+                .from('production_logs')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+            setProductionLogs(prev => prev.filter(l => l.id !== id));
+            return { success: true };
+        } catch (error) {
+            console.error('Error deleting production log:', error);
+            alert('생산기록 삭제에 실패했습니다.');
+            return { error };
+        }
+    };
+
     // --- Board (게시판) ---
     const addBoardPost = async (post) => {
         try {
@@ -942,7 +990,7 @@ export const DataProvider = ({ children }) => {
             injectionConditions, addInjectionCondition, updateInjectionCondition, deleteInjectionCondition, getConditionByProduct,
             suppliers, addSupplier, updateSupplier, deleteSupplier,
             purchaseRequests, addPurchaseRequest, updatePurchaseRequest, deletePurchaseRequest,
-            productionLogs, addProductionLog,
+            productionLogs, addProductionLog, updateProductionLog, deleteProductionLog,
             boardPosts, boardComments, addBoardPost, updateBoardPost, deleteBoardPost, addBoardComment, deleteBoardComment,
             attendance, addAttendance, updateAttendance, deleteAttendance,
             payrollRecords, addPayrollRecord, updatePayrollRecord, deletePayrollRecord,

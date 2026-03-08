@@ -117,13 +117,14 @@ const InventoryInOut = () => {
         setFilteredTransactions(filtered);
     };
 
-    // 시스템 재고 계산 함수
+    // 시스템 재고 계산 함수 (item_code 또는 item_name 기준 매칭)
     const getSystemStock = (itemCode, itemName) => {
-        const key = itemCode || itemName;
         let stock = 0;
         (inventoryTransactions || []).forEach(t => {
-            const tKey = t.item_code || t.item_name;
-            if (tKey === key) {
+            // item_code가 일치하거나, item_name이 일치하면 같은 제품
+            const codeMatch = itemCode && t.item_code && t.item_code === itemCode;
+            const nameMatch = itemName && t.item_name && t.item_name === itemName;
+            if (codeMatch || nameMatch) {
                 if (t.transaction_type === 'IN' || t.transaction_type === 'ADJUST') {
                     stock += parseFloat(t.quantity);
                 } else if (t.transaction_type === 'OUT') {
@@ -367,14 +368,16 @@ const InventoryInOut = () => {
         return { salesTotal, purchaseTotal };
     })();
 
-    // Calculate current inventory status
+    // Calculate current inventory status (item_name 기준 그룹핑)
     const getInventoryStatus = () => {
-        const stockByItem = {};
+        const stockByName = {};
 
         (inventoryTransactions || []).forEach(trans => {
-            const key = trans.item_code || trans.item_name;
-            if (!stockByItem[key]) {
-                stockByItem[key] = {
+            // item_name을 기본 키로 사용하여 코드 유무와 관계없이 같은 품목 그룹핑
+            const key = trans.item_name;
+            if (!key) return;
+            if (!stockByName[key]) {
+                stockByName[key] = {
                     itemName: trans.item_name,
                     itemCode: trans.item_code,
                     stock: 0,
@@ -383,15 +386,20 @@ const InventoryInOut = () => {
                 };
             }
 
-            if (trans.transaction_type === 'IN' || trans.transaction_type === 'ADJUST') {
-                stockByItem[key].stock += parseFloat(trans.quantity);
-            } else if (trans.transaction_type === 'OUT') {
-                stockByItem[key].stock -= parseFloat(trans.quantity);
+            // item_code가 있으면 업데이트 (빈 값보다 코드가 있는 게 우선)
+            if (trans.item_code && !stockByName[key].itemCode) {
+                stockByName[key].itemCode = trans.item_code;
             }
-            stockByItem[key].lastPrice = trans.unit_price;
+
+            if (trans.transaction_type === 'IN' || trans.transaction_type === 'ADJUST') {
+                stockByName[key].stock += parseFloat(trans.quantity);
+            } else if (trans.transaction_type === 'OUT') {
+                stockByName[key].stock -= parseFloat(trans.quantity);
+            }
+            stockByName[key].lastPrice = trans.unit_price;
         });
 
-        return Object.values(stockByItem);
+        return Object.values(stockByName);
     };
 
     const inventoryStatus = getInventoryStatus();

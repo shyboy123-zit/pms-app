@@ -7,13 +7,16 @@ import { useData } from '../context/DataContext';
 const Products = () => {
     const { products, materials, inventoryTransactions, addProduct, updateProduct, deleteProduct } = useData();
 
-    // 입출고 데이터로 제품 재고 계산
+    // 입출고 데이터로 제품 재고 계산 (item_code 또는 item_name 기준 매칭)
     const getProductStock = (product) => {
-        const key = product.product_code || product.name;
+        const code = product.product_code;
+        const name = product.name;
         let stock = 0;
         (inventoryTransactions || []).forEach(t => {
-            const tKey = t.item_code || t.item_name;
-            if (tKey === key) {
+            // item_code가 일치하거나, item_name이 일치하면 같은 제품
+            const codeMatch = code && t.item_code && t.item_code === code;
+            const nameMatch = name && t.item_name && t.item_name === name;
+            if (codeMatch || nameMatch) {
                 if (t.transaction_type === 'IN' || t.transaction_type === 'ADJUST') {
                     stock += parseFloat(t.quantity);
                 } else if (t.transaction_type === 'OUT') {

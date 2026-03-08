@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, Calendar, TrendingUp, Edit } from 'lucide-react';
+import { Plus, Calendar, TrendingUp, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const DailyProduction = () => {
-    const { workOrders, equipments, products, materials, employees, updateWorkOrder, addNotification, addProductionLog, productionLogs } = useData();
+    const { workOrders, equipments, products, materials, employees, updateWorkOrder, addNotification, addProductionLog, productionLogs, updateProductionLog, deleteProductionLog } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -17,6 +17,21 @@ const DailyProduction = () => {
     const [filterStartDate, setFilterStartDate] = useState('');
     const [filterEndDate, setFilterEndDate] = useState('');
     const [showAllOrders, setShowAllOrders] = useState(false);
+
+    // 제품 필터 상태 (날짜 조회 시)
+    const [selectedProductId, setSelectedProductId] = useState('');
+
+    // production_logs 합계로 생산수량 계산 (Single Source of Truth)
+    const getLogSum = (workOrderId) => {
+        return (productionLogs || [])
+            .filter(log => log.work_order_id === workOrderId)
+            .reduce((sum, log) => sum + (log.daily_quantity || 0), 0);
+    };
+
+    // 생산기록(log) 수정 모달 상태
+    const [isLogEditModalOpen, setIsLogEditModalOpen] = useState(false);
+    const [editingLog, setEditingLog] = useState(null);
+    const [editLogQuantity, setEditLogQuantity] = useState(0);
 
     // UTC → 로컬 날짜 변환 (KST 기준)
     const toLocalDate = (dateValue) => {
@@ -83,8 +98,9 @@ const DailyProduction = () => {
             header: '진행률',
             accessor: 'progress',
             render: (row) => {
+                const logSum = getLogSum(row.id);
                 const progress = row.target_quantity > 0
-                    ? Math.round((row.produced_quantity / row.target_quantity) * 100)
+                    ? Math.round((logSum / row.target_quantity) * 100)
                     : 0;
                 return (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -112,7 +128,10 @@ const DailyProduction = () => {
         {
             header: '생산수량/목표',
             accessor: 'quantities',
-            render: (row) => `${row.produced_quantity} / ${row.target_quantity}`
+            render: (row) => {
+                const logSum = getLogSum(row.id);
+                return `${logSum.toLocaleString()} / ${row.target_quantity.toLocaleString()}`;
+            }
         },
         {
             header: '원재료 소모량',
@@ -121,8 +140,9 @@ const DailyProduction = () => {
                 const product = products.find(p => p.id === row.product_id);
                 if (!product) return '-';
 
+                const logSum = getLogSum(row.id);
                 const shotWeight = (product.product_weight || 0) + (product.runner_weight || 0);
-                const totalWeightG = shotWeight * (row.produced_quantity || 0);
+                const totalWeightG = shotWeight * (logSum || 0);
                 const totalWeightKg = totalWeightG / 1000;
 
                 if (totalWeightKg === 0) return '-';
@@ -131,7 +151,7 @@ const DailyProduction = () => {
                     <span style={{
                         fontWeight: 600,
                         color: totalWeightKg >= 1 ? '#059669' : '#64748b'
-                    }} title={`제품: ${product.product_weight || 0}g, 런너: ${product.runner_weight || 0}g, 생산: ${row.produced_quantity}개`}>
+                    }} title={`제품: ${product.product_weight || 0}g, 런너: ${product.runner_weight || 0}g, 생산: ${logSum}개`}>
                         {totalWeightKg.toFixed(2)} kg
                     </span>
                 );
@@ -165,7 +185,8 @@ const DailyProduction = () => {
             return alert('수량을 입력해주세요.');
         }
 
-        const newProducedQuantity = selectedOrder.produced_quantity + dailyQuantity;
+        const currentLogSum = getLogSum(selectedOrder.id);
+        const newProducedQuantity = currentLogSum + dailyQuantity;
 
         await updateWorkOrder(selectedOrder.id, {
             produced_quantity: newProducedQuantity,
@@ -238,6 +259,61 @@ const DailyProduction = () => {
         setEditQuantity(0);
     };
 
+    // === 생산기록(log) 수정/삭제 핸들러 ===
+    const handleOpenLogEditModal = (log) => {
+        setEditingLog(log);
+        setEditLogQuantity(log.daily_quantity || 0);
+        setIsLogEditModalOpen(true);
+    };
+
+    const handleSaveLogEdit = async () => {
+        if (!editingLog || editLogQuantity < 0) {
+            return alert('올바른 수량을 입력해주세요.');
+        }
+
+        const oldQuantity = editingLog.daily_quantity || 0;
+        const quantityDiff = editLogQuantity - oldQuantity;
+
+        // 생산기록 수정
+        await updateProductionLog(editingLog.id, {
+            daily_quantity: editLogQuantity
+        });
+
+        // 작업지시의 produced_quantity도 연동 업데이트
+        if (editingLog.work_order_id && quantityDiff !== 0) {
+            const workOrder = workOrders.find(wo => wo.id === editingLog.work_order_id);
+            if (workOrder) {
+                const newProducedQty = (workOrder.produced_quantity || 0) + quantityDiff;
+                await updateWorkOrder(workOrder.id, {
+                    produced_quantity: Math.max(0, newProducedQty)
+                });
+            }
+        }
+
+        setIsLogEditModalOpen(false);
+        setEditingLog(null);
+        setEditLogQuantity(0);
+    };
+
+    const handleDeleteLog = async (log) => {
+        if (!window.confirm(`이 생산기록을 삭제하시겠습니까?\n(${getEquipmentName(log.equipment_id)} - ${getProductName(log.product_id)}: ${(log.daily_quantity || 0).toLocaleString()}개)`)) {
+            return;
+        }
+
+        // 작업지시의 produced_quantity에서 차감
+        if (log.work_order_id) {
+            const workOrder = workOrders.find(wo => wo.id === log.work_order_id);
+            if (workOrder) {
+                const newProducedQty = (workOrder.produced_quantity || 0) - (log.daily_quantity || 0);
+                await updateWorkOrder(workOrder.id, {
+                    produced_quantity: Math.max(0, newProducedQty)
+                });
+            }
+        }
+
+        await deleteProductionLog(log.id);
+    };
+
     const getEquipmentName = (equipmentId) => {
         const equipment = equipments.find(eq => eq.id === equipmentId);
         return equipment?.name || '-';
@@ -302,6 +378,7 @@ const DailyProduction = () => {
                         onClick={() => {
                             setFilterStartDate('');
                             setFilterEndDate('');
+                            setSelectedProductId('');
                         }}
                     >
                         날짜 초기화
@@ -311,16 +388,56 @@ const DailyProduction = () => {
 
             {isDateFiltered ? (
                 /* ===== 날짜 필터 활성 → 일일 생산 기록(production_logs) 표시 ===== */
+                (() => {
+                    // 제품 필터 적용된 로그
+                    const displayLogs = selectedProductId
+                        ? filteredLogs.filter(log => log.product_id === selectedProductId)
+                        : filteredLogs;
+                    // 해당 기간 내 고유 제품 목록
+                    const uniqueProductIds = [...new Set(filteredLogs.map(log => log.product_id))];
+                    return (
                 <>
+                    {/* 제품 필터 드롭다운 */}
+                    <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <label style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>🔍 제품 필터:</label>
+                        <select
+                            value={selectedProductId}
+                            onChange={(e) => setSelectedProductId(e.target.value)}
+                            style={{
+                                padding: '0.5rem 1rem',
+                                border: '1px solid var(--border)',
+                                borderRadius: '6px',
+                                background: 'white',
+                                fontSize: '0.9rem',
+                                minWidth: '200px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <option value="">전체 제품</option>
+                            {uniqueProductIds.map(pid => (
+                                <option key={pid} value={pid}>{getProductName(pid)}</option>
+                            ))}
+                        </select>
+                        {selectedProductId && (
+                            <button
+                                className="btn-cancel"
+                                style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                                onClick={() => setSelectedProductId('')}
+                            >
+                                필터 해제
+                            </button>
+                        )}
+                    </div>
+
                     <div className="stats-row">
                         <div className="glass-panel simple-stat">
                             <span className="label">📋 일일 기록 건수</span>
-                            <span className="value">{filteredLogs.length}건</span>
+                            <span className="value">{displayLogs.length}건</span>
                         </div>
                         <div className="glass-panel simple-stat">
-                            <span className="label">�icing 총 생산수량</span>
+                            <span className="label">🏭 총 생산수량</span>
                             <span className="value" style={{ color: '#059669' }}>
-                                {filteredLogs.reduce((sum, log) => sum + (log.daily_quantity || 0), 0).toLocaleString()}개
+                                {displayLogs.reduce((sum, log) => sum + (log.daily_quantity || 0), 0).toLocaleString()}개
                             </span>
                         </div>
                         <div className="glass-panel simple-stat">
@@ -331,7 +448,7 @@ const DailyProduction = () => {
                         </div>
                     </div>
 
-                    {filteredLogs.length === 0 ? (
+                    {displayLogs.length === 0 ? (
                         <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                             <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📭</div>
                             <div style={{ fontSize: '1rem' }}>해당 날짜에 기록된 생산 내역이 없습니다.</div>
@@ -350,10 +467,11 @@ const DailyProduction = () => {
                                         <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>원재료명</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>당일 생산수량</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>원재료 소모량</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', minWidth: '100px' }}>관리</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredLogs.map((log, idx) => {
+                                    {displayLogs.map((log, idx) => {
                                         const equipment = equipments.find(eq => eq.id === log.equipment_id);
                                         const product = products.find(p => p.id === log.product_id);
                                         const material = product?.material_id ? materials.find(m => m.id === product.material_id) : null;
@@ -374,6 +492,26 @@ const DailyProduction = () => {
                                                 <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: consumptionKg >= 1 ? '#059669' : '#64748b' }}>
                                                     {consumptionKg > 0 ? `${consumptionKg.toFixed(2)} kg` : '-'}
                                                 </td>
+                                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                                                        <button
+                                                            className="icon-btn"
+                                                            onClick={() => handleOpenLogEditModal(log)}
+                                                            title="수량 수정"
+                                                            style={{ padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                                        >
+                                                            <Edit size={15} color="#4f46e5" />
+                                                        </button>
+                                                        <button
+                                                            className="icon-btn"
+                                                            onClick={() => handleDeleteLog(log)}
+                                                            title="삭제"
+                                                            style={{ padding: '0.35rem', borderRadius: '6px', border: '1px solid #fecaca', background: '#fef2f2', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                                        >
+                                                            <Trash2 size={15} color="#dc2626" />
+                                                        </button>
+                                                    </div>
+                                                </td>
                                             </tr>
                                         );
                                     })}
@@ -382,11 +520,11 @@ const DailyProduction = () => {
                                     <tr style={{ borderTop: '2px solid #e2e8f0', background: '#f8fafc' }}>
                                         <td colSpan={4} style={{ padding: '0.75rem', fontWeight: 700, textAlign: 'right' }}>합계</td>
                                         <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 800, color: '#4f46e5', fontSize: '1.1rem' }}>
-                                            {filteredLogs.reduce((sum, log) => sum + (log.daily_quantity || 0), 0).toLocaleString()}개
+                                            {displayLogs.reduce((sum, log) => sum + (log.daily_quantity || 0), 0).toLocaleString()}개
                                         </td>
                                         <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
                                             {(() => {
-                                                const totalKg = filteredLogs.reduce((sum, log) => {
+                                                const totalKg = displayLogs.reduce((sum, log) => {
                                                     const product = products.find(p => p.id === log.product_id);
                                                     const shotWeight = product ? (product.product_weight || 0) + (product.runner_weight || 0) : 0;
                                                     return sum + (shotWeight * (log.daily_quantity || 0)) / 1000;
@@ -394,12 +532,15 @@ const DailyProduction = () => {
                                                 return totalKg > 0 ? `${totalKg.toFixed(2)} kg` : '-';
                                             })()}
                                         </td>
+                                        <td></td>
                                     </tr>
                                 </tfoot>
                             </table>
                         </div>
                     )}
                 </>
+                    );
+                })()
             ) : (
                 /* ===== 날짜 필터 없음 → 기존 작업지시 목록 표시 ===== */
                 <>
@@ -412,8 +553,9 @@ const DailyProduction = () => {
                             <span className="label">완료 임박</span>
                             <span className="value" style={{ color: 'var(--warning)' }}>
                                 {activeOrders.filter(wo => {
+                                    const logSum = getLogSum(wo.id);
                                     const progress = wo.target_quantity > 0
-                                        ? (wo.produced_quantity / wo.target_quantity) * 100
+                                        ? (logSum / wo.target_quantity) * 100
                                         : 0;
                                     return progress >= 90 && progress < 100;
                                 }).length}건
@@ -482,10 +624,10 @@ const DailyProduction = () => {
                             />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">현재 생산량</label>
+                            <label className="form-label">현재 생산량 (로그 합계)</label>
                             <input
                                 className="form-input"
-                                value={`${selectedOrder.produced_quantity} / ${selectedOrder.target_quantity}`}
+                                value={`${getLogSum(selectedOrder.id).toLocaleString()} / ${selectedOrder.target_quantity.toLocaleString()}`}
                                 disabled
                             />
                         </div>
@@ -513,11 +655,11 @@ const DailyProduction = () => {
                             <label className="form-label">예상 누적 생산량</label>
                             <input
                                 className="form-input"
-                                value={selectedOrder.produced_quantity + dailyQuantity}
+                                value={(getLogSum(selectedOrder.id) + dailyQuantity).toLocaleString()}
                                 disabled
                                 style={{
                                     fontWeight: 600,
-                                    color: (selectedOrder.produced_quantity + dailyQuantity) >= selectedOrder.target_quantity
+                                    color: (getLogSum(selectedOrder.id) + dailyQuantity) >= selectedOrder.target_quantity
                                         ? '#10b981'
                                         : '#4f46e5'
                                 }}
@@ -595,6 +737,80 @@ const DailyProduction = () => {
                         <div className="modal-actions">
                             <button className="btn-cancel" onClick={() => setIsEditModalOpen(false)}>취소</button>
                             <button className="btn-submit" onClick={handleSaveEdit}>
+                                저장
+                            </button>
+                        </div>
+                    </>
+                )}
+            </Modal>
+
+            {/* 생산기록(log) 수량 수정 모달 */}
+            <Modal
+                title="생산기록 수량 수정"
+                isOpen={isLogEditModalOpen}
+                onClose={() => setIsLogEditModalOpen(false)}
+            >
+                {editingLog && (
+                    <>
+                        <div className="form-group">
+                            <label className="form-label">생산일</label>
+                            <input
+                                className="form-input"
+                                value={editingLog.production_date}
+                                disabled
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">설비</label>
+                            <input
+                                className="form-input"
+                                value={getEquipmentName(editingLog.equipment_id)}
+                                disabled
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">제품</label>
+                            <input
+                                className="form-input"
+                                value={getProductName(editingLog.product_id)}
+                                disabled
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">기존 수량</label>
+                            <input
+                                className="form-input"
+                                value={(editingLog.daily_quantity || 0).toLocaleString() + '개'}
+                                disabled
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">수정 수량 *</label>
+                            <input
+                                type="number"
+                                className="form-input"
+                                value={editLogQuantity}
+                                onChange={(e) => setEditLogQuantity(parseInt(e.target.value) || 0)}
+                                placeholder="수정할 수량 입력"
+                                autoFocus
+                            />
+                        </div>
+                        {editLogQuantity !== (editingLog.daily_quantity || 0) && (
+                            <div style={{
+                                padding: '0.75rem',
+                                background: '#eff6ff',
+                                borderRadius: '8px',
+                                fontSize: '0.85rem',
+                                color: '#1e40af',
+                                marginBottom: '1rem'
+                            }}>
+                                ℹ️ 작업지시 누적 생산량이 {editLogQuantity - (editingLog.daily_quantity || 0) > 0 ? '+' : ''}{(editLogQuantity - (editingLog.daily_quantity || 0)).toLocaleString()}개 조정됩니다.
+                            </div>
+                        )}
+
+                        <div className="modal-actions">
+                            <button className="btn-cancel" onClick={() => setIsLogEditModalOpen(false)}>취소</button>
+                            <button className="btn-submit" onClick={handleSaveLogEdit}>
                                 저장
                             </button>
                         </div>

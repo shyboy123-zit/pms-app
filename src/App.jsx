@@ -32,6 +32,24 @@ const ProtectedRoute = () => {
   return user ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
+/**
+ * 권한 게이트 — 특정 권한 키가 user.permissions[key] === false면 대시보드로 리다이렉트
+ * 관리자(position === '관리자')는 모든 권한 패스
+ * 권한 데이터가 없으면 기본 허용 (기존 호환성)
+ */
+const PermissionGate = ({ permissionKey, children }) => {
+  const { user } = useAuth();
+  // 관리자는 항상 허용
+  if (user?.position === '관리자') return children;
+  // 권한 객체 없으면 허용 (기존 호환)
+  if (!user?.permissions) return children;
+  // 명시적으로 false인 경우만 차단
+  if (user.permissions[permissionKey] === false) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -47,24 +65,24 @@ function App() {
             {/* Protected Dashboard Routes */}
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<DashboardLayout />}>
-                <Route index element={<Dashboard />} />
-                <Route path="molds" element={<Molds />} />
-                <Route path="materials" element={<Materials />} />
-                <Route path="delivery" element={<InventoryInOut />} />
-                <Route path="quality" element={<Quality />} />
-                <Route path="sales" element={<Sales />} />
-                <Route path="employees" element={<Employees />} />
-                <Route path="equipments" element={<Equipments />} />
-                <Route path="products" element={<Products />} />
-                <Route path="work-orders" element={<WorkOrders />} />
-                <Route path="daily-production" element={<DailyProduction />} />
-                <Route path="work-history" element={<WorkHistory />} />
-                <Route path="injection-conditions" element={<InjectionConditions />} />
-                <Route path="suppliers" element={<Suppliers />} />
-                <Route path="purchase" element={<Purchase />} />
-                <Route path="board" element={<Board />} />
-                <Route path="government-support" element={<GovernmentSupport />} />
-                <Route path="payroll" element={<Payroll />} />
+                <Route index element={<PermissionGate permissionKey="dashboard"><Dashboard /></PermissionGate>} />
+                <Route path="molds" element={<PermissionGate permissionKey="molds"><Molds /></PermissionGate>} />
+                <Route path="materials" element={<PermissionGate permissionKey="materials"><Materials /></PermissionGate>} />
+                <Route path="delivery" element={<PermissionGate permissionKey="delivery"><InventoryInOut /></PermissionGate>} />
+                <Route path="quality" element={<PermissionGate permissionKey="quality"><Quality /></PermissionGate>} />
+                <Route path="sales" element={<PermissionGate permissionKey="sales"><Sales /></PermissionGate>} />
+                <Route path="employees" element={<PermissionGate permissionKey="employees"><Employees /></PermissionGate>} />
+                <Route path="equipments" element={<PermissionGate permissionKey="equipments"><Equipments /></PermissionGate>} />
+                <Route path="products" element={<PermissionGate permissionKey="products"><Products /></PermissionGate>} />
+                <Route path="work-orders" element={<PermissionGate permissionKey="work_orders"><WorkOrders /></PermissionGate>} />
+                <Route path="daily-production" element={<PermissionGate permissionKey="daily_production"><DailyProduction /></PermissionGate>} />
+                <Route path="work-history" element={<PermissionGate permissionKey="work_history"><WorkHistory /></PermissionGate>} />
+                <Route path="injection-conditions" element={<PermissionGate permissionKey="injection_conditions"><InjectionConditions /></PermissionGate>} />
+                <Route path="suppliers" element={<PermissionGate permissionKey="suppliers"><Suppliers /></PermissionGate>} />
+                <Route path="purchase" element={<PermissionGate permissionKey="purchase"><Purchase /></PermissionGate>} />
+                <Route path="board" element={<PermissionGate permissionKey="board"><Board /></PermissionGate>} />
+                <Route path="government-support" element={<PermissionGate permissionKey="government_support"><GovernmentSupport /></PermissionGate>} />
+                <Route path="payroll" element={<PermissionGate permissionKey="payroll"><Payroll /></PermissionGate>} />
               </Route>
             </Route>
 

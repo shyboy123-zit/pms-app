@@ -259,6 +259,7 @@ const Employees = () => {
 
     const permissionLabels = {
         dashboard: '대시보드',
+        board: '게시판',
         molds: '금형관리',
         materials: '원재료관리',
         delivery: '입출고관리',

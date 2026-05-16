@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { DollarSign, TrendingUp, TrendingDown, Calendar, BarChart3, ArrowUpRight, ArrowDownRight, Plus, Edit, Trash2, FileText, CheckCircle, AlertTriangle, Search, X } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Calendar, BarChart3, ArrowUpRight, ArrowDownRight, Plus, Edit, Trash2, FileText, CheckCircle, AlertTriangle, Search, X, Wallet } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import PaymentTab from '../components/PaymentTab';
 
 const Sales = () => {
     const { inventoryTransactions, salesRecords, products, materials, suppliers, vouchers, addVoucher, updateVoucher, deleteVoucher } = useData();
@@ -436,7 +437,13 @@ const Sales = () => {
                         <span className="mismatch-badge">{reconciliationSummary.mismatchCount}</span>
                     )}
                 </button>
+                <button className={`sales-tab ${activeTab === 'payment' ? 'active' : ''}`} onClick={() => setActiveTab('payment')}>
+                    <Wallet size={16} /> 결제 관리
+                </button>
             </div>
+
+            {/* ──────────────── 탭4: 결제 관리 (Phase 3b) ──────────────── */}
+            {activeTab === 'payment' && <PaymentTab />}
 
             {/* ──────────────── 탭1: 입출고 기반 분석 ──────────────── */}
             {activeTab === 'analysis' && (

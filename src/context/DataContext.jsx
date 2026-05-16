@@ -214,6 +214,19 @@ export const DataProvider = ({ children }) => {
         fetchAllData();
     }, []);
 
+    // 자동 알림 체크 — 로그인된 사용자가 있고 핵심 데이터 로딩이 끝났을 때 1회 실행
+    // (페이지 새로고침 시마다 호출되지만, 같은 키 알림이 오늘 이미 있으면 스킵됨)
+    useEffect(() => {
+        if (loading) return;
+        if (!user?.id) return;
+        // 데이터 형태 보장 + 다른 상태 변경마다 재실행 방지 위해 setTimeout 0ms로 마이크로태스크 큐 이후 실행
+        const timer = setTimeout(() => {
+            runNotificationChecks(user.id).catch(e => console.warn('[notification-check] failed:', e?.message));
+        }, 500);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loading, user?.id]);
+
     // --- Actions (CRUD) ---
 
     // 1. Molds
@@ -841,6 +854,102 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    // ============================================================
+    // 자동 알림 체커 (Auto Notification Checks)
+    // ------------------------------------------------------------
+    // 데이터 로드 완료 후 자동으로 호출되어 다음 조건을 검사하고
+    // 알림이 없으면 notifications 테이블에 생성한다.
+    //   1) 원재료 안전재고 미달  (materials.stock < min_stock)
+    //   2) 작업지시 지연          (status='진행중' + 시작 후 7일↑ + 진척률<100%)
+    //   3) 금형 점검 도래          (last_check + 90일↑)
+    // 같은 키([AUTO] title prefix + related_id)가 오늘 이미 있으면 스킵 →
+    // 페이지 새로고침 시마다 중복 생성되지 않음.
+    // ============================================================
+    const NOTIF_LOW_STOCK_THRESHOLD_RATIO = 1.0;  // min_stock 미만이면 알림
+    const NOTIF_WORK_DELAY_DAYS = 7;              // 진행중 N일 경과 시 지연 알림
+    const NOTIF_MOLD_INSPECTION_DAYS = 90;        // 점검 후 N일 경과 시 점검 도래 알림
+
+    const runNotificationChecks = async (userId) => {
+        if (!userId) return;
+        const today = new Date().toISOString().split('T')[0];
+        const now = Date.now();
+
+        // 오늘 생성된 자동 알림 키 셋 (중복 방지)
+        const existingKeys = new Set(
+            notifications
+                .filter(n =>
+                    n.user_id === userId &&
+                    n.created_at && n.created_at.startsWith(today) &&
+                    n.title && n.title.startsWith('[AUTO]')
+                )
+                .map(n => `${n.type}:${n.related_id}`)
+        );
+
+        const toCreate = [];
+
+        // 1) 원재료 안전재고 미달
+        (materials || []).forEach(m => {
+            const minStock = parseFloat(m.min_stock || 0);
+            const currentStock = parseFloat(m.stock || 0);
+            if (minStock > 0 && currentStock < minStock * NOTIF_LOW_STOCK_THRESHOLD_RATIO) {
+                const key = `production:${m.id}`;
+                if (!existingKeys.has(key)) {
+                    const pct = minStock > 0 ? Math.round((currentStock / minStock) * 100) : 0;
+                    toCreate.push({
+                        title: `[AUTO] 원재료 안전재고 미달: ${m.name}`,
+                        message: `현재 재고 ${currentStock.toLocaleString()}${m.unit || ''} / 안전재고 ${minStock.toLocaleString()}${m.unit || ''} (${pct}%)`,
+                        type: 'production',
+                        relatedId: m.id
+                    });
+                }
+            }
+        });
+
+        // 2) 작업지시 지연
+        (workOrders || []).forEach(wo => {
+            if (wo.status !== '진행중' || !wo.start_time) return;
+            const startMs = new Date(wo.start_time).getTime();
+            const daysSinceStart = Math.floor((now - startMs) / (1000 * 60 * 60 * 24));
+            if (daysSinceStart < NOTIF_WORK_DELAY_DAYS) return;
+            const target = parseFloat(wo.target_quantity || 0);
+            const produced = parseFloat(wo.produced_quantity || 0);
+            const progress = target > 0 ? (produced / target) * 100 : 0;
+            if (progress >= 100) return;
+            const key = `production:${wo.id}`;
+            if (!existingKeys.has(key)) {
+                toCreate.push({
+                    title: `[AUTO] 작업지시 지연: ${wo.order_code || wo.id.slice(0, 8)}`,
+                    message: `시작 후 ${daysSinceStart}일 경과, 진척률 ${progress.toFixed(1)}% (${produced.toLocaleString()}/${target.toLocaleString()})`,
+                    type: 'production',
+                    relatedId: wo.id
+                });
+            }
+        });
+
+        // 3) 금형 점검 도래
+        (molds || []).forEach(mold => {
+            if (!mold.last_check) return;
+            if (mold.status === '폐기' || mold.status === '단종') return;
+            const checkMs = new Date(mold.last_check).getTime();
+            const daysSinceCheck = Math.floor((now - checkMs) / (1000 * 60 * 60 * 24));
+            if (daysSinceCheck < NOTIF_MOLD_INSPECTION_DAYS) return;
+            const key = `equipment:${mold.id}`;
+            if (!existingKeys.has(key)) {
+                toCreate.push({
+                    title: `[AUTO] 금형 점검 필요: ${mold.name || mold.code || mold.id.slice(0, 8)}`,
+                    message: `최종 점검 후 ${daysSinceCheck}일 경과 / 현재 타수: ${(mold.cycle_count || 0).toLocaleString()}`,
+                    type: 'equipment',
+                    relatedId: mold.id
+                });
+            }
+        });
+
+        // 일괄 생성 (실패해도 다른 알림에는 영향 없음)
+        for (const alert of toCreate) {
+            await addNotification(userId, alert.title, alert.message, alert.type, alert.relatedId);
+        }
+    };
+
     // --- Injection Conditions Functions ---
     const addInjectionCondition = async (conditionData) => {
         try {
@@ -1064,7 +1173,8 @@ export const DataProvider = ({ children }) => {
             attendance, addAttendance, updateAttendance, deleteAttendance,
             payrollRecords, addPayrollRecord, updatePayrollRecord, deletePayrollRecord,
             vouchers, addVoucher, updateVoucher, deleteVoucher,
-            logAudit
+            logAudit,
+            runNotificationChecks
         }}>
             {children}
         </DataContext.Provider>

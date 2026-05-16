@@ -94,7 +94,9 @@ const Header = ({ onToggleSidebar }) => {
 
                 <div className="action-btn notification-btn" onClick={() => setShowNotifications(!showNotifications)}>
                     <Bell size={20} />
-                    {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
+                    {unreadCount > 0 && (
+                        <span className="badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                    )}
                 </div>
 
                 {/* 알림 모달 */}
@@ -256,13 +258,22 @@ const Header = ({ onToggleSidebar }) => {
 
                 .badge {
                     position: absolute;
-                    top: 10px;
-                    right: 10px;
-                    width: 8px;
-                    height: 8px;
+                    top: 2px;
+                    right: 2px;
+                    min-width: 18px;
+                    height: 18px;
+                    padding: 0 5px;
                     background: var(--danger);
-                    border-radius: 50%;
-                    border: 1px solid white;
+                    color: white;
+                    font-size: 0.7rem;
+                    font-weight: 700;
+                    border-radius: 9px;
+                    border: 2px solid white;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    line-height: 1;
+                    box-sizing: border-box;
                 }
 
                 .user-profile {

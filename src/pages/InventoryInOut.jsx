@@ -59,6 +59,19 @@ const InventoryInOut = () => {
     const [isBatchClientCustom, setIsBatchClientCustom] = useState(false);
     const [isEditClientCustom, setIsEditClientCustom] = useState(false);
 
+    // 재고조정 사유 코드 (자유서술 → 표준 코드로 분류)
+    const ADJUST_REASONS = [
+        { code: 'PHYSICAL_COUNT', label: '실사 오차 (정기 실사 결과)' },
+        { code: 'DAMAGE', label: '파손/불량 폐기' },
+        { code: 'LOSS', label: '분실/도난' },
+        { code: 'SAMPLE', label: '시제품/샘플 출고' },
+        { code: 'INTERNAL_USE', label: '내부 소모/시험' },
+        { code: 'RETURN', label: '반품 처리' },
+        { code: 'INITIAL', label: '기초재고 등록' },
+        { code: 'OTHER', label: '기타 (비고에 상세 기재)' }
+    ];
+    const [adjustReason, setAdjustReason] = useState('PHYSICAL_COUNT');
+
     const addBatchItemRow = () => setBatchItems(prev => [...prev, { ...emptyBatchItem }]);
     const removeBatchItemRow = (idx) => { if (batchItems.length > 1) setBatchItems(prev => prev.filter((_, i) => i !== idx)); };
     const updateBatchItem = (idx, field, value) => setBatchItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
@@ -190,6 +203,7 @@ const InventoryInOut = () => {
                 if (!newItem.itemName) return alert('품목을 선택해주세요.');
                 const diff = actualStock - systemStock;
                 if (diff === 0) return alert('조정할 수량 차이가 없습니다.');
+                const reasonLabel = ADJUST_REASONS.find(r => r.code === adjustReason)?.label || adjustReason;
                 await updateInventoryTransaction(editingId, {
                     transaction_type: 'ADJUST',
                     item_name: newItem.itemName,
@@ -199,10 +213,28 @@ const InventoryInOut = () => {
                     unit_price: parseFloat(newItem.unitPrice) || 0,
                     transaction_date: newItem.transactionDate,
                     client: '',
-                    notes: `[재고조정] 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff})${newItem.notes ? ' / ' + newItem.notes : ''}`
-                });
+                    notes: `[재고조정:${adjustReason}] 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff}) / 사유: ${reasonLabel}${newItem.notes ? ' / ' + newItem.notes : ''}`
+                }, { reason: reasonLabel, context: 'inventory:adjust_update' });
             } else {
+                // 입고/출고 수정: product_id 필수
+                if (!newItem.productId) return alert('제품을 선택해주세요. (자유입력은 더 이상 허용되지 않습니다)');
                 if (!newItem.itemName || newItem.quantity <= 0) return alert('품목명과 수량을 입력해주세요.');
+
+                // 출고 시 음수 재고 방지 (기존 거래 본인은 제외하고 시뮬레이션)
+                if (newItem.transactionType === 'OUT') {
+                    const original = inventoryTransactions.find(t => t.id === editingId);
+                    let stockBefore = getSystemStock(newItem.itemCode, newItem.itemName);
+                    if (original) {
+                        // 기존 영향 되돌리기
+                        if (original.transaction_type === 'OUT') stockBefore += parseFloat(original.quantity);
+                        else if (original.transaction_type === 'IN' || original.transaction_type === 'ADJUST') stockBefore -= parseFloat(original.quantity);
+                    }
+                    const afterOut = stockBefore - parseFloat(newItem.quantity);
+                    if (afterOut < 0) {
+                        return alert(`출고 후 재고가 음수가 됩니다.\n현재 가용 재고: ${stockBefore.toLocaleString()} ${newItem.unit}\n출고 요청: ${parseFloat(newItem.quantity).toLocaleString()} ${newItem.unit}\n부족: ${Math.abs(afterOut).toLocaleString()} ${newItem.unit}`);
+                    }
+                }
+
                 await updateInventoryTransaction(editingId, {
                     transaction_type: newItem.transactionType,
                     item_name: newItem.itemName,
@@ -213,7 +245,7 @@ const InventoryInOut = () => {
                     transaction_date: newItem.transactionDate,
                     client: newItem.client,
                     notes: newItem.notes
-                });
+                }, { context: 'inventory:update' });
             }
             resetForm();
             return;
@@ -225,6 +257,7 @@ const InventoryInOut = () => {
             if (!newItem.itemName) return alert('품목을 선택해주세요.');
             const diff = actualStock - systemStock;
             if (diff === 0) return alert('조정할 수량 차이가 없습니다.');
+            const reasonLabel = ADJUST_REASONS.find(r => r.code === adjustReason)?.label || adjustReason;
             await addInventoryTransaction({
                 transaction_type: 'ADJUST',
                 item_name: newItem.itemName,
@@ -234,14 +267,32 @@ const InventoryInOut = () => {
                 unit_price: parseFloat(newItem.unitPrice) || 0,
                 transaction_date: batchCommon.transactionDate,
                 client: '',
-                notes: `[재고조정] 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff})${batchCommon.notes ? ' / ' + batchCommon.notes : ''}`
-            });
+                notes: `[재고조정:${adjustReason}] 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff}) / 사유: ${reasonLabel}${batchCommon.notes ? ' / ' + batchCommon.notes : ''}`
+            }, { reason: reasonLabel, context: 'inventory:adjust_new' });
             resetForm();
             return;
         }
 
-        const validItems = batchItems.filter(item => item.itemName && item.quantity > 0);
+        // 입고/출고 다건 등록: 모든 항목이 product_id를 가지고 있어야 함
+        const itemsWithoutProduct = batchItems.filter(item => item.itemName && item.quantity > 0 && !item.productId);
+        if (itemsWithoutProduct.length > 0) {
+            return alert('모든 품목은 등록된 제품에서 선택해야 합니다. (자유입력은 더 이상 허용되지 않습니다)');
+        }
+        const validItems = batchItems.filter(item => item.productId && item.itemName && item.quantity > 0);
         if (validItems.length === 0) return alert('최소 1개 이상의 품목을 입력해주세요.');
+
+        // 출고 시 음수 재고 사전 시뮬레이션 (같은 품목 누적 출고도 함께 체크)
+        if (batchCommon.transactionType === 'OUT') {
+            const cumulativeOut = {};
+            for (const item of validItems) {
+                const key = item.itemCode || item.itemName;
+                const currentStock = getSystemStock(item.itemCode, item.itemName);
+                cumulativeOut[key] = (cumulativeOut[key] || 0) + parseFloat(item.quantity);
+                if (currentStock - cumulativeOut[key] < 0) {
+                    return alert(`'${item.itemName}'의 출고 후 재고가 음수가 됩니다.\n현재 가용 재고: ${currentStock.toLocaleString()} ${item.unit}\n출고 요청(누적): ${cumulativeOut[key].toLocaleString()} ${item.unit}\n부족: ${(cumulativeOut[key] - currentStock).toLocaleString()} ${item.unit}`);
+                }
+            }
+        }
 
         for (const item of validItems) {
             await addInventoryTransaction({
@@ -254,7 +305,7 @@ const InventoryInOut = () => {
                 transaction_date: batchCommon.transactionDate,
                 client: batchCommon.client,
                 notes: batchCommon.notes
-            });
+            }, { context: `inventory:batch_${batchCommon.transactionType.toLowerCase()}` });
 
             // 출고 → 매출 전표 자동 생성 (입고는 제품 입고이므로 매입 아님)
             if (addVoucher && batchCommon.transactionType === 'OUT') {
@@ -276,8 +327,14 @@ const InventoryInOut = () => {
     };
 
     const handleEdit = (row) => {
+        // 기존 거래의 item_code/item_name으로 products에서 product_id 역추적
+        const matchedProduct = products.find(p =>
+            (row.item_code && p.product_code === row.item_code) ||
+            (row.item_name && p.name === row.item_name)
+        );
         setNewItem({
             transactionType: row.transaction_type,
+            productId: matchedProduct?.id || '',
             itemName: row.item_name,
             itemCode: row.item_code || '',
             quantity: row.quantity,
@@ -290,6 +347,21 @@ const InventoryInOut = () => {
         // 거래처가 활성 거래처 목록에 없으면 직접입력 모드로 초기화
         const clientInList = !!row.client && activeSuppliers.some(s => s.name === row.client);
         setIsEditClientCustom(!!row.client && !clientInList);
+
+        // 재고조정 수정 시 사유 코드 복원
+        if (row.transaction_type === 'ADJUST' && row.notes) {
+            const reasonMatch = row.notes.match(/\[재고조정:([A-Z_]+)\]/);
+            if (reasonMatch && ADJUST_REASONS.some(r => r.code === reasonMatch[1])) {
+                setAdjustReason(reasonMatch[1]);
+            }
+            // 재고조정 수정에서는 systemStock/actualStock 복원
+            const stockNow = getSystemStock(row.item_code, row.item_name);
+            // 본인 거래 영향 제거: stockNow에서 row.quantity 빼야 진짜 "조정 전" 상태
+            const stockBefore = stockNow - parseFloat(row.quantity);
+            setSystemStock(stockBefore);
+            setActualStock(stockBefore + parseFloat(row.quantity));
+        }
+
         setEditingId(row.id);
         setIsEditMode(true);
         setIsModalOpen(true);
@@ -329,6 +401,7 @@ const InventoryInOut = () => {
         setActiveBatchDropdown(-1);
         setIsBatchClientCustom(false);
         setIsEditClientCustom(false);
+        setAdjustReason('PHYSICAL_COUNT');
     };
 
     // 재고현황에서 직접 재고조정 시작
@@ -641,6 +714,15 @@ const InventoryInOut = () => {
                                     </div>
                                 </div>
                                 <div className="form-group">
+                                    <label className="form-label">조정 사유 *</label>
+                                    <select className="form-input" value={adjustReason}
+                                        onChange={(e) => setAdjustReason(e.target.value)}>
+                                        {ADJUST_REASONS.map(r => (
+                                            <option key={r.code} value={r.code}>{r.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
                                     <label className="form-label">단가</label>
                                     <input type="number" className="form-input" value={newItem.unitPrice}
                                         onChange={(e) => setNewItem({ ...newItem, unitPrice: parseFloat(e.target.value) || 0 })} placeholder="0" />
@@ -802,6 +884,15 @@ const InventoryInOut = () => {
                                             {(actualStock - systemStock) > 0 ? '+' : ''}{(actualStock - systemStock).toLocaleString()} {newItem.unit}
                                         </span>
                                     </div>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">조정 사유 *</label>
+                                    <select className="form-input" value={adjustReason}
+                                        onChange={(e) => setAdjustReason(e.target.value)}>
+                                        {ADJUST_REASONS.map(r => (
+                                            <option key={r.code} value={r.code}>{r.label}</option>
+                                        ))}
+                                    </select>
                                 </div>
                             </>
                         ) : (

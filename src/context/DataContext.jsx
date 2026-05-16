@@ -1,9 +1,44 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 const DataContext = createContext(null);
 
 export const DataProvider = ({ children }) => {
+    const { user } = useAuth() || {};
+
+    // ============================================================
+    // 감사 로그 (audit_log) 자동 기록 헬퍼
+    // ------------------------------------------------------------
+    // 모든 주요 데이터 변경(INSERT/UPDATE/DELETE)을 audit_log 테이블에
+    // 자동 기록한다. 실패해도 메인 로직은 영향받지 않도록 silent fail.
+    // ============================================================
+    const logAudit = async ({
+        tableName,
+        recordId,
+        action,        // 'INSERT' | 'UPDATE' | 'DELETE'
+        oldData = null,
+        newData = null,
+        reason = null,
+        context = null
+    }) => {
+        try {
+            await supabase.from('audit_log').insert([{
+                table_name: tableName,
+                record_id: recordId != null ? String(recordId) : null,
+                action,
+                old_data: oldData,
+                new_data: newData,
+                changed_by_id: user?.auth_user_id || null,
+                changed_by_name: user?.name || user?.email || 'unknown',
+                reason,
+                context
+            }]);
+        } catch (e) {
+            // 감사 로그 실패는 메인 트랜잭션을 막지 않음 (테이블 없을 수도 있음)
+            console.warn('[audit_log] silent fail:', e?.message);
+        }
+    };
     // --- State ---
     const [loading, setLoading] = useState(true);
     const [molds, setMolds] = useState([]);
@@ -347,20 +382,54 @@ export const DataProvider = ({ children }) => {
     };
 
     // 9. Inventory Transactions
-    const addInventoryTransaction = async (item) => {
+    const addInventoryTransaction = async (item, auditMeta = {}) => {
         const { data, error } = await supabase.from('inventory_transactions').insert([item]).select();
-        if (!error && data) setInventoryTransactions(prev => [data[0], ...prev]);
+        if (!error && data) {
+            setInventoryTransactions(prev => [data[0], ...prev]);
+            logAudit({
+                tableName: 'inventory_transactions',
+                recordId: data[0].id,
+                action: 'INSERT',
+                newData: data[0],
+                reason: auditMeta.reason || null,
+                context: auditMeta.context || 'inventory:add'
+            });
+        }
         return { data, error };
     };
 
-    const updateInventoryTransaction = async (id, fields) => {
+    const updateInventoryTransaction = async (id, fields, auditMeta = {}) => {
+        // 변경 전 데이터 스냅샷 (감사 로그용)
+        const oldRow = inventoryTransactions.find(t => t.id === id) || null;
         const { error } = await supabase.from('inventory_transactions').update(fields).eq('id', id);
-        if (!error) setInventoryTransactions(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t));
+        if (!error) {
+            setInventoryTransactions(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t));
+            logAudit({
+                tableName: 'inventory_transactions',
+                recordId: id,
+                action: 'UPDATE',
+                oldData: oldRow,
+                newData: { ...(oldRow || {}), ...fields },
+                reason: auditMeta.reason || null,
+                context: auditMeta.context || 'inventory:update'
+            });
+        }
     };
 
-    const deleteInventoryTransaction = async (id) => {
+    const deleteInventoryTransaction = async (id, auditMeta = {}) => {
+        const oldRow = inventoryTransactions.find(t => t.id === id) || null;
         const { error } = await supabase.from('inventory_transactions').delete().eq('id', id);
-        if (!error) setInventoryTransactions(prev => prev.filter(t => t.id !== id));
+        if (!error) {
+            setInventoryTransactions(prev => prev.filter(t => t.id !== id));
+            logAudit({
+                tableName: 'inventory_transactions',
+                recordId: id,
+                action: 'DELETE',
+                oldData: oldRow,
+                reason: auditMeta.reason || null,
+                context: auditMeta.context || 'inventory:delete'
+            });
+        }
     };
 
     const getTransactionsByDateRange = async (startDate, endDate) => {
@@ -994,7 +1063,8 @@ export const DataProvider = ({ children }) => {
             boardPosts, boardComments, addBoardPost, updateBoardPost, deleteBoardPost, addBoardComment, deleteBoardComment,
             attendance, addAttendance, updateAttendance, deleteAttendance,
             payrollRecords, addPayrollRecord, updatePayrollRecord, deletePayrollRecord,
-            vouchers, addVoucher, updateVoucher, deleteVoucher
+            vouchers, addVoucher, updateVoucher, deleteVoucher,
+            logAudit
         }}>
             {children}
         </DataContext.Provider>

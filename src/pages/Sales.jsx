@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { DollarSign, TrendingUp, TrendingDown, Calendar, BarChart3, ArrowUpRight, ArrowDownRight, Plus, Edit, Trash2, FileText, CheckCircle, AlertTriangle, Search, X, Wallet } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Calendar, BarChart3, ArrowUpRight, ArrowDownRight, Plus, Edit, Trash2, FileText, CheckCircle, AlertTriangle, Search, X, Wallet, Download } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import PaymentTab from '../components/PaymentTab';
+import MonthlyReportModal from '../components/MonthlyReportModal';
 
 const Sales = () => {
     const { inventoryTransactions, salesRecords, products, materials, suppliers, vouchers, addVoucher, updateVoucher, deleteVoucher } = useData();
@@ -18,6 +19,7 @@ const Sales = () => {
     const [clientSearch, setClientSearch] = useState('');
     const [showClientDropdown, setShowClientDropdown] = useState(false);
     const [clientFilter, setClientFilter] = useState('all'); // 거래처별 필터
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false); // Phase 3c: 월말 결산 PDF
 
     // 전표 공통 정보
     const [voucherCommon, setVoucherCommon] = useState({
@@ -420,8 +422,14 @@ const Sales = () => {
                             <Plus size={18} /> 전표 등록
                         </button>
                     )}
+                    <button className="btn-report" onClick={() => setIsReportModalOpen(true)} title="월말 결산 보고서 PDF">
+                        <Download size={18} /> 월말 결산 PDF
+                    </button>
                 </div>
             </div>
+
+            {/* 월말 결산 PDF 모달 (Phase 3c) */}
+            <MonthlyReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} />
 
             {/* 탭 네비게이션 */}
             <div className="sales-tabs">
@@ -1124,6 +1132,8 @@ const Sales = () => {
 
                 .btn-primary-sales { background: var(--primary); color: white; padding: 0.6rem 1.2rem; border-radius: 10px; display: flex; align-items: center; gap: 0.5rem; font-weight: 600; transition: all 0.2s; border: none; cursor: pointer; }
                 .btn-primary-sales:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
+                .btn-report { background: #059669; color: white; padding: 0.6rem 1.1rem; border-radius: 10px; display: flex; align-items: center; gap: 0.4rem; font-weight: 600; transition: all 0.2s; border: none; cursor: pointer; font-size: 0.9rem; }
+                .btn-report:hover { background: #047857; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5,150,105,0.3); }
 
                 /* 탭 네비게이션 */
                 .sales-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; background: white; padding: 0.5rem; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }

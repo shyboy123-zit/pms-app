@@ -41,8 +41,9 @@ const Modal = ({ isOpen, onClose, title, children }) => {
           left: 0;
           width: 100%;
           height: 100%;
-          background: rgba(0, 0, 0, 0.4);
-          backdrop-filter: blur(4px);
+          background: var(--bg-overlay);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -52,13 +53,17 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 
         .modal-container {
           width: 100%;
-          max-width: 500px;
-          background: white; /* Stronger background for modal */
+          max-width: 540px;
+          background: var(--bg-card);
+          color: var(--text-main);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
           max-height: 90vh;
           display: flex;
           flex-direction: column;
-          animation: slideUp 0.3s ease-out;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: var(--shadow-xl);
+          overflow: hidden;
         }
 
         .modal-header {
@@ -67,23 +72,30 @@ const Modal = ({ isOpen, onClose, title, children }) => {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          background: var(--bg-card);
         }
 
         .modal-title {
           font-size: 1.1rem;
-          font-weight: 600;
+          font-weight: 700;
+          color: var(--text-main);
+          letter-spacing: -0.01em;
         }
 
         .close-btn {
           color: var(--text-muted);
-          padding: 0.25rem;
+          padding: 0.4rem;
           border-radius: 50%;
-          transition: all 0.2s;
+          transition: all var(--transition-base);
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
-        
+
         .close-btn:hover {
-          background: var(--bg-main);
+          background: var(--bg-subtle);
           color: var(--text-main);
+          transform: rotate(90deg);
         }
 
         .modal-content {
@@ -114,38 +126,60 @@ const Modal = ({ isOpen, onClose, title, children }) => {
         }
         .form-input {
             width: 100%;
-            padding: 0.75rem;
+            padding: 0.7rem 0.85rem;
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
             font-size: 0.95rem;
-            transition: border 0.2s;
+            background: var(--bg-elevated);
+            color: var(--text-main);
+            transition: all var(--transition-base);
+            font-family: inherit;
+        }
+        .form-input:hover {
+            border-color: var(--border-strong);
         }
         .form-input:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+            box-shadow: var(--shadow-focus);
         }
-        
+
         .modal-actions {
             display: flex;
             justify-content: flex-end;
-            gap: 0.75rem;
+            gap: 0.5rem;
             margin-top: 1.5rem;
         }
-        
+
         .btn-cancel {
-            padding: 0.75rem 1rem;
+            padding: 0.7rem 1.1rem;
             border-radius: var(--radius-md);
             color: var(--text-muted);
-            font-weight: 500;
-            background: var(--bg-main);
+            font-weight: 600;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+            transition: all var(--transition-base);
+        }
+        .btn-cancel:hover {
+            background: var(--bg-card);
+            color: var(--text-main);
         }
         .btn-submit {
-             padding: 0.75rem 1.5rem;
+             padding: 0.7rem 1.4rem;
              border-radius: var(--radius-md);
-             background: var(--primary);
-             color: white;
-             font-weight: 600;
+             background: var(--gradient-primary);
+             color: var(--primary-text);
+             font-weight: 700;
+             box-shadow: var(--shadow-sm);
+             transition: all var(--transition-base);
+             letter-spacing: -0.01em;
+        }
+        .btn-submit:hover {
+             transform: translateY(-1px);
+             box-shadow: var(--shadow-md);
+        }
+        .btn-submit:active {
+             transform: translateY(0);
         }
 
         /* 모바일 — 모달 풀스크린화 (Phase 4d) */

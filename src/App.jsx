@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import DashboardLayout from './layouts/DashboardLayout';
@@ -52,9 +53,10 @@ const PermissionGate = ({ permissionKey, children }) => {
 
 function App() {
   return (
-    <AuthProvider>
-      <DataProvider>
-        <Router>
+    <ThemeProvider>
+      <AuthProvider>
+        <DataProvider>
+          <Router>
           <Routes>
             {/* Auth Routes */}
             <Route element={<AuthLayout />}>
@@ -88,10 +90,11 @@ function App() {
 
             {/* Catch all */}
             <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </Router>
-      </DataProvider>
-    </AuthProvider>
+            </Routes>
+          </Router>
+        </DataProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

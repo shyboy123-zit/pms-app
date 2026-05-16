@@ -43,34 +43,42 @@ const Table = ({ columns, data, actions }) => {
             <style>{`
         .table-container {
             overflow-x: auto;
-            padding: 1rem;
+            padding: 0.5rem;
             position: relative;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
         }
-        
+
         .custom-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
         }
 
         .custom-table th {
             text-align: left;
-            padding: 1rem;
-            border-bottom: 2px solid var(--border);
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--border);
             color: var(--text-muted);
             font-weight: 600;
-            background: rgba(255, 255, 255, 0.9);
+            background: var(--bg-subtle);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
 
         .custom-table td {
-            padding: 1rem;
+            padding: 0.9rem 1rem;
             border-bottom: 1px solid var(--border);
             color: var(--text-main);
-            background: white;
+            background: var(--bg-card);
+            transition: background var(--transition-fast);
         }
 
         .custom-table tr:hover td {
-            background: rgba(255,255,255,0.5);
+            background: var(--bg-subtle);
         }
 
         .custom-table tr:last-child td {
@@ -80,7 +88,8 @@ const Table = ({ columns, data, actions }) => {
         .no-data {
             text-align: center;
             padding: 2rem;
-            color: var(--text-muted);
+            color: var(--text-subtle);
+            background: var(--bg-card);
         }
 
         .status-badge {
@@ -103,7 +112,7 @@ const Table = ({ columns, data, actions }) => {
             .custom-table th.sticky-col,
             .custom-table td.sticky-col {
                 position: sticky;
-                background: rgba(255, 255, 255, 0.98);
+                background: var(--bg-card);
                 z-index: 10;
                 box-shadow: 2px 0 4px rgba(0,0,0,0.05);
             }

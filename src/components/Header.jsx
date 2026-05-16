@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { Bell, Search, User, Menu, X, Check, Trash2 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { Bell, Search, User, Menu, X, Check, Trash2, Sun, Moon } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
 const Header = ({ onToggleSidebar }) => {
     const { user } = useAuth();
     const { notifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification } = useData();
+    const { theme, toggleTheme } = useTheme();
     const location = useLocation();
     const [showNotifications, setShowNotifications] = useState(false);
 
@@ -92,6 +94,15 @@ const Header = ({ onToggleSidebar }) => {
                     <input type="text" placeholder="검색..." />
                 </div>
 
+                <button
+                    className="action-btn theme-toggle"
+                    onClick={toggleTheme}
+                    title={theme === 'light' ? '다크 모드로 전환' : '라이트 모드로 전환'}
+                    aria-label="테마 전환"
+                >
+                    {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+                </button>
+
                 <div className="action-btn notification-btn" onClick={() => setShowNotifications(!showNotifications)}>
                     <Bell size={20} />
                     {unreadCount > 0 && (
@@ -170,6 +181,22 @@ const Header = ({ onToggleSidebar }) => {
                     align-items: center;
                     justify-content: space-between;
                     position: relative;
+                    background: var(--glass-bg);
+                    backdrop-filter: blur(16px) saturate(160%);
+                    -webkit-backdrop-filter: blur(16px) saturate(160%);
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-lg);
+                    box-shadow: var(--shadow-sm);
+                }
+
+                .theme-toggle {
+                    color: var(--text-muted);
+                    border: 1px solid var(--border);
+                }
+                .theme-toggle:hover {
+                    color: var(--primary);
+                    background: var(--primary-soft);
+                    border-color: transparent;
                 }
 
                 /* 햄버거 메뉴 버튼 */
@@ -217,16 +244,18 @@ const Header = ({ onToggleSidebar }) => {
                     padding: 0.5rem 1rem 0.5rem 2.5rem;
                     border-radius: 20px;
                     border: 1px solid var(--border);
-                    background: rgba(255,255,255,0.5);
+                    background: var(--bg-subtle);
+                    color: var(--text-main);
                     width: 200px;
-                    transition: all 0.2s;
+                    transition: all var(--transition-base);
                 }
 
                 .search-bar input:focus {
                     outline: none;
                     width: 250px;
                     border-color: var(--primary);
-                    background: white;
+                    background: var(--bg-elevated);
+                    box-shadow: var(--shadow-focus);
                 }
 
                 .search-icon {
@@ -245,15 +274,18 @@ const Header = ({ onToggleSidebar }) => {
                     align-items: center;
                     justify-content: center;
                     border-radius: 50%;
-                    background: white;
+                    background: var(--bg-card);
                     color: var(--text-muted);
                     cursor: pointer;
-                    transition: all 0.2s;
+                    transition: all var(--transition-base);
+                    box-shadow: var(--shadow-xs);
                 }
 
                 .action-btn:hover {
-                    background: var(--bg-main);
+                    background: var(--primary-soft);
                     color: var(--primary);
+                    transform: translateY(-1px);
+                    box-shadow: var(--shadow-sm);
                 }
 
                 .badge {
@@ -286,11 +318,12 @@ const Header = ({ onToggleSidebar }) => {
                     width: 40px;
                     height: 40px;
                     border-radius: 50%;
-                    background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
+                    background: var(--gradient-primary);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    color: white;
+                    color: var(--primary-text);
+                    box-shadow: var(--shadow-md);
                 }
 
                 .user-info {
@@ -364,12 +397,15 @@ const Header = ({ onToggleSidebar }) => {
                     right: -1rem;
                     width: 380px;
                     max-height: 500px;
-                    background: white;
-                    border-radius: 12px;
-                    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+                    background: var(--bg-card);
+                    color: var(--text-main);
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-lg);
+                    box-shadow: var(--shadow-xl);
                     z-index: 1000;
                     display: flex;
                     flex-direction: column;
+                    overflow: hidden;
                 }
 
                 .notification-header {

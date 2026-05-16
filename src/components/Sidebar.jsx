@@ -246,9 +246,11 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
     margin: 1rem;
     display: flex;
     flex-direction: column;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    transition: transform 0.3s ease-in-out;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    border-radius: var(--radius-lg);
+    transition: transform 0.3s ease-in-out, background-color var(--transition-base);
   }
 
   .sidebar-header {
@@ -256,26 +258,29 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    border-bottom: 1px solid var(--border);
   }
 
   .logo-icon {
-    width: 32px;
-    height: 32px;
-    background: var(--primary);
-    color: white;
-    border-radius: 8px;
+    width: 36px;
+    height: 36px;
+    background: var(--gradient-primary);
+    color: var(--primary-text);
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: bold;
-    font-size: 1.2rem;
+    font-weight: 800;
+    font-size: 1.15rem;
+    box-shadow: var(--shadow-md);
+    letter-spacing: -0.02em;
   }
 
   .logo-text {
     font-size: 1.25rem;
     font-weight: 700;
     color: var(--text-main);
+    letter-spacing: -0.02em;
   }
 
   .sidebar-nav {
@@ -307,7 +312,8 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
   }
 
   .category-header:hover {
-    background: rgba(79, 70, 229, 0.05);
+    background: var(--primary-soft);
+    color: var(--primary);
   }
 
   .category-label {
@@ -345,20 +351,20 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
   }
 
   .nav-item:hover {
-    background: rgba(79, 70, 229, 0.05);
+    background: var(--primary-soft);
     color: var(--primary);
     transform: translateX(2px);
   }
 
   .nav-item.active {
-    background: var(--primary);
-    color: white;
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+    background: var(--gradient-primary);
+    color: var(--primary-text);
+    box-shadow: var(--shadow-md);
   }
 
   .sidebar-footer {
     padding: 1rem 1.5rem 1.5rem;
-    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    border-top: 1px solid var(--border);
   }
 
   .user-profile {
@@ -367,22 +373,24 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
     gap: 0.75rem;
     margin-bottom: 1rem;
     padding: 0.75rem;
-    background: rgba(0, 0, 0, 0.03);
-    border-radius: 8px;
+    background: var(--bg-subtle);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
   }
-  
+
   .user-avatar {
     width: 32px;
     height: 32px;
-    background: var(--primary);
-    color: white;
+    background: var(--gradient-primary);
+    color: var(--primary-text);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 0.9rem;
     flex-shrink: 0;
+    box-shadow: var(--shadow-sm);
   }
 
   .user-info {

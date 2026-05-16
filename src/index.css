@@ -1,36 +1,139 @@
-/* Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* ============================================================
+   Phase 5 디자인 시스템 — Premium Navy + Dark Mode
+   ============================================================ */
 
-:root {
-  /* Color Palette - Modern & Professional */
-  --primary: #4f46e5;
-  /* Indigo 600 */
-  --primary-hover: #4338ca;
-  --secondary: #64748b;
-  /* Slate 500 */
+/* Pretendard (한글 최적화) + Inter (영문) */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-  --bg-main: #f8fafc;
-  /* Slate 50 */
+/* === 라이트 모드 (기본) === */
+:root,
+[data-theme='light'] {
+  /* 배경 */
+  --bg-main: #f6f7fb;        /* 미세한 쿨톤 라이트 그레이 */
   --bg-card: #ffffff;
-  --text-main: #0f172a;
-  /* Slate 900 */
-  --text-muted: #64748b;
+  --bg-elevated: #ffffff;
+  --bg-subtle: #f1f5f9;
+  --bg-glass: rgba(255, 255, 255, 0.65);
+  --bg-overlay: rgba(15, 23, 42, 0.45);
 
-  --border: #e2e8f0;
+  /* 텍스트 */
+  --text-main: #0b1729;       /* 깊은 네이비 블랙 */
+  --text-muted: #5b6779;
+  --text-subtle: #94a3b8;
+  --text-inverse: #ffffff;
 
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
+  /* 보더 */
+  --border: #e3e8f0;
+  --border-strong: #cbd5e1;
 
-  /* Glassmorphism */
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.5);
-  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  /* 프라이머리 — 프리미엄 딥 네이비 */
+  --primary: #1e3a8a;
+  --primary-hover: #1e40af;
+  --primary-active: #1d4ed8;
+  --primary-soft: #eef2ff;
+  --primary-text: #ffffff;
 
-  /* Spacing & Radius */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
+  /* 액센트 — 워밍 골드 */
+  --accent: #b45309;
+  --accent-soft: #fef3c7;
+
+  /* 상태 컬러 */
+  --success: #047857;
+  --success-soft: #d1fae5;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --danger: #b91c1c;
+  --danger-soft: #fee2e2;
+  --info: #1d4ed8;
+  --info-soft: #dbeafe;
+
+  /* 그라데이션 */
+  --gradient-primary: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+  --gradient-luxe: linear-gradient(135deg, #0b1729 0%, #1e3a8a 50%, #3b82f6 100%);
+  --gradient-card: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(246,247,251,0.9) 100%);
+
+  /* 다층 그림자 (premium feel) */
+  --shadow-xs: 0 1px 2px 0 rgba(11, 23, 41, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(11, 23, 41, 0.06), 0 1px 2px -1px rgba(11, 23, 41, 0.04);
+  --shadow-md: 0 4px 8px -2px rgba(11, 23, 41, 0.08), 0 2px 4px -2px rgba(11, 23, 41, 0.05);
+  --shadow-lg: 0 12px 24px -6px rgba(11, 23, 41, 0.12), 0 4px 8px -4px rgba(11, 23, 41, 0.06);
+  --shadow-xl: 0 24px 48px -12px rgba(11, 23, 41, 0.18), 0 8px 16px -8px rgba(11, 23, 41, 0.08);
+  --shadow-glow: 0 0 0 4px rgba(30, 58, 138, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(30, 58, 138, 0.15);
+
+  /* 글래스 */
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-shadow: 0 8px 32px 0 rgba(11, 23, 41, 0.08);
+
+  /* 라운드 */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
   --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  /* 모션 */
+  --transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 320ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  color-scheme: light;
+}
+
+/* === 다크 모드 === */
+[data-theme='dark'] {
+  --bg-main: #0a1020;          /* 깊은 네이비 블랙 */
+  --bg-card: #131d33;
+  --bg-elevated: #1a2541;
+  --bg-subtle: #1a2541;
+  --bg-glass: rgba(19, 29, 51, 0.7);
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+
+  --text-main: #e8eef9;
+  --text-muted: #94a3b8;
+  --text-subtle: #64748b;
+  --text-inverse: #0a1020;
+
+  --border: #243049;
+  --border-strong: #2d3a55;
+
+  --primary: #60a5fa;
+  --primary-hover: #3b82f6;
+  --primary-active: #2563eb;
+  --primary-soft: rgba(96, 165, 250, 0.14);
+  --primary-text: #0a1020;
+
+  --accent: #fbbf24;
+  --accent-soft: rgba(251, 191, 36, 0.16);
+
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.15);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.15);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.15);
+  --info: #60a5fa;
+  --info-soft: rgba(96, 165, 250, 0.15);
+
+  --gradient-primary: linear-gradient(135deg, #1e3a8a 0%, #60a5fa 100%);
+  --gradient-luxe: linear-gradient(135deg, #0a1020 0%, #1e3a8a 50%, #60a5fa 100%);
+  --gradient-card: linear-gradient(135deg, rgba(26, 37, 65, 0.85) 0%, rgba(19, 29, 51, 0.85) 100%);
+
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 24px -6px rgba(0, 0, 0, 0.55), 0 4px 8px -4px rgba(0, 0, 0, 0.35);
+  --shadow-xl: 0 24px 48px -12px rgba(0, 0, 0, 0.7), 0 8px 16px -8px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 0 4px rgba(96, 165, 250, 0.18);
+  --shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.3);
+
+  --glass-bg: rgba(19, 29, 51, 0.7);
+  --glass-border: rgba(96, 165, 250, 0.12);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
 }
 
 * {
@@ -39,12 +142,23 @@
   padding: 0;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Pretendard Variable', 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--bg-main);
   color: var(--text-main);
-  line-height: 1.5;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color var(--transition-base), color var(--transition-base);
+  /* 다크모드 배경에 미세한 그라데이션 — 깊이감 */
+  background-image: radial-gradient(circle at top right, rgba(96, 165, 250, 0.04), transparent 50%);
+  min-height: 100vh;
 }
 
 a {
@@ -59,14 +173,90 @@ button {
   font-family: inherit;
 }
 
-/* Utilities */
+input, select, textarea {
+  font-family: inherit;
+  color: var(--text-main);
+}
+
+/* 스크롤바 — 다크/라이트 호환 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 5px;
+  border: 2px solid var(--bg-main);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-subtle);
+}
+
+/* === 유틸리티 === */
 .glass-panel {
   background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
   border-radius: var(--radius-lg);
+}
+
+/* === 다크모드 기본 보정 === */
+/* 인라인 style 안의 white/black을 변수로 매핑하기 어려우므로,
+   주요 패턴(흰 배경 카드, 진한 텍스트)을 다크모드에서 자동 보정 */
+[data-theme='dark'] [style*="background: white"],
+[data-theme='dark'] [style*="background:#fff"],
+[data-theme='dark'] [style*="background: #fff"],
+[data-theme='dark'] [style*="background-color: white"],
+[data-theme='dark'] [style*="background-color: #ffffff"],
+[data-theme='dark'] [style*="background: #ffffff"] {
+  background: var(--bg-card) !important;
+  color: var(--text-main);
+}
+
+[data-theme='dark'] [style*="background: #f8fafc"],
+[data-theme='dark'] [style*="background:#f8fafc"],
+[data-theme='dark'] [style*="background: #f1f5f9"] {
+  background: var(--bg-subtle) !important;
+}
+
+/* 폼 인풋도 다크 호환 */
+[data-theme='dark'] input,
+[data-theme='dark'] select,
+[data-theme='dark'] textarea,
+[data-theme='dark'] .form-input {
+  background: var(--bg-elevated);
+  color: var(--text-main);
+  border-color: var(--border);
+}
+
+[data-theme='dark'] input::placeholder,
+[data-theme='dark'] textarea::placeholder {
+  color: var(--text-subtle);
+}
+
+[data-theme='dark'] table {
+  color: var(--text-main);
+}
+
+[data-theme='dark'] th {
+  background: var(--bg-subtle) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border) !important;
+}
+
+[data-theme='dark'] td {
+  background: var(--bg-card) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border) !important;
+}
+
+[data-theme='dark'] tr:hover td {
+  background: var(--bg-elevated) !important;
 }
 
 .flex-center {

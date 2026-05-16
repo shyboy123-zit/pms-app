@@ -9,7 +9,7 @@ const Materials = () => {
         materials, addMaterial, updateMaterial, deleteMaterial,
         materialUsage, addMaterialUsage, updateMaterialUsage, deleteMaterialUsage,
         addPurchaseRequest,
-        inventoryTransactions,
+        vouchers,
         addVoucher
     } = useData();
 
@@ -210,7 +210,7 @@ const Materials = () => {
             else verificationStatus = '초과';
         }
 
-        // 매입 전표 생성 (업체별 매입으로 잡힘 - 입출고관리에는 기록하지 않음)
+        // 매입 전표 생성 (원재료 입고 기록 — 일일/월별 입출고 조회에서 사용)
         try {
             const { error: voucherError } = await addVoucher({
                 voucher_date: incomingData.incoming_date,
@@ -730,10 +730,9 @@ const Materials = () => {
                 </div>
 
                 {(() => {
-                    // 해당 날짜 입고 (inventory_transactions)
-                    const materialNames = new Set((materials || []).map(m => m.name));
-                    const dayIncoming = (inventoryTransactions || []).filter(t =>
-                        t.transaction_date === trackingDate && t.transaction_type === 'IN' && materialNames.has(t.item_name)
+                    // 해당 날짜 입고 (vouchers 매입 전표 중 원재료 자동생성분)
+                    const dayIncoming = (vouchers || []).filter(v =>
+                        v.voucher_date === trackingDate && v.voucher_type === '매입' && v.notes && v.notes.includes('[자동-원재료]')
                     );
                     // 해당 날짜 출고 (material_usage)
                     const dayOutgoing = (materialUsage || []).filter(u =>
@@ -782,7 +781,7 @@ const Materials = () => {
                                                     <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: '#059669' }}>
                                                         +{parseFloat(t.quantity).toLocaleString()} {t.unit}
                                                     </td>
-                                                    <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{t.notes || '-'}</td>
+                                                    <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{t.client || '-'}</td>
                                                 </tr>
                                             ))}
                                             {dayOutgoing.map((u) => (
@@ -897,10 +896,9 @@ const Materials = () => {
                 </div>
 
                 {(() => {
-                    // 해당 월의 원재료 입고 (원재료 목록에 있는 항목만)
-                    const materialNames = new Set((materials || []).map(m => m.name));
-                    const monthIncoming = (inventoryTransactions || []).filter(t =>
-                        t.transaction_type === 'IN' && materialNames.has(t.item_name) && t.transaction_date && t.transaction_date.startsWith(summaryMonth)
+                    // 해당 월의 원재료 입고 (vouchers 매입 전표 중 원재료 자동생성분)
+                    const monthIncoming = (vouchers || []).filter(v =>
+                        v.voucher_type === '매입' && v.notes && v.notes.includes('[자동-원재료]') && v.voucher_date && v.voucher_date.startsWith(summaryMonth)
                     );
                     // 해당 월의 사용 (material_usage)
                     const monthUsage = (materialUsage || []).filter(u =>
@@ -925,16 +923,14 @@ const Materials = () => {
                     });
 
                     monthIncoming.forEach(t => {
-                        const key = t.material_id || t.item_name;
+                        // voucher의 item_name으로 materials에서 매칭
+                        const matchedMat = (materials || []).find(m => m.name === t.item_name);
+                        const key = matchedMat ? matchedMat.id : t.item_name;
                         if (!summaryMap[key]) {
                             summaryMap[key] = { name: t.item_name, unit: t.unit, incomingQty: 0, orderedQty: 0, usageQty: 0, incomingCount: 0, usageCount: 0, mismatchCount: 0 };
                         }
                         summaryMap[key].incomingQty += parseFloat(t.quantity) || 0;
-                        summaryMap[key].orderedQty += parseFloat(t.ordered_quantity) || 0;
                         summaryMap[key].incomingCount += 1;
-                        if (t.verification_status && t.verification_status !== '일치') {
-                            summaryMap[key].mismatchCount += 1;
-                        }
                     });
 
                     monthUsage.forEach(u => {

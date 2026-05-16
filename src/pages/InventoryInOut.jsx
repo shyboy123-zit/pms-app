@@ -9,12 +9,16 @@ const InventoryInOut = () => {
     const {
         inventoryTransactions,
         products,
+        suppliers,
         addInventoryTransaction,
         updateInventoryTransaction,
         deleteInventoryTransaction,
         getTransactionsByDateRange,
         addVoucher
     } = useData();
+
+    // 활성 거래처 목록 (드롭다운용)
+    const activeSuppliers = (suppliers || []).filter(s => s.status === '활성');
 
     const [activeTab, setActiveTab] = useState('all'); // 'all', 'in', 'out', 'adjust', 'status'
     const [actualStock, setActualStock] = useState(0);
@@ -50,6 +54,10 @@ const InventoryInOut = () => {
     const emptyBatchItem = { productId: '', itemName: '', itemCode: '', quantity: 0, unit: 'EA', unitPrice: 0 };
     const [batchItems, setBatchItems] = useState([{ ...emptyBatchItem }]);
     const [activeBatchDropdown, setActiveBatchDropdown] = useState(-1);
+
+    // 거래처 직접입력 토글 (드롭다운에 없는 거래처를 입력할 때 사용)
+    const [isBatchClientCustom, setIsBatchClientCustom] = useState(false);
+    const [isEditClientCustom, setIsEditClientCustom] = useState(false);
 
     const addBatchItemRow = () => setBatchItems(prev => [...prev, { ...emptyBatchItem }]);
     const removeBatchItemRow = (idx) => { if (batchItems.length > 1) setBatchItems(prev => prev.filter((_, i) => i !== idx)); };
@@ -279,6 +287,9 @@ const InventoryInOut = () => {
             client: row.client || '',
             notes: row.notes || ''
         });
+        // 거래처가 활성 거래처 목록에 없으면 직접입력 모드로 초기화
+        const clientInList = !!row.client && activeSuppliers.some(s => s.name === row.client);
+        setIsEditClientCustom(!!row.client && !clientInList);
         setEditingId(row.id);
         setIsEditMode(true);
         setIsModalOpen(true);
@@ -316,6 +327,8 @@ const InventoryInOut = () => {
         });
         setBatchItems([{ ...emptyBatchItem }]);
         setActiveBatchDropdown(-1);
+        setIsBatchClientCustom(false);
+        setIsEditClientCustom(false);
     };
 
     // 재고현황에서 직접 재고조정 시작
@@ -655,8 +668,36 @@ const InventoryInOut = () => {
                         {newItem.transactionType !== 'ADJUST' && (
                             <div className="form-group">
                                 <label className="form-label">거래처</label>
-                                <input className="form-input" value={newItem.client}
-                                    onChange={(e) => setNewItem({ ...newItem, client: e.target.value })} placeholder="공급사 또는 고객사" />
+                                <select className="form-input"
+                                    value={isEditClientCustom ? '__custom__' : newItem.client}
+                                    onChange={(e) => {
+                                        if (e.target.value === '__custom__') {
+                                            setIsEditClientCustom(true);
+                                            setNewItem({ ...newItem, client: '' });
+                                        } else {
+                                            setIsEditClientCustom(false);
+                                            setNewItem({ ...newItem, client: e.target.value });
+                                        }
+                                    }}>
+                                    <option value="">거래처를 선택하세요</option>
+                                    {activeSuppliers.map(s => (
+                                        <option key={s.id} value={s.name}>
+                                            {s.name}{s.contact_person ? ` (${s.contact_person})` : ''}
+                                        </option>
+                                    ))}
+                                    <option value="__custom__">+ 직접 입력</option>
+                                </select>
+                                {isEditClientCustom && (
+                                    <input className="form-input" value={newItem.client}
+                                        onChange={(e) => setNewItem({ ...newItem, client: e.target.value })}
+                                        placeholder="거래처명을 직접 입력하세요"
+                                        style={{ marginTop: '0.5rem' }} />
+                                )}
+                                {activeSuppliers.length === 0 && !isEditClientCustom && (
+                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.35rem' }}>
+                                        등록된 거래처가 없습니다. '거래처 관리'에서 먼저 등록하거나 '직접 입력'을 선택하세요.
+                                    </div>
+                                )}
                             </div>
                         )}
                         <div className="form-group">
@@ -688,8 +729,36 @@ const InventoryInOut = () => {
                         {batchCommon.transactionType !== 'ADJUST' && (
                             <div className="form-group">
                                 <label className="form-label">거래처</label>
-                                <input className="form-input" value={batchCommon.client}
-                                    onChange={(e) => setBatchCommon({ ...batchCommon, client: e.target.value })} placeholder="공급사 또는 고객사" />
+                                <select className="form-input"
+                                    value={isBatchClientCustom ? '__custom__' : batchCommon.client}
+                                    onChange={(e) => {
+                                        if (e.target.value === '__custom__') {
+                                            setIsBatchClientCustom(true);
+                                            setBatchCommon({ ...batchCommon, client: '' });
+                                        } else {
+                                            setIsBatchClientCustom(false);
+                                            setBatchCommon({ ...batchCommon, client: e.target.value });
+                                        }
+                                    }}>
+                                    <option value="">거래처를 선택하세요</option>
+                                    {activeSuppliers.map(s => (
+                                        <option key={s.id} value={s.name}>
+                                            {s.name}{s.contact_person ? ` (${s.contact_person})` : ''}
+                                        </option>
+                                    ))}
+                                    <option value="__custom__">+ 직접 입력</option>
+                                </select>
+                                {isBatchClientCustom && (
+                                    <input className="form-input" value={batchCommon.client}
+                                        onChange={(e) => setBatchCommon({ ...batchCommon, client: e.target.value })}
+                                        placeholder="거래처명을 직접 입력하세요"
+                                        style={{ marginTop: '0.5rem' }} />
+                                )}
+                                {activeSuppliers.length === 0 && !isBatchClientCustom && (
+                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.35rem' }}>
+                                        등록된 거래처가 없습니다. '거래처 관리'에서 먼저 등록하거나 '직접 입력'을 선택하세요.
+                                    </div>
+                                )}
                             </div>
                         )}
 

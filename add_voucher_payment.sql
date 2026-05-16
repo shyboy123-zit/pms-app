@@ -18,17 +18,19 @@ ALTER TABLE vouchers
 ALTER TABLE vouchers
   ADD COLUMN IF NOT EXISTS payment_notes TEXT;
 
--- 4. 결제 상태 (계산된 컬럼) — total_amount 대비 paid_amount 비교
+-- 4. 결제 상태 (계산된 컬럼) — 청구금액(quantity * unit_price) 대비 paid_amount 비교
 -- PostgreSQL의 generated column으로 자동 계산 (read-only)
+-- ⚠️ total_amount도 generated column이므로 직접 참조 불가 (42P17 에러) →
+--    quantity * unit_price를 직접 사용해 동일 결과 계산
 -- 상태 분류:
 --   - '미결제' : paid_amount = 0
---   - '부분결제': 0 < paid_amount < total_amount
---   - '결제완료': paid_amount >= total_amount
+--   - '부분결제': 0 < paid_amount < 청구금액
+--   - '결제완료': paid_amount >= 청구금액
 ALTER TABLE vouchers
   ADD COLUMN IF NOT EXISTS payment_status TEXT GENERATED ALWAYS AS (
     CASE
       WHEN COALESCE(paid_amount, 0) = 0 THEN '미결제'
-      WHEN COALESCE(paid_amount, 0) >= COALESCE(total_amount, 0) THEN '결제완료'
+      WHEN COALESCE(paid_amount, 0) >= COALESCE(quantity, 0) * COALESCE(unit_price, 0) THEN '결제완료'
       ELSE '부분결제'
     END
   ) STORED;

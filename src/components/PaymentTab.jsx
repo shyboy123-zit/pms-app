@@ -14,6 +14,7 @@ const PaymentTab = () => {
     const { vouchers, updateVoucher } = useData();
 
     const [filter, setFilter] = useState('receivable'); // 'receivable'(미수금) | 'payable'(미지급)
+    const [view, setView] = useState('outstanding');    // 'outstanding'(미결제) | 'paid'(결제완료)
     const [clientFilter, setClientFilter] = useState('all');
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [editingVoucher, setEditingVoucher] = useState(null);
@@ -39,17 +40,34 @@ const PaymentTab = () => {
         return Math.max(0, total - paid);
     };
 
-    // 필터링: 미수금(매출+미결제/부분결제) / 미지급(매입+미결제/부분결제)
+    // 필터링: 미결제(미수금/미지급) 또는 결제완료 (보기 모드에 따라)
     const filteredVouchers = useMemo(() => {
         return (vouchers || []).filter(v => {
             const status = getPaymentStatus(v);
-            if (status === '결제완료') return false;
+            if (view === 'outstanding' && status === '결제완료') return false;
+            if (view === 'paid' && status !== '결제완료') return false;
             if (filter === 'receivable' && v.voucher_type !== '매출') return false;
             if (filter === 'payable' && v.voucher_type !== '매입') return false;
             if (clientFilter !== 'all' && (v.client || '미지정') !== clientFilter) return false;
             return true;
-        }).sort((a, b) => (a.voucher_date < b.voucher_date ? 1 : -1));
-    }, [vouchers, filter, clientFilter]);
+        }).sort((a, b) => {
+            // 결제완료 보기에선 결제일 내림차순, 미결제 보기에선 발행일 내림차순
+            if (view === 'paid') {
+                const ad = a.paid_date || a.voucher_date;
+                const bd = b.paid_date || b.voucher_date;
+                return ad < bd ? 1 : -1;
+            }
+            return a.voucher_date < b.voucher_date ? 1 : -1;
+        });
+    }, [vouchers, filter, clientFilter, view]);
+
+    // 결제완료 합계 (보기 모드에 따라 노출)
+    const paidTotals = useMemo(() => {
+        const arr = (vouchers || []).filter(v => getPaymentStatus(v) === '결제완료');
+        const salesPaid = arr.filter(v => v.voucher_type === '매출').reduce((s, v) => s + parseFloat(v.paid_amount || 0), 0);
+        const purchasePaid = arr.filter(v => v.voucher_type === '매입').reduce((s, v) => s + parseFloat(v.paid_amount || 0), 0);
+        return { salesPaid, purchasePaid, salesCount: arr.filter(v => v.voucher_type === '매출').length, purchaseCount: arr.filter(v => v.voucher_type === '매입').length };
+    }, [vouchers]);
 
     // 거래처별 잔액 집계
     const clientBalances = useMemo(() => {
@@ -138,6 +156,17 @@ const PaymentTab = () => {
         setEditingVoucher(null);
     };
 
+    const handleCancelPayment = async (v) => {
+        if (!window.confirm(`'${v.item_name}' 전표의 결제를 취소하시겠습니까?\n(paid_amount가 0으로 되돌아가며 다시 미결제 상태가 됩니다)`)) return;
+        const today = new Date().toISOString().split('T')[0];
+        const existingNote = v.payment_notes || '';
+        await updateVoucher(v.id, {
+            paid_amount: 0,
+            paid_date: null,
+            payment_notes: `${existingNote}${existingNote ? '\n' : ''}[${today}] 결제 취소`
+        });
+    };
+
     const handleMarkFullyPaid = async (v) => {
         const total = parseFloat(v.total_amount || v.quantity * v.unit_price || 0);
         if (!window.confirm(`'${v.item_name}' 전표를 결제완료로 처리합니다. (₩${total.toLocaleString()})`)) return;
@@ -218,17 +247,27 @@ const PaymentTab = () => {
                 )}
             </div>
 
-            {/* 미결제 전표 리스트 */}
+            {/* 전표 리스트 (미결제 / 결제완료 보기) */}
             <div className="section-card">
                 <div className="section-header">
-                    <h3 className="section-title">미결제 전표 목록</h3>
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <h3 className="section-title" style={{ margin: 0 }}>{view === 'outstanding' ? '미결제 전표 목록' : '결제 완료 이력'}</h3>
+                        <div className="filter-tabs">
+                            <button className={`filter-btn ${view === 'outstanding' ? 'active' : ''}`} onClick={() => setView('outstanding')}>
+                                미결제
+                            </button>
+                            <button className={`filter-btn ${view === 'paid' ? 'active' : ''}`} onClick={() => setView('paid')}>
+                                결제완료
+                            </button>
+                        </div>
+                    </div>
                     <div className="filter-controls">
                         <div className="filter-tabs">
                             <button className={`filter-btn ${filter === 'receivable' ? 'active' : ''}`} onClick={() => setFilter('receivable')}>
-                                미수금 (매출)
+                                {view === 'outstanding' ? '미수금 (매출)' : '매출'}
                             </button>
                             <button className={`filter-btn ${filter === 'payable' ? 'active' : ''}`} onClick={() => setFilter('payable')}>
-                                미지급 (매입)
+                                {view === 'outstanding' ? '미지급 (매입)' : '매입'}
                             </button>
                         </div>
                         <select className="client-select" value={clientFilter} onChange={(e) => setClientFilter(e.target.value)}>
@@ -238,18 +277,32 @@ const PaymentTab = () => {
                     </div>
                 </div>
 
+                {/* 결제완료 보기 요약 */}
+                {view === 'paid' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem', padding: '0.75rem 1rem', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                        <div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>매출 결제완료 합계</div>
+                            <div style={{ fontWeight: 700, color: 'var(--success)' }}>₩{paidTotals.salesPaid.toLocaleString()} ({paidTotals.salesCount}건)</div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>매입 결제완료 합계</div>
+                            <div style={{ fontWeight: 700, color: 'var(--info)' }}>₩{paidTotals.purchasePaid.toLocaleString()} ({paidTotals.purchaseCount}건)</div>
+                        </div>
+                    </div>
+                )}
+
                 {filteredVouchers.length > 0 ? (
                     <table className="voucher-table">
                         <thead>
                             <tr>
-                                <th>일자</th>
+                                <th>{view === 'paid' ? '결제일' : '일자'}</th>
                                 <th>거래처</th>
                                 <th>품목</th>
                                 <th style={{ textAlign: 'right' }}>청구금액</th>
-                                <th style={{ textAlign: 'right' }}>기결제</th>
-                                <th style={{ textAlign: 'right' }}>잔액</th>
+                                <th style={{ textAlign: 'right' }}>{view === 'paid' ? '결제액' : '기결제'}</th>
+                                <th style={{ textAlign: 'right' }}>{view === 'paid' ? '메모' : '잔액'}</th>
                                 <th>상태</th>
-                                <th style={{ textAlign: 'center' }}>결제 입력</th>
+                                <th style={{ textAlign: 'center' }}>{view === 'paid' ? '취소' : '결제 입력'}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -260,16 +313,20 @@ const PaymentTab = () => {
                                 const paid = parseFloat(v.paid_amount || 0);
                                 return (
                                     <tr key={v.id}>
-                                        <td>{v.voucher_date}</td>
+                                        <td>{view === 'paid' ? (v.paid_date || v.voucher_date) : v.voucher_date}</td>
                                         <td className="client-cell">{v.client || '-'}</td>
                                         <td>
                                             <div className="item-name">{v.item_name}</div>
                                             {v.item_code && <div className="item-code">[{v.item_code}]</div>}
                                         </td>
                                         <td style={{ textAlign: 'right' }}>₩{total.toLocaleString()}</td>
-                                        <td style={{ textAlign: 'right', color: '#64748b' }}>₩{paid.toLocaleString()}</td>
-                                        <td style={{ textAlign: 'right', fontWeight: 700, color: filter === 'receivable' ? '#dc2626' : '#2563eb' }}>
-                                            ₩{outstanding.toLocaleString()}
+                                        <td style={{ textAlign: 'right', color: view === 'paid' ? 'var(--success)' : 'var(--text-muted)', fontWeight: view === 'paid' ? 700 : 400 }}>
+                                            ₩{paid.toLocaleString()}
+                                        </td>
+                                        <td style={{ textAlign: view === 'paid' ? 'left' : 'right', fontWeight: view === 'paid' ? 400 : 700, color: view === 'paid' ? 'var(--text-muted)' : (filter === 'receivable' ? 'var(--danger)' : 'var(--info)'), fontSize: view === 'paid' ? '0.78rem' : 'inherit' }}>
+                                            {view === 'paid'
+                                                ? (v.payment_notes ? <span title={v.payment_notes}>{v.payment_notes.split('\n').slice(-1)[0].slice(0, 40)}</span> : '-')
+                                                : `₩${outstanding.toLocaleString()}`}
                                         </td>
                                         <td>
                                             <span className={`status-badge status-${status === '미결제' ? 'unpaid' : status === '부분결제' ? 'partial' : 'paid'}`}>
@@ -277,12 +334,22 @@ const PaymentTab = () => {
                                             </span>
                                         </td>
                                         <td style={{ textAlign: 'center' }}>
-                                            <button className="pay-btn" onClick={() => openPaymentModal(v)}>
-                                                <DollarSign size={14} /> 결제
-                                            </button>
-                                            <button className="full-pay-btn" onClick={() => handleMarkFullyPaid(v)} title="전액 결제 처리">
-                                                <CheckCircle2 size={14} />
-                                            </button>
+                                            {view === 'paid' ? (
+                                                <button className="full-pay-btn" onClick={() => handleCancelPayment(v)}
+                                                    style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}
+                                                    title="결제 취소 (paid_amount=0으로 되돌림)">
+                                                    <X size={14} />
+                                                </button>
+                                            ) : (
+                                                <>
+                                                    <button className="pay-btn" onClick={() => openPaymentModal(v)}>
+                                                        <DollarSign size={14} /> 결제
+                                                    </button>
+                                                    <button className="full-pay-btn" onClick={() => handleMarkFullyPaid(v)} title="전액 결제 처리">
+                                                        <CheckCircle2 size={14} />
+                                                    </button>
+                                                </>
+                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -290,7 +357,9 @@ const PaymentTab = () => {
                         </tbody>
                     </table>
                 ) : (
-                    <div className="empty-msg">조건에 맞는 미결제 전표가 없습니다.</div>
+                    <div className="empty-msg">
+                        {view === 'paid' ? '결제 완료된 전표가 없습니다.' : '조건에 맞는 미결제 전표가 없습니다.'}
+                    </div>
                 )}
             </div>
 

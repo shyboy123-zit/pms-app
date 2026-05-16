@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import Modal from '../components/Modal';
+import AnalyticsSection from '../components/AnalyticsSection';
 import {
     Activity,
     AlertTriangle,
@@ -1720,6 +1721,9 @@ const Dashboard = () => {
                     padding: 0 4px;
                 }
             `}</style>
+
+            {/* ──────────────── 30일 분석 섹션 (Phase 3a) ──────────────── */}
+            <AnalyticsSection />
 
             {/* 불량 사진 뷰어 모달 */}
             <Modal title="불량 사진 보기" isOpen={isViewerOpen} onClose={() => setIsViewerOpen(false)}>

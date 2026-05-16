@@ -3,7 +3,8 @@ import Table from '../components/Table';
 import Modal from '../components/Modal';
 import DateRangePicker from '../components/DateRangePicker';
 import ExcelToolbar from '../components/ExcelToolbar';
-import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X } from 'lucide-react';
+import BarcodeScannerModal from '../components/BarcodeScannerModal';
+import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X, Camera } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const InventoryInOut = () => {
@@ -59,6 +60,30 @@ const InventoryInOut = () => {
     // 거래처 직접입력 토글 (드롭다운에 없는 거래처를 입력할 때 사용)
     const [isBatchClientCustom, setIsBatchClientCustom] = useState(false);
     const [isEditClientCustom, setIsEditClientCustom] = useState(false);
+
+    // 바코드 스캐너 상태 (Phase 4b)
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [scannerTargetIdx, setScannerTargetIdx] = useState(-1); // 다건 등록 시 어느 행에 적용할지
+
+    const openScanner = (idx) => {
+        setScannerTargetIdx(idx);
+        setIsScannerOpen(true);
+    };
+
+    const handleScanResult = (decodedText) => {
+        // product_code 우선 매칭, 없으면 name으로
+        const code = String(decodedText).trim();
+        const product = products.find(p => p.product_code === code) || products.find(p => p.name === code);
+        if (!product) {
+            alert(`스캔된 코드 '${code}'에 일치하는 제품이 없습니다.\n제품 관리에서 먼저 등록해주세요.`);
+            return;
+        }
+        if (scannerTargetIdx >= 0) {
+            selectBatchProduct(scannerTargetIdx, product);
+        }
+        setIsScannerOpen(false);
+        setScannerTargetIdx(-1);
+    };
 
     // 재고조정 사유 코드 (자유서술 → 표준 코드로 분류)
     const ADJUST_REASONS = [
@@ -672,6 +697,14 @@ const InventoryInOut = () => {
                 />
             )}
 
+            {/* 바코드 스캐너 모달 (Phase 4b) */}
+            <BarcodeScannerModal
+                isOpen={isScannerOpen}
+                onClose={() => { setIsScannerOpen(false); setScannerTargetIdx(-1); }}
+                onScan={handleScanResult}
+                title="제품 바코드/QR 스캔"
+            />
+
             {/* Transaction Modal */}
             <Modal
                 title={isEditMode ? '거래 수정' : '거래 일괄 등록'}
@@ -934,20 +967,27 @@ const InventoryInOut = () => {
                                                 </button>
                                             )}
                                             <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.35rem' }}>#{idx + 1}</div>
-                                            {/* 제품 드롭다운 */}
-                                            <select className="form-input" value={item.productId} style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem', marginBottom: '0.4rem' }}
-                                                onChange={(e) => {
-                                                    const product = products.find(p => p.id === e.target.value);
-                                                    if (product) selectBatchProduct(idx, product);
-                                                    else updateBatchItem(idx, 'productId', '');
-                                                }}>
-                                                <option value="">제품 선택...</option>
-                                                {products.filter(p => p.status !== '단종').map(p => (
-                                                    <option key={p.id} value={p.id}>
-                                                        {p.product_code ? `[${p.product_code}] ` : ''}{p.name} {p.unit_price ? `₩${Number(p.unit_price).toLocaleString()}` : ''}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                            {/* 제품 드롭다운 + 바코드 스캔 버튼 */}
+                                            <div style={{ display: 'flex', gap: '4px', marginBottom: '0.4rem' }}>
+                                                <select className="form-input" value={item.productId} style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem', flex: 1 }}
+                                                    onChange={(e) => {
+                                                        const product = products.find(p => p.id === e.target.value);
+                                                        if (product) selectBatchProduct(idx, product);
+                                                        else updateBatchItem(idx, 'productId', '');
+                                                    }}>
+                                                    <option value="">제품 선택...</option>
+                                                    {products.filter(p => p.status !== '단종').map(p => (
+                                                        <option key={p.id} value={p.id}>
+                                                            {p.product_code ? `[${p.product_code}] ` : ''}{p.name} {p.unit_price ? `₩${Number(p.unit_price).toLocaleString()}` : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <button type="button" onClick={() => openScanner(idx)}
+                                                    style={{ background: '#4f46e5', color: 'white', border: 'none', borderRadius: '8px', padding: '0 0.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600 }}
+                                                    title="바코드/QR 스캔">
+                                                    <Camera size={14} />
+                                                </button>
+                                            </div>
                                             {/* 수량 / 단가 / 금액 */}
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', alignItems: 'center' }}>
                                                 <div>

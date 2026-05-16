@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import ExcelToolbar from '../components/ExcelToolbar';
-import { Plus, ShoppingCart, AlertCircle, PlayCircle, Edit, Trash2, Calendar, CheckCircle, AlertTriangle } from 'lucide-react';
+import MiniKpiCards from '../components/MiniKpiCards';
+import { Plus, ShoppingCart, AlertCircle, PlayCircle, Edit, Trash2, Calendar, CheckCircle, AlertTriangle, Package, TrendingDown } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { parsers } from '../lib/excel';
 
@@ -402,6 +403,34 @@ const Materials = () => {
                     </button>
                 </div>
             </div>
+
+            <MiniKpiCards cards={[
+                {
+                    label: '전체 자재',
+                    value: `${(materials || []).length}종`,
+                    icon: <Package size={20} />,
+                    color: 'var(--primary)'
+                },
+                {
+                    label: '안전재고 미달',
+                    value: `${(materials || []).filter(m => m.min_stock > 0 && parseFloat(m.stock || 0) < parseFloat(m.min_stock)).length}건`,
+                    icon: <AlertTriangle size={20} />,
+                    color: 'var(--danger)',
+                    sub: '발주 검토 필요'
+                },
+                {
+                    label: '재고 0',
+                    value: `${(materials || []).filter(m => parseFloat(m.stock || 0) <= 0).length}건`,
+                    icon: <TrendingDown size={20} />,
+                    color: 'var(--warning)'
+                },
+                {
+                    label: '총 재고 가치',
+                    value: `₩${(materials || []).reduce((sum, m) => sum + (parseFloat(m.stock || 0) * parseFloat(m.unit_price || 0)), 0).toLocaleString()}`,
+                    icon: <CheckCircle size={20} />,
+                    color: 'var(--success)'
+                }
+            ]} />
 
             <Table
                 columns={columns}

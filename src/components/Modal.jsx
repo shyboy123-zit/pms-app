@@ -147,6 +147,48 @@ const Modal = ({ isOpen, onClose, title, children }) => {
              color: white;
              font-weight: 600;
         }
+
+        /* 모바일 — 모달 풀스크린화 (Phase 4d) */
+        @media (max-width: 640px) {
+            .modal-overlay {
+                align-items: stretch;
+                padding: 0;
+            }
+            .modal-container {
+                max-width: 100%;
+                max-height: 100vh;
+                border-radius: 0;
+                width: 100%;
+            }
+            .modal-header {
+                padding: 1rem 1.25rem;
+                position: sticky;
+                top: 0;
+                background: white;
+                z-index: 10;
+            }
+            .modal-content {
+                padding: 1rem 1.25rem;
+            }
+            .modal-actions {
+                position: sticky;
+                bottom: 0;
+                background: white;
+                padding-top: 0.75rem;
+                margin-top: 1rem;
+                border-top: 1px solid var(--border);
+                margin-left: -1.25rem;
+                margin-right: -1.25rem;
+                padding-left: 1.25rem;
+                padding-right: 1.25rem;
+                padding-bottom: 0.75rem;
+            }
+            .btn-submit, .btn-cancel {
+                flex: 1;
+                text-align: center;
+                justify-content: center;
+            }
+        }
       `}</style>
         </div>
     );

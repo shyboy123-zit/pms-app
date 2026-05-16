@@ -271,3 +271,44 @@ button {
     opacity: 0.3;
   }
 }
+
+/* ============================================================
+   Phase 4d — 모바일 반응형 통합 강화
+   각 페이지의 page-header-row 우측 버튼 그룹이 좁은 화면에서
+   잘리지 않도록 강제 wrap. 글로벌 적용 (페이지별 inline-style보다 우선).
+   ============================================================ */
+@media (max-width: 768px) {
+  .page-header-row {
+    flex-wrap: wrap !important;
+    gap: 0.75rem;
+  }
+
+  .page-header-row > div {
+    flex-wrap: wrap;
+  }
+
+  .page-header-row > div:last-child {
+    width: 100%;
+    justify-content: flex-start !important;
+  }
+
+  /* 페이지 좌우 패딩 절약 */
+  .page-container {
+    padding: 0.5rem !important;
+  }
+
+  /* 차트 가로 스크롤 허용 (recharts) */
+  .recharts-wrapper {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 480px) {
+  /* 매우 작은 화면 - 카드 한 줄 1개 */
+  .summary-cards,
+  .summary-grid,
+  .balance-cards,
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

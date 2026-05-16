@@ -6,6 +6,7 @@ import ExcelToolbar from '../components/ExcelToolbar';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X, Camera } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 
 const InventoryInOut = () => {
     const {
@@ -18,6 +19,7 @@ const InventoryInOut = () => {
         getTransactionsByDateRange,
         addVoucher
     } = useData();
+    const { can } = useAuth();
 
     // 활성 거래처 목록 (드롭다운용)
     const activeSuppliers = (suppliers || []).filter(s => s.status === '활성');
@@ -540,9 +542,11 @@ const InventoryInOut = () => {
                         ]}
                         fileName="입출고내역"
                     />
-                    <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-                        <Plus size={18} /> 거래 등록
-                    </button>
+                    {can('delivery', 'create') && (
+                        <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                            <Plus size={18} /> 거래 등록
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -686,12 +690,16 @@ const InventoryInOut = () => {
                     data={filteredTransactions}
                     actions={(row) => (
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button className="icon-btn" onClick={() => handleEdit(row)} title="수정">
-                                <Edit size={16} />
-                            </button>
-                            <button className="icon-btn delete-btn" onClick={() => handleDelete(row)} title="삭제">
-                                <Trash2 size={16} />
-                            </button>
+                            {can('delivery', 'update') && (
+                                <button className="icon-btn" onClick={() => handleEdit(row)} title="수정">
+                                    <Edit size={16} />
+                                </button>
+                            )}
+                            {can('delivery', 'delete') && (
+                                <button className="icon-btn delete-btn" onClick={() => handleDelete(row)} title="삭제">
+                                    <Trash2 size={16} />
+                                </button>
+                            )}
                         </div>
                     )}
                 />

@@ -275,7 +275,19 @@ const Employees = () => {
         suppliers: '거래처관리',
         employees: '직원관리',
         government_support: '국가지원사업',
-        payroll: '급여관리'
+        payroll: '급여관리',
+        audit_log: '감사 로그'
+    };
+
+    // 액션 단위 세부 권한 라벨 (Phase 5g)
+    // 입출고/원재료에 우선 적용. permissions['{key}_{action}']=false 면 해당 액션 차단
+    const actionPermLabels = {
+        delivery_create: '입출고 - 거래 등록',
+        delivery_update: '입출고 - 거래 수정',
+        delivery_delete: '입출고 - 거래 삭제',
+        materials_create: '원재료 - 자재 등록',
+        materials_update: '원재료 - 자재 수정',
+        materials_delete: '원재료 - 자재 삭제'
     };
 
     // === PDF 관련 함수 ===
@@ -715,17 +727,32 @@ const Employees = () => {
 
             {/* Permission Modal */}
             <Modal title={`접근 권한 설정 - ${selectedEmp?.name}`} isOpen={isPermModalOpen} onClose={() => setIsPermModalOpen(false)}>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-main)' }}>📋 페이지 접근 권한</h4>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                    체크된 항목만 사이드바 메뉴에 표시되고 직접 URL 접근도 허용됩니다.
+                </p>
                 <div className="perm-grid">
                     {Object.keys(permissionLabels).map(key => (
                         <div key={key} className="perm-item" onClick={() => togglePerm(key)}>
-                            <input type="checkbox" checked={tempPerms[key] || false} readOnly />
+                            <input type="checkbox" checked={tempPerms[key] !== false} readOnly />
                             <span>{permissionLabels[key]}</span>
                         </div>
                     ))}
                 </div>
-                <p className="description-text" style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    체크된 항목만 해당 직원의 사이드바 메뉴에 표시됩니다.
+
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginTop: '1.25rem', marginBottom: '0.5rem', color: 'var(--text-main)' }}>⚙️ 액션 세부 권한 (Phase 5g)</h4>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                    체크 해제하면 해당 페이지에서 해당 액션 버튼이 숨겨집니다. (관리자는 모든 권한 패스)
                 </p>
+                <div className="perm-grid">
+                    {Object.keys(actionPermLabels).map(key => (
+                        <div key={key} className="perm-item" onClick={() => togglePerm(key)}>
+                            <input type="checkbox" checked={tempPerms[key] !== false} readOnly />
+                            <span>{actionPermLabels[key]}</span>
+                        </div>
+                    ))}
+                </div>
+
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={() => setIsPermModalOpen(false)}>취소</button>
                     <button className="btn-submit" onClick={handlePermSave}>저장</button>

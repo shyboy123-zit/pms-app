@@ -144,8 +144,32 @@ export const AuthProvider = ({ children }) => {
         await supabase.auth.signOut();
     };
 
+    /**
+     * 액션 단위 권한 체크
+     * - 관리자(position === '관리자')는 항상 true
+     * - permissions 객체가 없으면 기본 허용 (기존 호환)
+     * - permissions[`${key}_${action}`] 가 우선, 없으면 permissions[key] 따름
+     *   예: permissions['materials_delete'] = false 면 자재 삭제 차단
+     *   예: permissions['materials'] = false 면 페이지 자체 접근 차단 (PermissionGate에서)
+     *
+     * @param {string} key      페이지 권한 키 (예: 'materials')
+     * @param {string} action   'create' | 'update' | 'delete' | 'view' (기본 'view')
+     */
+    const can = (key, action = 'view') => {
+        if (!user) return false;
+        if (user.position === '관리자') return true;
+        if (!user.permissions) return true;
+        // 세부 권한이 명시되어 있으면 우선 적용
+        const specific = user.permissions[`${key}_${action}`];
+        if (specific === false) return false;
+        if (specific === true) return true;
+        // 페이지 단위 권한이 false면 모든 액션 차단
+        if (user.permissions[key] === false) return false;
+        return true;
+    };
+
     return (
-        <AuthContext.Provider value={{ user, login, logout, register, loading }}>
+        <AuthContext.Provider value={{ user, login, logout, register, loading, can }}>
             {!loading && children}
         </AuthContext.Provider>
     );

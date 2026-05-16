@@ -5,6 +5,7 @@ import ExcelToolbar from '../components/ExcelToolbar';
 import MiniKpiCards from '../components/MiniKpiCards';
 import { Plus, ShoppingCart, AlertCircle, PlayCircle, Edit, Trash2, Calendar, CheckCircle, AlertTriangle, Package, TrendingDown } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { parsers } from '../lib/excel';
 
 const Materials = () => {
@@ -15,6 +16,7 @@ const Materials = () => {
         vouchers,
         addVoucher
     } = useData();
+    const { can } = useAuth();
 
     const [trackingDate, setTrackingDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -398,9 +400,11 @@ const Materials = () => {
                             alert(`${ok}/${valid.length}건 등록 완료`);
                         }}
                     />
-                    <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-                        <Plus size={18} /> 자재 등록
-                    </button>
+                    {can('materials', 'create') && (
+                        <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                            <Plus size={18} /> 자재 등록
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -437,20 +441,24 @@ const Materials = () => {
                 data={materials || []}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <button
-                            className="icon-btn-small"
-                            onClick={() => handleEditMaterial(row)}
-                            title="원재료 정보 수정"
-                        >
-                            <Edit size={16} />
-                        </button>
-                        <button
-                            className="icon-btn-small delete-btn-small"
-                            onClick={() => handleDeleteMaterial(row)}
-                            title="원재료 삭제"
-                        >
-                            <Trash2 size={16} />
-                        </button>
+                        {can('materials', 'update') && (
+                            <button
+                                className="icon-btn-small"
+                                onClick={() => handleEditMaterial(row)}
+                                title="원재료 정보 수정"
+                            >
+                                <Edit size={16} />
+                            </button>
+                        )}
+                        {can('materials', 'delete') && (
+                            <button
+                                className="icon-btn-small delete-btn-small"
+                                onClick={() => handleDeleteMaterial(row)}
+                                title="원재료 삭제"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        )}
                         <button
                             className="usage-btn"
                             onClick={() => handleRecordUsage(row)}

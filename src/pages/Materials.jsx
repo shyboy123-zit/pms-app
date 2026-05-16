@@ -1,8 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
+import ExcelToolbar from '../components/ExcelToolbar';
 import { Plus, ShoppingCart, AlertCircle, PlayCircle, Edit, Trash2, Calendar, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { parsers } from '../lib/excel';
 
 const Materials = () => {
     const {
@@ -360,9 +362,45 @@ const Materials = () => {
                     <h2 className="page-subtitle">원재료 관리</h2>
                     <p className="page-description">자재 재고를 확인하고 안전재고 미달 시 긴급 발주를 지시합니다.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-                    <Plus size={18} /> 자재 등록
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <ExcelToolbar
+                        data={materials || []}
+                        columns={[
+                            { key: 'name', label: '자재명', sample: '예: PP-001', parse: parsers.string },
+                            { key: 'type', label: '종류', sample: '플라스틱', parse: parsers.string },
+                            { key: 'stock', label: '현재재고', sample: 100, parse: parsers.number, format: (v) => parseFloat(v || 0) },
+                            { key: 'unit', label: '단위', sample: 'kg', parse: parsers.string },
+                            { key: 'min_stock', label: '안전재고', sample: 50, parse: parsers.number, format: (v) => parseFloat(v || 0) },
+                            { key: 'unit_price', label: '단가', sample: 5000, parse: parsers.number, format: (v) => parseFloat(v || 0) },
+                            { key: 'supplier', label: '공급사', sample: '예: 한일케미칼', parse: parsers.string }
+                        ]}
+                        fileName="원재료목록"
+                        onImport={async (rows) => {
+                            const valid = rows.filter(r => r.name);
+                            if (valid.length === 0) return alert('자재명이 입력된 행이 없습니다.');
+                            if (!window.confirm(`${valid.length}건의 자재를 신규 등록합니다. 진행하시겠습니까?\n(기존 자재와 동일한 이름이면 중복 등록됩니다)`)) return;
+                            let ok = 0;
+                            for (const r of valid) {
+                                try {
+                                    await addMaterial({
+                                        name: r.name,
+                                        type: r.type || '기타',
+                                        stock: parseFloat(r.stock) || 0,
+                                        unit: r.unit || 'kg',
+                                        min_stock: parseFloat(r.min_stock) || 0,
+                                        unit_price: parseFloat(r.unit_price) || 0,
+                                        supplier: r.supplier || ''
+                                    });
+                                    ok++;
+                                } catch (e) { console.error(e); }
+                            }
+                            alert(`${ok}/${valid.length}건 등록 완료`);
+                        }}
+                    />
+                    <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                        <Plus size={18} /> 자재 등록
+                    </button>
+                </div>
             </div>
 
             <Table

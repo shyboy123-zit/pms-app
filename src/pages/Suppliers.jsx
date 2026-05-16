@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
+import ExcelToolbar from '../components/ExcelToolbar';
 import { Plus, Edit, Trash2, Phone, Mail, Building } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { parsers } from '../lib/excel';
 
 const Suppliers = () => {
     const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useData();
@@ -92,9 +94,39 @@ const Suppliers = () => {
                     <h2 className="page-subtitle">거래처 관리</h2>
                     <p className="page-description">원자재 구매 및 외주 가공 거래처를 관리합니다.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-                    <Plus size={18} /> 신규 거래처 등록
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <ExcelToolbar
+                        data={suppliers || []}
+                        columns={[
+                            { key: 'name', label: '업체명', sample: '예: 한일케미칼', parse: parsers.string },
+                            { key: 'contact_person', label: '담당자', sample: '홍길동', parse: parsers.string },
+                            { key: 'phone', label: '연락처', sample: '010-1234-5678', parse: parsers.string },
+                            { key: 'email', label: '이메일', sample: 'sales@example.com', parse: parsers.string },
+                            { key: 'address', label: '주소', sample: '경기도 시흥시 ...', parse: parsers.string },
+                            { key: 'business_number', label: '사업자번호', sample: '123-45-67890', parse: parsers.string },
+                            { key: 'main_items', label: '주요 품목', sample: 'PP, ABS', parse: parsers.string },
+                            { key: 'notes', label: '비고', sample: '', parse: parsers.string },
+                            { key: 'status', label: '상태', sample: '활성', parse: parsers.string }
+                        ]}
+                        fileName="거래처목록"
+                        onImport={async (rows) => {
+                            const valid = rows.filter(r => r.name);
+                            if (valid.length === 0) return alert('업체명이 입력된 행이 없습니다.');
+                            if (!window.confirm(`${valid.length}건의 거래처를 신규 등록합니다.`)) return;
+                            let ok = 0;
+                            for (const r of valid) {
+                                try {
+                                    await addSupplier({ ...r, status: r.status || '활성' });
+                                    ok++;
+                                } catch (e) { console.error(e); }
+                            }
+                            alert(`${ok}/${valid.length}건 등록 완료`);
+                        }}
+                    />
+                    <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                        <Plus size={18} /> 신규 거래처 등록
+                    </button>
+                </div>
             </div>
 
             <Table

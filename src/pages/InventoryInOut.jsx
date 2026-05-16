@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import DateRangePicker from '../components/DateRangePicker';
+import ExcelToolbar from '../components/ExcelToolbar';
 import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
@@ -497,9 +498,27 @@ const InventoryInOut = () => {
                     <h2 className="page-subtitle">입출고 관리</h2>
                     <p className="page-description">볼 조인트 베어링 제품의 입고/출고 현황을 관리합니다.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-                    <Plus size={18} /> 거래 등록
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <ExcelToolbar
+                        data={filteredTransactions}
+                        columns={[
+                            { key: 'transaction_date', label: '일자' },
+                            { key: 'transaction_type', label: '구분', format: (v) => v === 'IN' ? '입고' : v === 'OUT' ? '출고' : '재고조정' },
+                            { key: 'item_code', label: '품목코드' },
+                            { key: 'item_name', label: '품목명' },
+                            { key: 'quantity', label: '수량', format: (v) => parseFloat(v) },
+                            { key: 'unit', label: '단위' },
+                            { key: 'unit_price', label: '단가', format: (v) => parseFloat(v || 0) },
+                            { key: 'total_amount', label: '금액', format: (v) => parseFloat(v || 0) },
+                            { key: 'client', label: '거래처' },
+                            { key: 'notes', label: '비고' }
+                        ]}
+                        fileName="입출고내역"
+                    />
+                    <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                        <Plus size={18} /> 거래 등록
+                    </button>
+                </div>
             </div>
 
             {/* Summary Cards */}

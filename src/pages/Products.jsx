@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
+import ExcelToolbar from '../components/ExcelToolbar';
 import { Plus, Package, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { parsers } from '../lib/excel';
 
 const Products = () => {
     const { products, materials, inventoryTransactions, addProduct, updateProduct, deleteProduct } = useData();
@@ -182,9 +184,47 @@ const Products = () => {
                     <h2 className="page-subtitle">제품 관리</h2>
                     <p className="page-description">생산하는 제품을 등록하고 관리합니다.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-                    <Plus size={18} /> 제품 등록
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <ExcelToolbar
+                        data={products || []}
+                        columns={[
+                            { key: 'product_code', label: '제품코드', sample: 'PRD-001', parse: parsers.string },
+                            { key: 'name', label: '제품명', sample: '예: 베어링 A', parse: parsers.string },
+                            { key: 'model', label: '모델', sample: 'BR-100', parse: parsers.string },
+                            { key: 'unit', label: '단위', sample: 'EA', parse: parsers.string },
+                            { key: 'standard_cycle_time', label: '표준사이클타임(초)', sample: 30, parse: parsers.number, format: (v) => parseFloat(v || 0) },
+                            { key: 'unit_price', label: '단가', sample: 5000, parse: parsers.number, format: (v) => parseFloat(v || 0) },
+                            { key: 'min_stock', label: '안전재고', sample: 100, parse: parsers.number, format: (v) => parseFloat(v || 0) },
+                            { key: 'status', label: '상태', sample: '생산중', parse: parsers.string }
+                        ]}
+                        fileName="제품목록"
+                        onImport={async (rows) => {
+                            const valid = rows.filter(r => r.product_code && r.name);
+                            if (valid.length === 0) return alert('제품코드와 제품명이 모두 입력된 행이 없습니다.');
+                            if (!window.confirm(`${valid.length}건의 제품을 신규 등록합니다. 진행하시겠습니까?\n(제품코드 중복 시 실패합니다)`)) return;
+                            let ok = 0, fail = 0;
+                            for (const r of valid) {
+                                try {
+                                    await addProduct({
+                                        product_code: r.product_code,
+                                        name: r.name,
+                                        model: r.model || '',
+                                        unit: r.unit || 'EA',
+                                        standard_cycle_time: parseInt(r.standard_cycle_time) || 30,
+                                        unit_price: parseFloat(r.unit_price) || 0,
+                                        min_stock: parseFloat(r.min_stock) || 0,
+                                        status: r.status || '생산중'
+                                    });
+                                    ok++;
+                                } catch (e) { fail++; console.error(e); }
+                            }
+                            alert(`${ok}건 등록, ${fail}건 실패`);
+                        }}
+                    />
+                    <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                        <Plus size={18} /> 제품 등록
+                    </button>
+                </div>
             </div>
 
             <div className="stats-row">

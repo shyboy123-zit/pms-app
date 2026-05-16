@@ -118,22 +118,22 @@ const BarcodeScannerModal = ({ isOpen, onClose, onScan, title = '바코드 / QR 
             </div>
 
             <style>{`
-                .scanner-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 1rem; }
-                .scanner-modal { background: white; border-radius: 14px; width: 100%; max-width: 480px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
-                .scanner-header { padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
-                .scanner-header h3 { margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 6px; }
-                .close-btn { background: transparent; border: none; cursor: pointer; padding: 0.25rem; color: #64748b; }
+                .scanner-overlay { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(4px); }
+                .scanner-modal { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 100%; max-width: 480px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-xl); }
+                .scanner-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+                .scanner-header h3 { margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 6px; color: var(--text-main); }
+                .close-btn { background: transparent; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted); }
 
                 .scanner-body { padding: 1rem; }
-                .scanner-region { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 10px; overflow: hidden; background: #000; min-height: 240px; }
+                .scanner-region { width: 100%; max-width: 400px; margin: 0 auto; border-radius: var(--radius-md); overflow: hidden; background: #000; min-height: 240px; }
                 .scanner-region video { width: 100% !important; height: auto !important; }
 
-                .hint { text-align: center; color: #64748b; font-size: 0.85rem; margin: 0.85rem 0 0; }
-                .last-scanned { background: #ecfdf5; color: #065f46; padding: 0.65rem 0.85rem; margin-top: 0.75rem; border-radius: 8px; text-align: center; font-size: 0.9rem; border: 1px solid #a7f3d0; }
+                .hint { text-align: center; color: var(--text-muted); font-size: 0.85rem; margin: 0.85rem 0 0; }
+                .last-scanned { background: var(--success-soft); color: var(--success); padding: 0.65rem 0.85rem; margin-top: 0.75rem; border-radius: var(--radius-sm); text-align: center; font-size: 0.9rem; border: 1px solid var(--success); }
 
                 .error-box { padding: 2rem; text-align: center; }
-                .error-box p { margin: 0.5rem 0 0; color: #475569; font-size: 0.9rem; }
-                .error-box .hint { font-size: 0.8rem; color: #94a3b8; margin-top: 0.75rem; }
+                .error-box p { margin: 0.5rem 0 0; color: var(--text-main); font-size: 0.9rem; }
+                .error-box .hint { font-size: 0.8rem; color: var(--text-subtle); margin-top: 0.75rem; }
             `}</style>
         </div>
     );

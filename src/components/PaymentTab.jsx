@@ -348,64 +348,59 @@ const PaymentTab = () => {
             </Modal>
 
             <style>{`
-                .payment-tab { padding: 1rem 0; }
+                .payment-tab { padding: 1rem 0; color: var(--text-main); }
                 .balance-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-                .balance-card { background: white; padding: 1.25rem; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); display: flex; gap: 1rem; align-items: center; border-left: 4px solid; }
-                .balance-card.receivable { border-left-color: #dc2626; }
-                .balance-card.payable { border-left-color: #2563eb; }
-                .balance-card.net { border-left-color: #059669; }
-                .balance-card .card-icon { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #f1f5f9; color: #64748b; }
-                .balance-card.receivable .card-icon { background: #fee2e2; color: #dc2626; }
-                .balance-card.payable .card-icon { background: #dbeafe; color: #2563eb; }
-                .balance-card.net .card-icon { background: #dcfce7; color: #059669; }
+                .balance-card { background: var(--bg-card); padding: 1.25rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); border: 1px solid var(--border); display: flex; gap: 1rem; align-items: center; border-left: 4px solid; }
+                .balance-card.receivable { border-left-color: var(--danger); }
+                .balance-card.payable { border-left-color: var(--info); }
+                .balance-card.net { border-left-color: var(--success); }
+                .balance-card .card-icon { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--bg-subtle); color: var(--text-muted); }
+                .balance-card.receivable .card-icon { background: var(--danger-soft); color: var(--danger); }
+                .balance-card.payable .card-icon { background: var(--info-soft); color: var(--info); }
+                .balance-card.net .card-icon { background: var(--success-soft); color: var(--success); }
                 .balance-card .card-body { display: flex; flex-direction: column; flex: 1; }
-                .card-label { font-size: 0.8rem; color: #64748b; }
-                .card-value { font-size: 1.35rem; font-weight: 700; color: #1e293b; margin-top: 2px; }
-                .card-value.positive { color: #059669; }
-                .card-value.negative { color: #dc2626; }
-                .card-sub { font-size: 0.75rem; color: #94a3b8; margin-top: 2px; }
+                .card-label { font-size: 0.8rem; color: var(--text-muted); }
+                .card-value { font-size: 1.35rem; font-weight: 700; color: var(--text-main); margin-top: 2px; }
+                .card-value.positive { color: var(--success); }
+                .card-value.negative { color: var(--danger); }
+                .card-sub { font-size: 0.75rem; color: var(--text-subtle); margin-top: 2px; }
 
-                .section-card { background: white; padding: 1.25rem; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 1rem; }
-                .section-title { font-size: 1rem; font-weight: 700; color: #1e293b; margin: 0 0 0.75rem; }
+                .section-card { background: var(--bg-card); padding: 1.25rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); border: 1px solid var(--border); margin-bottom: 1rem; }
+                .section-title { font-size: 1rem; font-weight: 700; color: var(--text-main); margin: 0 0 0.75rem; letter-spacing: -0.01em; }
                 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem; }
                 .filter-controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-                .filter-tabs { display: flex; background: #f1f5f9; border-radius: 8px; padding: 3px; }
-                .filter-btn { padding: 0.4rem 0.85rem; border: none; background: transparent; border-radius: 6px; cursor: pointer; font-size: 0.85rem; color: #64748b; transition: all 0.15s; font-weight: 600; }
-                .filter-btn.active { background: white; color: #4f46e5; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-                .client-select { padding: 0.4rem 0.65rem; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; background: white; cursor: pointer; }
+                .filter-tabs { display: flex; background: var(--bg-subtle); border-radius: var(--radius-sm); padding: 3px; }
+                .filter-btn { padding: 0.4rem 0.85rem; border: none; background: transparent; border-radius: var(--radius-xs); cursor: pointer; font-size: 0.85rem; color: var(--text-muted); transition: all var(--transition-base); font-weight: 600; }
+                .filter-btn.active { background: var(--bg-card); color: var(--primary); box-shadow: var(--shadow-xs); }
+                .client-select { padding: 0.4rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem; background: var(--bg-elevated); color: var(--text-main); cursor: pointer; }
 
                 .balance-table, .voucher-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-                .balance-table th, .voucher-table th { text-align: left; padding: 0.65rem 0.5rem; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 600; font-size: 0.78rem; background: #f8fafc; }
-                .balance-table td, .voucher-table td { padding: 0.7rem 0.5rem; border-bottom: 1px solid #f1f5f9; }
-                .client-cell { font-weight: 600; color: #1e293b; }
-                .item-name { font-weight: 600; color: #1e293b; }
-                .item-code { font-size: 0.72rem; color: #94a3b8; }
-                .count-badge { display: inline-block; background: #f1f5f9; color: #64748b; padding: 1px 6px; border-radius: 9px; font-size: 0.7rem; margin-left: 4px; font-weight: 600; }
+                .balance-table th, .voucher-table th { text-align: left; padding: 0.65rem 0.5rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 600; font-size: 0.78rem; background: var(--bg-subtle); }
+                .balance-table td, .voucher-table td { padding: 0.7rem 0.5rem; border-bottom: 1px solid var(--border); color: var(--text-main); }
+                .client-cell { font-weight: 600; color: var(--text-main); }
+                .item-name { font-weight: 600; color: var(--text-main); }
+                .item-code { font-size: 0.72rem; color: var(--text-subtle); }
+                .count-badge { display: inline-block; background: var(--bg-subtle); color: var(--text-muted); padding: 1px 6px; border-radius: 9px; font-size: 0.7rem; margin-left: 4px; font-weight: 600; }
 
                 .status-badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 9px; font-size: 0.72rem; font-weight: 600; }
-                .status-unpaid { background: #fee2e2; color: #dc2626; }
-                .status-partial { background: #fef3c7; color: #d97706; }
-                .status-paid { background: #dcfce7; color: #059669; }
+                .status-unpaid { background: var(--danger-soft); color: var(--danger); }
+                .status-partial { background: var(--warning-soft); color: var(--warning); }
+                .status-paid { background: var(--success-soft); color: var(--success); }
 
-                .pay-btn { display: inline-flex; align-items: center; gap: 4px; background: #4f46e5; color: white; padding: 0.35rem 0.65rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.78rem; font-weight: 600; margin-right: 4px; }
-                .pay-btn:hover { background: #4338ca; }
-                .full-pay-btn { background: #dcfce7; color: #059669; border: none; padding: 0.35rem; border-radius: 6px; cursor: pointer; }
-                .full-pay-btn:hover { background: #bbf7d0; }
+                .pay-btn { display: inline-flex; align-items: center; gap: 4px; background: var(--gradient-primary); color: var(--primary-text); padding: 0.35rem 0.65rem; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.78rem; font-weight: 600; margin-right: 4px; transition: all var(--transition-base); }
+                .pay-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+                .full-pay-btn { background: var(--success-soft); color: var(--success); border: none; padding: 0.35rem; border-radius: var(--radius-sm); cursor: pointer; transition: all var(--transition-base); }
+                .full-pay-btn:hover { opacity: 0.85; }
 
-                .empty-msg { padding: 2.5rem; text-align: center; color: #94a3b8; }
+                .empty-msg { padding: 2.5rem; text-align: center; color: var(--text-subtle); }
 
-                .voucher-info { background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.9rem; }
-                .voucher-info strong { color: #64748b; font-weight: 600; margin-right: 0.5rem; }
+                .voucher-info { background: var(--bg-subtle); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.9rem; color: var(--text-main); border: 1px solid var(--border); }
+                .voucher-info strong { color: var(--text-muted); font-weight: 600; margin-right: 0.5rem; }
 
                 .form-group { margin-bottom: 0.85rem; }
-                .form-group label { display: block; font-size: 0.85rem; font-weight: 600; color: #475569; margin-bottom: 0.35rem; }
-                .form-input { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.9rem; box-sizing: border-box; }
-                .form-input:focus { outline: none; border-color: #4f46e5; }
+                .form-group label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-main); margin-bottom: 0.35rem; }
 
                 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
-                .btn-cancel { background: #f1f5f9; color: #64748b; padding: 0.55rem 1rem; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-                .btn-submit { background: #4f46e5; color: white; padding: 0.55rem 1.25rem; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-                .btn-submit:hover { background: #4338ca; }
 
                 @media (max-width: 768px) {
                     .balance-table, .voucher-table { font-size: 0.78rem; }

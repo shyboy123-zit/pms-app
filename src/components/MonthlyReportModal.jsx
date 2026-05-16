@@ -307,18 +307,21 @@ const MonthlyReportModal = ({ isOpen, onClose }) => {
             </div>
 
             <style>{`
-                .report-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 1rem; }
-                .report-modal-container { background: white; border-radius: 12px; width: 100%; max-width: 900px; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
-                .report-modal-header { padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
-                .report-modal-header h2 { margin: 0; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; }
-                .month-input { padding: 0.45rem 0.75rem; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; }
-                .download-btn { display: flex; align-items: center; gap: 6px; background: #059669; color: white; padding: 0.5rem 1rem; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9rem; }
-                .download-btn:hover:not(:disabled) { background: #047857; }
+                .report-modal-overlay { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(4px); }
+                .report-modal-container { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 100%; max-width: 900px; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-xl); }
+                .report-modal-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; background: var(--bg-card); }
+                .report-modal-header h2 { margin: 0; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-main); }
+                .month-input { padding: 0.45rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem; background: var(--bg-elevated); color: var(--text-main); }
+                .download-btn { display: flex; align-items: center; gap: 6px; background: var(--success); color: white; padding: 0.5rem 1rem; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all var(--transition-base); }
+                .download-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-md); }
                 .download-btn:disabled { opacity: 0.5; cursor: wait; }
-                .close-btn { background: transparent; border: none; cursor: pointer; padding: 0.25rem; color: #64748b; }
+                .close-btn { background: transparent; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted); }
 
-                .report-scroll { overflow-y: auto; flex: 1; background: #f1f5f9; padding: 1.5rem; }
-                .report-content { background: white; padding: 2rem; max-width: 800px; margin: 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+                /* 보고서 본문은 PDF 인쇄용이므로 항상 흰 배경 + 검은 텍스트 (다크모드와 무관) */
+                .report-scroll { overflow-y: auto; flex: 1; background: var(--bg-subtle); padding: 1.5rem; }
+                .report-content { background: #ffffff; color: #0b1729; padding: 2rem; max-width: 800px; margin: 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-radius: 6px; }
+                .report-content * { color: inherit; }
+                .report-content strong { color: #0b1729; }
 
                 .report-title { text-align: center; padding-bottom: 1.25rem; border-bottom: 3px solid #4f46e5; margin-bottom: 1.5rem; }
                 .report-title h1 { margin: 0; font-size: 1.75rem; color: #1e293b; }

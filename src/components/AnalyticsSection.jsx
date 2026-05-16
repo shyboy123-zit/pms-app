@@ -184,8 +184,8 @@ const AnalyticsSection = () => {
                         <YAxis fontSize={11} stroke="#64748b" />
                         <Tooltip
                             formatter={(value) => `₩${(value * 1000).toLocaleString()}`}
-                            labelStyle={{ color: '#1e293b' }}
-                            contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8 }}
+                            labelStyle={{ color: 'var(--text-main)' }}
+                            contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-main)' }}
                         />
                         <Legend />
                         <Line type="monotone" dataKey="매출" stroke="#059669" strokeWidth={2} dot={false} />
@@ -205,7 +205,7 @@ const AnalyticsSection = () => {
                         <YAxis fontSize={11} stroke="#64748b" />
                         <Tooltip
                             formatter={(value) => value.toLocaleString()}
-                            contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8 }}
+                            contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-main)' }}
                         />
                         <Legend />
                         <Bar dataKey="입고" fill="#3b82f6" />
@@ -294,30 +294,30 @@ const AnalyticsSection = () => {
             <style>{`
                 .analytics-section { margin-top: 2rem; padding: 0 1rem; }
                 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-                .section-header h2 { display: flex; align-items: center; gap: 0.5rem; font-size: 1.15rem; font-weight: 700; color: #1e293b; margin: 0; }
-                .period-label { font-size: 0.8rem; color: #94a3b8; }
+                .section-header h2 { display: flex; align-items: center; gap: 0.5rem; font-size: 1.15rem; font-weight: 700; color: var(--text-main); margin: 0; letter-spacing: -0.01em; }
+                .period-label { font-size: 0.8rem; color: var(--text-subtle); }
 
                 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
-                .summary-card { background: white; padding: 1rem; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border-left: 4px solid; }
-                .summary-card.sales-card { border-left-color: #059669; }
-                .summary-card.purchase-card { border-left-color: #2563eb; }
-                .summary-card.in-card { border-left-color: #3b82f6; }
-                .summary-card.out-card { border-left-color: #ef4444; }
-                .card-label { font-size: 0.8rem; color: #64748b; margin-bottom: 0.25rem; }
-                .card-value { font-size: 1.25rem; font-weight: 700; color: #1e293b; }
+                .summary-card { background: var(--bg-card); padding: 1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); border-left: 4px solid; border-top: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+                .summary-card.sales-card { border-left-color: var(--success); }
+                .summary-card.purchase-card { border-left-color: var(--info); }
+                .summary-card.in-card { border-left-color: var(--primary); }
+                .summary-card.out-card { border-left-color: var(--danger); }
+                .card-label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem; }
+                .card-value { font-size: 1.25rem; font-weight: 700; color: var(--text-main); letter-spacing: -0.01em; }
 
-                .chart-card { background: white; padding: 1.25rem; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 1rem; }
-                .chart-title { font-size: 0.95rem; font-weight: 700; color: #1e293b; margin: 0 0 0.25rem; }
-                .chart-subtitle { font-size: 0.75rem; color: #94a3b8; margin: 0 0 0.75rem; }
+                .chart-card { background: var(--bg-card); padding: 1.25rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); border: 1px solid var(--border); margin-bottom: 1rem; }
+                .chart-title { font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin: 0 0 0.25rem; }
+                .chart-subtitle { font-size: 0.75rem; color: var(--text-subtle); margin: 0 0 0.75rem; }
 
                 .turnover-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem; }
                 .mini-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-                .mini-table th { text-align: left; padding: 0.5rem; border-bottom: 2px solid #e2e8f0; font-weight: 600; color: #64748b; font-size: 0.78rem; }
+                .mini-table th { text-align: left; padding: 0.5rem; border-bottom: 2px solid var(--border); font-weight: 600; color: var(--text-muted); font-size: 0.78rem; }
                 .mini-table th:not(:first-child) { text-align: right; }
-                .mini-table td { padding: 0.6rem 0.5rem; border-bottom: 1px solid #f1f5f9; }
-                .item-name { font-weight: 600; color: #1e293b; }
-                .item-code { font-size: 0.7rem; color: #94a3b8; }
-                .empty-msg { padding: 2rem; text-align: center; color: #94a3b8; font-size: 0.9rem; }
+                .mini-table td { padding: 0.6rem 0.5rem; border-bottom: 1px solid var(--border); color: var(--text-main); }
+                .item-name { font-weight: 600; color: var(--text-main); }
+                .item-code { font-size: 0.7rem; color: var(--text-subtle); }
+                .empty-msg { padding: 2rem; text-align: center; color: var(--text-subtle); font-size: 0.9rem; }
 
                 @media (max-width: 768px) {
                     .turnover-grid { grid-template-columns: 1fr; }

@@ -75,15 +75,15 @@ const ExcelToolbar = ({ data, columns, fileName, onImport, showTemplate = true }
 
             <style>{`
                 .excel-toolbar { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
-                .excel-btn { display: inline-flex; align-items: center; gap: 4px; padding: 0.4rem 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.15s; background: white; }
-                .excel-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+                .excel-btn { display: inline-flex; align-items: center; gap: 4px; padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all var(--transition-base); background: var(--bg-card); color: var(--text-main); }
+                .excel-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
                 .excel-btn:disabled { opacity: 0.5; cursor: wait; }
-                .excel-btn.export { color: #059669; border-color: #a7f3d0; background: #ecfdf5; }
-                .excel-btn.export:hover { background: #d1fae5; }
-                .excel-btn.import { color: #2563eb; border-color: #93c5fd; background: #eff6ff; }
-                .excel-btn.import:hover { background: #dbeafe; }
-                .excel-btn.template { color: #64748b; border-color: #e2e8f0; }
-                .excel-btn.template:hover { background: #f8fafc; }
+                .excel-btn.export { color: var(--success); border-color: var(--success); background: var(--success-soft); }
+                .excel-btn.export:hover { opacity: 0.85; }
+                .excel-btn.import { color: var(--info); border-color: var(--info); background: var(--info-soft); }
+                .excel-btn.import:hover { opacity: 0.85; }
+                .excel-btn.template { color: var(--text-muted); }
+                .excel-btn.template:hover { background: var(--bg-subtle); }
             `}</style>
         </div>
     );

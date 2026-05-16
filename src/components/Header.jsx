@@ -3,13 +3,14 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useTheme } from '../context/ThemeContext';
 import { Bell, Search, User, Menu, X, Check, Trash2, Sun, Moon } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const Header = ({ onToggleSidebar }) => {
     const { user } = useAuth();
     const { notifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification } = useData();
     const { theme, toggleTheme } = useTheme();
     const location = useLocation();
+    const navigate = useNavigate();
     const [showNotifications, setShowNotifications] = useState(false);
 
     // 현재 사용자의 알림만 필터
@@ -28,9 +29,9 @@ const Header = ({ onToggleSidebar }) => {
             case '/': return '대시보드';
             case '/molds': return '금형관리';
             case '/materials': return '원재료관리';
-            case '/delivery': return '납품관리';
+            case '/delivery': return '입출고관리';
             case '/quality': return '품질관리';
-            case '/sales': return '매입매출관리';
+            case '/sales': return '매입매출';
             case '/employees': return '직원관리';
             case '/equipments': return '설비관리';
             case '/products': return '제품관리';
@@ -38,13 +39,39 @@ const Header = ({ onToggleSidebar }) => {
             case '/daily-production': return '일일작업현황';
             case '/work-history': return '작업이력';
             case '/injection-conditions': return '사출조건표';
+            case '/suppliers': return '거래처관리';
+            case '/purchase': return '구매관리';
+            case '/board': return '게시판';
+            case '/government-support': return '국가지원사업';
+            case '/payroll': return '급여관리';
+            case '/audit-log': return '감사 로그';
             default: return 'PMS App';
         }
     };
 
+    /**
+     * 알림 클릭 → 읽음 처리 + 관련 페이지로 이동
+     * 알림 title 또는 type을 기반으로 적절한 페이지 추정
+     */
     const handleNotificationClick = (notification) => {
         if (!notification.is_read) {
             markNotificationAsRead(notification.id);
+        }
+        // 자동 알림([AUTO] prefix) 라우팅 매핑
+        const title = notification.title || '';
+        const type = notification.type || '';
+        let destination = null;
+        if (title.includes('원재료') || title.includes('안전재고')) destination = '/materials';
+        else if (title.includes('작업지시')) destination = '/work-orders';
+        else if (title.includes('금형')) destination = '/molds';
+        else if (title.includes('설비')) destination = '/equipments';
+        else if (title.includes('품질') || type === 'quality') destination = '/quality';
+        else if (type === 'production') destination = '/daily-production';
+        else if (type === 'equipment') destination = '/equipments';
+
+        if (destination) {
+            setShowNotifications(false);
+            navigate(destination);
         }
     };
 

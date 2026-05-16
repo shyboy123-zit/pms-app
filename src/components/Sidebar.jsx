@@ -21,7 +21,8 @@ import {
   ShoppingBag,
   Building,
   MessageSquare,
-  Briefcase
+  Briefcase,
+  History
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -102,7 +103,8 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
       icon: Briefcase,
       items: [
         { icon: Building, label: '국가지원사업', path: '/government-support', key: 'government_support' },
-        { icon: DollarSign, label: '급여관리', path: '/payroll', key: 'payroll' }
+        { icon: DollarSign, label: '급여관리', path: '/payroll', key: 'payroll' },
+        { icon: History, label: '감사 로그', path: '/audit-log', key: 'audit_log' }
       ]
     }
   ];

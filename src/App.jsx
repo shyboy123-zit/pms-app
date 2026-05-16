@@ -26,6 +26,7 @@ import Purchase from './pages/Purchase';
 import Board from './pages/Board';
 import GovernmentSupport from './pages/GovernmentSupport';
 import Payroll from './pages/Payroll';
+import AuditLog from './pages/AuditLog';
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();
@@ -85,6 +86,7 @@ function App() {
                 <Route path="board" element={<PermissionGate permissionKey="board"><Board /></PermissionGate>} />
                 <Route path="government-support" element={<PermissionGate permissionKey="government_support"><GovernmentSupport /></PermissionGate>} />
                 <Route path="payroll" element={<PermissionGate permissionKey="payroll"><Payroll /></PermissionGate>} />
+                <Route path="audit-log" element={<PermissionGate permissionKey="audit_log"><AuditLog /></PermissionGate>} />
               </Route>
             </Route>
 

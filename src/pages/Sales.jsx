@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { DollarSign, TrendingUp, TrendingDown, Calendar, BarChart3, ArrowUpRight, ArrowDownRight, Plus, Edit, Trash2, FileText, CheckCircle, AlertTriangle, Search, X, Wallet, Download } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Calendar, BarChart3, ArrowUpRight, ArrowDownRight, Plus, Edit, Trash2, FileText, CheckCircle, AlertTriangle, Search, X, Wallet, Download, Camera } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import PaymentTab from '../components/PaymentTab';
 import MonthlyReportModal from '../components/MonthlyReportModal';
+import BarcodeScannerModal from '../components/BarcodeScannerModal';
 
 const Sales = () => {
     const { inventoryTransactions, salesRecords, products, materials, suppliers, vouchers, addVoucher, updateVoucher, deleteVoucher } = useData();
@@ -20,6 +21,8 @@ const Sales = () => {
     const [showClientDropdown, setShowClientDropdown] = useState(false);
     const [clientFilter, setClientFilter] = useState('all'); // 거래처별 필터
     const [isReportModalOpen, setIsReportModalOpen] = useState(false); // Phase 3c: 월말 결산 PDF
+    const [isScannerOpen, setIsScannerOpen] = useState(false);          // Phase 5d: 전표 바코드 스캔
+    const [scannerTargetIdx, setScannerTargetIdx] = useState(-1);
 
     // 전표 공통 정보
     const [voucherCommon, setVoucherCommon] = useState({
@@ -210,6 +213,26 @@ const Sales = () => {
             searchText: `${product.product_code ? `[${product.product_code}] ` : ''}${product.name}`
         } : item));
         setActiveItemDropdown(-1);
+    };
+
+    // Phase 5d: 바코드 스캔으로 전표 항목 선택
+    const openVoucherScanner = (idx) => {
+        setScannerTargetIdx(idx);
+        setIsScannerOpen(true);
+    };
+
+    const handleVoucherScan = (decodedText) => {
+        const code = String(decodedText).trim();
+        const product = products.find(p => p.product_code === code) || products.find(p => p.name === code);
+        if (!product) {
+            alert(`스캔된 코드 '${code}'에 일치하는 제품이 없습니다.\n제품 관리에서 먼저 등록해주세요.`);
+            return;
+        }
+        if (scannerTargetIdx >= 0) {
+            selectProductForItem(scannerTargetIdx, product);
+        }
+        setIsScannerOpen(false);
+        setScannerTargetIdx(-1);
     };
 
     const handleEditVoucher = (v) => {
@@ -430,6 +453,14 @@ const Sales = () => {
 
             {/* 월말 결산 PDF 모달 (Phase 3c) */}
             <MonthlyReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} />
+
+            {/* 바코드 스캐너 모달 (Phase 5d - 전표 등록 시) */}
+            <BarcodeScannerModal
+                isOpen={isScannerOpen}
+                onClose={() => { setIsScannerOpen(false); setScannerTargetIdx(-1); }}
+                onScan={handleVoucherScan}
+                title="전표 품목 바코드/QR 스캔"
+            />
 
             {/* 탭 네비게이션 */}
             <div className="sales-tabs">
@@ -1044,12 +1075,17 @@ const Sales = () => {
                                         </button>
                                     )}
                                     <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.35rem' }}>#{idx + 1}</div>
-                                    {/* 품목 선택 */}
-                                    <div className="autocomplete-wrapper" style={{ marginBottom: '0.4rem' }}>
+                                    {/* 품목 선택 + 바코드 스캔 버튼 */}
+                                    <div className="autocomplete-wrapper" style={{ marginBottom: '0.4rem', display: 'flex', gap: '4px' }}>
                                         <input className="form-input" value={item.searchText} placeholder="품목 검색..."
-                                            style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem' }}
+                                            style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem', flex: 1 }}
                                             onChange={(e) => { updateVoucherItem(idx, 'searchText', e.target.value); setActiveItemDropdown(idx); }}
                                             onFocus={() => setActiveItemDropdown(idx)} />
+                                        <button type="button" onClick={() => openVoucherScanner(idx)}
+                                            style={{ background: 'var(--gradient-primary)', color: 'var(--primary-text)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0 0.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600 }}
+                                            title="바코드/QR 스캔">
+                                            <Camera size={14} />
+                                        </button>
                                         {activeItemDropdown === idx && (
                                             <div className="autocomplete-dropdown">
                                                 {(products || []).filter(p => {

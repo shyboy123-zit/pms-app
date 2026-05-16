@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
+import ExcelToolbar from '../components/ExcelToolbar';
 import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon, FileText, Download, X, Calendar, Filter, Pencil, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -347,9 +348,24 @@ const Quality = () => {
                     <h2 className="page-subtitle">품질 관리 (일일 검사)</h2>
                     <p className="page-description">제품 스펙 검사 결과 및 불량 사진을 등록합니다.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-                    <ClipboardCheck size={18} /> 검사 결과 등록
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <ExcelToolbar
+                        data={inspections || []}
+                        columns={[
+                            { key: 'date', label: '검사일' },
+                            { key: 'product_id', label: '제품ID' },
+                            { key: 'result', label: '결과' },
+                            { key: 'defect_count', label: '불량수', format: (v) => parseFloat(v || 0) },
+                            { key: 'sample_size', label: '검사수량', format: (v) => parseFloat(v || 0) },
+                            { key: 'inspector', label: '검사자' },
+                            { key: 'notes', label: '비고' }
+                        ]}
+                        fileName="품질검사내역"
+                    />
+                    <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                        <ClipboardCheck size={18} /> 검사 결과 등록
+                    </button>
+                </div>
             </div>
 
             {/* 날짜 필터 */}

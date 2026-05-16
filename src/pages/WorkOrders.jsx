@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
+import ExcelToolbar from '../components/ExcelToolbar';
 import { Plus, Play, CheckCircle, XCircle, Edit, FileText, Wrench, PenTool, Truck, ClipboardList } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
@@ -216,9 +217,27 @@ const WorkOrders = () => {
                     <h2 className="page-subtitle">작업지시 관리</h2>
                     <p className="page-description">설비별 생산 작업지시를 관리합니다.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-                    <Plus size={18} /> 작업지시 생성
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <ExcelToolbar
+                        data={workOrders || []}
+                        columns={[
+                            { key: 'order_code', label: '지시번호' },
+                            { key: 'product_id', label: '제품ID' },
+                            { key: 'equipment_id', label: '설비ID' },
+                            { key: 'target_quantity', label: '목표수량', format: (v) => parseFloat(v || 0) },
+                            { key: 'produced_quantity', label: '생산수량', format: (v) => parseFloat(v || 0) },
+                            { key: 'status', label: '상태' },
+                            { key: 'order_date', label: '지시일' },
+                            { key: 'start_time', label: '시작' },
+                            { key: 'end_time', label: '완료' },
+                            { key: 'notes', label: '비고' }
+                        ]}
+                        fileName="작업지시내역"
+                    />
+                    <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                        <Plus size={18} /> 작업지시 생성
+                    </button>
+                </div>
             </div>
 
             <div className="stats-row">

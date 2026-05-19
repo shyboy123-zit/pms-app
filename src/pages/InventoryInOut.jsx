@@ -17,7 +17,10 @@ const InventoryInOut = () => {
         updateInventoryTransaction,
         deleteInventoryTransaction,
         getTransactionsByDateRange,
-        addVoucher
+        vouchers,
+        addVoucher,
+        updateVoucher,
+        deleteVoucher
     } = useData();
     const { can } = useAuth();
 
@@ -263,6 +266,7 @@ const InventoryInOut = () => {
                     }
                 }
 
+                const original = inventoryTransactions.find(t => t.id === editingId);
                 await updateInventoryTransaction(editingId, {
                     transaction_type: newItem.transactionType,
                     item_name: newItem.itemName,
@@ -274,6 +278,65 @@ const InventoryInOut = () => {
                     client: newItem.client,
                     notes: newItem.notes
                 }, { context: 'inventory:update' });
+
+                // ── 매출 전표 동기화 (OUT 거래 변경 시) ──
+                // 기존 voucher 매칭: 원래 거래의 (date, item, qty, client)로 찾기
+                const findMatchingVoucher = (refDate, refItem, refQty, refClient) => {
+                    if (!vouchers) return null;
+                    return vouchers.find(v =>
+                        v.voucher_type === '매출' &&
+                        v.voucher_date === refDate &&
+                        v.item_name === refItem &&
+                        parseFloat(v.quantity) === parseFloat(refQty) &&
+                        (v.client || '') === (refClient || '')
+                    );
+                };
+                const wasOut = original?.transaction_type === 'OUT';
+                const isOut = newItem.transactionType === 'OUT';
+
+                try {
+                    if (wasOut && isOut) {
+                        // OUT → OUT: 기존 voucher UPDATE
+                        const existing = findMatchingVoucher(original.transaction_date, original.item_name, original.quantity, original.client);
+                        if (existing && updateVoucher) {
+                            await updateVoucher(existing.id, {
+                                voucher_date: newItem.transactionDate,
+                                item_name: newItem.itemName,
+                                item_code: newItem.itemCode,
+                                quantity: parseFloat(newItem.quantity),
+                                unit: newItem.unit,
+                                unit_price: parseFloat(newItem.unitPrice),
+                                client: newItem.client,
+                                notes: `[자동-입출고 수정] ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`
+                            });
+                        } else if (addVoucher) {
+                            // 기존 voucher가 없으면 신규 생성 (과거 누락분 보완)
+                            await addVoucher({
+                                voucher_date: newItem.transactionDate, voucher_type: '매출',
+                                item_name: newItem.itemName, item_code: newItem.itemCode,
+                                quantity: parseFloat(newItem.quantity), unit: newItem.unit,
+                                unit_price: parseFloat(newItem.unitPrice), client: newItem.client,
+                                notes: `[자동-입출고 수정생성] ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`
+                            });
+                        }
+                    } else if (!wasOut && isOut && addVoucher) {
+                        // non-OUT → OUT: voucher 신규 생성
+                        await addVoucher({
+                            voucher_date: newItem.transactionDate, voucher_type: '매출',
+                            item_name: newItem.itemName, item_code: newItem.itemCode,
+                            quantity: parseFloat(newItem.quantity), unit: newItem.unit,
+                            unit_price: parseFloat(newItem.unitPrice), client: newItem.client,
+                            notes: `[자동-입출고 수정생성] ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`
+                        });
+                    } else if (wasOut && !isOut && deleteVoucher) {
+                        // OUT → non-OUT: 기존 voucher DELETE
+                        const existing = findMatchingVoucher(original.transaction_date, original.item_name, original.quantity, original.client);
+                        if (existing) await deleteVoucher(existing.id);
+                    }
+                } catch (e) {
+                    console.error('매출 전표 동기화 실패:', e);
+                    alert(`⚠️ 입출고 수정은 완료되었으나, 매출 전표 동기화에 실패했습니다.\n매입매출 페이지에서 직접 확인/수정 필요.\n원인: ${e.message || e}`);
+                }
             }
             resetForm();
             return;
@@ -322,6 +385,12 @@ const InventoryInOut = () => {
             }
         }
 
+        // 출고인데 거래처 비어있으면 사전 차단 (자동 매출 전표 생성 시 고아 voucher 방지)
+        if (batchCommon.transactionType === 'OUT' && !batchCommon.client?.trim()) {
+            return alert('출고 거래는 거래처를 반드시 선택/입력해야 합니다. (매출 전표 자동 생성용)');
+        }
+
+        const voucherFailures = [];
         for (const item of validItems) {
             await addInventoryTransaction({
                 transaction_type: batchCommon.transactionType,
@@ -337,20 +406,32 @@ const InventoryInOut = () => {
 
             // 출고 → 매출 전표 자동 생성 (입고는 제품 입고이므로 매입 아님)
             if (addVoucher && batchCommon.transactionType === 'OUT') {
-                await addVoucher({
-                    voucher_date: batchCommon.transactionDate,
-                    voucher_type: '매출',
-                    item_name: item.itemName,
-                    item_code: item.itemCode,
-                    quantity: parseFloat(item.quantity),
-                    unit: item.unit,
-                    unit_price: parseFloat(item.unitPrice),
-                    client: batchCommon.client,
-                    notes: `[자동-입출고] ${item.itemName} ${item.quantity}${item.unit} 출고`
-                });
+                try {
+                    const { error: vErr } = await addVoucher({
+                        voucher_date: batchCommon.transactionDate,
+                        voucher_type: '매출',
+                        item_name: item.itemName,
+                        item_code: item.itemCode,
+                        quantity: parseFloat(item.quantity),
+                        unit: item.unit,
+                        unit_price: parseFloat(item.unitPrice),
+                        client: batchCommon.client,
+                        notes: `[자동-입출고] ${item.itemName} ${item.quantity}${item.unit} 출고`
+                    }) || {};
+                    if (vErr) voucherFailures.push({ item: item.itemName, error: vErr.message || String(vErr) });
+                } catch (e) {
+                    console.error('매출 전표 생성 실패:', e);
+                    voucherFailures.push({ item: item.itemName, error: e.message || String(e) });
+                }
             }
         }
-        alert(`${validItems.length}건의 거래가 등록되었습니다.`);
+        if (voucherFailures.length > 0) {
+            alert(`⚠️ ${validItems.length}건 입출고는 등록되었으나, 매출 전표 ${voucherFailures.length}건 생성 실패\n` +
+                  voucherFailures.map(f => `  - ${f.item}: ${f.error}`).join('\n') +
+                  '\n매입매출 페이지에서 수동 보충 필요.');
+        } else {
+            alert(`${validItems.length}건의 거래가 등록되었습니다.`);
+        }
         resetForm();
     };
 

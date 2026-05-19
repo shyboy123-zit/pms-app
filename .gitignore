@@ -34,3 +34,6 @@ supabase/functions/
 
 .vercel
 .env*.local
+
+# DB 백업 (수동 정정 시 생성, 외부 노출 금지)
+db_backup/

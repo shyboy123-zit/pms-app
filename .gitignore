@@ -37,3 +37,6 @@ supabase/functions/
 
 # DB 백업 (수동 정정 시 생성, 외부 노출 금지)
 db_backup/
+
+# 로컬 헬퍼 스크립트 (개인 사용)
+check_stock.py

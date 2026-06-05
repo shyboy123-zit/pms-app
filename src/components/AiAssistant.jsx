@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Sparkles, RotateCcw } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 // PMS AI 질문방 — 자연어로 재고/생산/매출/품질/설비를 묻고 답을 받는다.
 // 서버리스 /api/assistant 가 Claude tool-calling 으로 실데이터를 조회해 답변.
@@ -45,10 +46,11 @@ const AiAssistant = () => {
     setMessages((prev) => [...prev, { role: 'user', content: question }]);
     setLoading(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, history }),
+        body: JSON.stringify({ question, history, token: session?.access_token || null }),
       });
       const data = await res.json();
       const answer = res.ok ? data.answer : `⚠️ ${data.error || '오류가 발생했습니다.'}`;

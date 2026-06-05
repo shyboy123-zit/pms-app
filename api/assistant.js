@@ -318,6 +318,14 @@ export default async function handler(req, res) {
     }
     const tools = isAdmin ? TOOLS : TOOLS.filter((t) => t.name !== 'sales_summary');
 
+    // 오늘 날짜(한국시간)를 시스템 프롬프트에 주입 — "이번 달/오늘/최근" 등 상대적 기간 해석용
+    const todayKST = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    const system = `${SYSTEM_PROMPT}
+
+오늘 날짜는 ${todayKST} (한국시간)입니다. "이번 달", "오늘", "최근", "올해" 같은 상대적 기간 표현은 반드시 이 날짜를 기준으로 해석하세요. 예: "이번 달"은 ${todayKST.slice(0, 7)}-01 부터 ${todayKST} 까지입니다.`;
+
     // 직전 대화 최대 6턴만 컨텍스트로 전달
     const prior = Array.isArray(history)
       ? history.slice(-6).map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.content || '') }))
@@ -329,7 +337,7 @@ export default async function handler(req, res) {
       const resp = await anthropic.messages.create({
         model: MODEL,
         max_tokens: 1024,
-        system: SYSTEM_PROMPT,
+        system,
         tools,
         messages,
       });

@@ -36,7 +36,7 @@ function findEquipment(equipments, code) {
   );
 }
 
-const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], onMachineClick }) => {
+const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], productionLogs = [], onMachineClick }) => {
   // 배치도 각 칸의 상태/작업 계산 + 배치된 설비 id 집합
   const { cells, extras } = useMemo(() => {
     const matchedIds = new Set();
@@ -61,6 +61,71 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], onMa
     const extras = equipments.filter((e) => e.status === '가동중' && !matchedIds.has(e.id));
     return { cells, extras };
   }, [equipments, workOrders, products]);
+
+  // 우측 종합 현황 패널용 통계
+  const stats = useMemo(() => {
+    const total = equipments.length;
+    const running = equipments.filter((e) => e.status === '가동중').length;
+    const idle = equipments.filter((e) => e.status === '대기').length;
+    const stopped = Math.max(total - running - idle, 0);
+    const util = total > 0 ? Math.round((running / total) * 100) : 0;
+    const t = total || 1;
+    const runDeg = (running / t) * 360;
+    const idleDeg = runDeg + (idle / t) * 360;
+
+    const now = Date.now();
+
+    // 가동 호기 예상 완료 (ETA)
+    const eta = [];
+    equipments.filter((e) => e.status === '가동중' && e.current_work_order_id).forEach((e) => {
+      const wo = workOrders.find((w) => w.id === e.current_work_order_id);
+      if (!wo) return;
+      const product = products.find((p) => p.id === wo.product_id);
+      const target = Number(wo.target_quantity) || 0;
+      const produced = Number(wo.produced_quantity) || 0;
+      const remaining = Math.max(target - produced, 0);
+      const cavity = Number(product?.cavity_count) || 1;
+      const cycleSec = Number(product?.standard_cycle_time) || Number(e.cycle_time) || 0;
+      let etaText = '—', etaMs = Infinity;
+      if (remaining <= 0) { etaText = '완료임박'; etaMs = now; }
+      else if (cycleSec > 0) {
+        const shots = Math.ceil(remaining / (cavity > 0 ? cavity : 1));
+        etaMs = now + shots * cycleSec * 1000;
+        const d = new Date(etaMs);
+        const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        etaText = new Date(now).toDateString() === d.toDateString() ? hhmm : `내일 ${hhmm}`;
+      }
+      eta.push({ code: e.name, product: product?.name, remaining, etaText, etaMs });
+    });
+    eta.sort((a, b) => a.etaMs - b.etaMs);
+
+    // 오늘/어제 생산 실적 (production_date 는 UTC 기준 저장과 동일하게 맞춤)
+    const todayStr = new Date(now).toISOString().split('T')[0];
+    const yStr = new Date(now - 86400000).toISOString().split('T')[0];
+    const sumByDate = (ds) => (productionLogs || []).filter((l) => l.production_date === ds)
+      .reduce((s, l) => s + (Number(l.daily_quantity) || 0), 0);
+    const todayQty = sumByDate(todayStr);
+    const yQty = sumByDate(yStr);
+    const todayMax = Math.max(todayQty, yQty, 1);
+    const trendPct = yQty > 0 ? Math.round(((todayQty - yQty) / yQty) * 100) : null;
+
+    // 임박(진척 90%+) / 지연(7일+ 저진척) 작업
+    const imminent = [], delayed = [];
+    workOrders.filter((w) => w.status === '진행중').forEach((w) => {
+      const target = Number(w.target_quantity) || 0;
+      const made = Number(w.produced_quantity) || 0;
+      const prog = target > 0 ? Math.round((made / target) * 100) : 0;
+      const product = products.find((p) => p.id === w.product_id);
+      const label = product?.name || w.order_code || '작업';
+      if (prog >= 90 && prog < 100) imminent.push({ id: w.id, label, prog });
+      if (w.start_time) {
+        const days = Math.floor((now - new Date(w.start_time).getTime()) / 86400000);
+        if (days >= 7 && prog < 100) delayed.push({ id: w.id, label, prog, days });
+      }
+    });
+
+    return { total, running, idle, stopped, util, runDeg, idleDeg, eta, todayQty, yQty, todayMax, trendPct, imminent, delayed };
+  }, [equipments, workOrders, products, productionLogs]);
 
   const stateLabel = { running: '가동중', idle: '대기', fault: '점검/정지', missing: '미등록' };
 
@@ -95,6 +160,82 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], onMa
             </div>
           </div>
         ))}
+
+        {/* 우측 종합 현황 패널 (배치도 빈 공간 활용) */}
+        <div className="ffm-side" style={{ gridColumn: '2 / 6', gridRow: '1 / 10' }}>
+          {/* 1. 가동 현황 요약 */}
+          <div className="ffm-panel">
+            <div className="ffm-panel-title">🏭 가동 현황</div>
+            <div className="ffm-util">
+              <div className="ffm-donut" style={{ background: `conic-gradient(#16a34a 0 ${stats.runDeg}deg, #94a3b8 ${stats.runDeg}deg ${stats.idleDeg}deg, #ef4444 ${stats.idleDeg}deg 360deg)` }}>
+                <div className="ffm-donut-hole"><b>{stats.util}%</b><span>가동률</span></div>
+              </div>
+              <div className="ffm-util-legend">
+                <div><i style={{ background: '#16a34a' }} /> 가동 <b>{stats.running}</b></div>
+                <div><i style={{ background: '#94a3b8' }} /> 대기 <b>{stats.idle}</b></div>
+                <div><i style={{ background: '#ef4444' }} /> 정지 <b>{stats.stopped}</b></div>
+                <div className="ffm-util-total">전체 {stats.total}대</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. 가동 호기 예상 완료 (ETA) */}
+          <div className="ffm-panel">
+            <div className="ffm-panel-title">⏱️ 예상 완료 (ETA)</div>
+            {stats.eta.length > 0 ? (
+              <ul className="ffm-eta">
+                {stats.eta.slice(0, 6).map((e) => (
+                  <li key={e.code}>
+                    <span className="ffm-eta-code">{e.code}</span>
+                    <span className="ffm-eta-prod" title={e.product || ''}>{e.product || '-'}</span>
+                    <span className="ffm-eta-time">{e.etaText}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <div className="ffm-empty-sm">가동 중인 호기가 없습니다</div>}
+          </div>
+
+          {/* 3. 오늘 생산 실적 */}
+          <div className="ffm-panel">
+            <div className="ffm-panel-title">📈 오늘 생산</div>
+            <div className="ffm-today-num">{stats.todayQty.toLocaleString()}<span> 개</span></div>
+            <div className="ffm-today-cmp">
+              어제 {stats.yQty.toLocaleString()}개
+              {stats.trendPct !== null && (
+                <span className={stats.trendPct >= 0 ? 'up' : 'down'}>
+                  {' '}· {stats.trendPct >= 0 ? '▲' : '▼'} {Math.abs(stats.trendPct)}%
+                </span>
+              )}
+            </div>
+            <div className="ffm-today-bars">
+              <div className="ffm-today-bar"><span style={{ width: `${(stats.todayQty / stats.todayMax) * 100}%`, background: '#6366f1' }} /><em>오늘</em></div>
+              <div className="ffm-today-bar"><span style={{ width: `${(stats.yQty / stats.todayMax) * 100}%`, background: '#cbd5e1' }} /><em>어제</em></div>
+            </div>
+          </div>
+
+          {/* 4. 임박·지연 작업 */}
+          <div className="ffm-panel">
+            <div className="ffm-panel-title">🚨 임박·지연 작업</div>
+            {(stats.imminent.length > 0 || stats.delayed.length > 0) ? (
+              <div className="ffm-alert-list">
+                {stats.imminent.map((w) => (
+                  <div key={`im-${w.id}`} className="ffm-alert-row">
+                    <span className="ffm-tag im">임박</span>
+                    <span className="ffm-alert-label" title={w.label}>{w.label}</span>
+                    <span className="ffm-alert-val">{w.prog}%</span>
+                  </div>
+                ))}
+                {stats.delayed.map((w) => (
+                  <div key={`dl-${w.id}`} className="ffm-alert-row">
+                    <span className="ffm-tag dl">지연</span>
+                    <span className="ffm-alert-label" title={w.label}>{w.label}</span>
+                    <span className="ffm-alert-val">{w.days}일·{w.prog}%</span>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="ffm-empty-sm">특이사항 없음 ✓</div>}
+          </div>
+        </div>
       </div>
 
       {/* 범례 */}
@@ -200,10 +341,61 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], onMa
 
         .ffm-extras { margin-top: 10px; font-size: 0.78rem; color: #b45309; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 8px 12px; }
 
+        /* === 우측 종합 현황 패널 === */
+        .ffm-side { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(0, 1fr); gap: 12px; min-height: 0; }
+        .ffm-panel {
+          background: var(--bg-card, #fff); border: 1px solid var(--border); border-radius: 12px;
+          padding: 12px 14px; display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+        }
+        .ffm-panel-title { font-size: 0.82rem; font-weight: 800; color: var(--text-main); margin-bottom: 10px; letter-spacing: -0.01em; }
+
+        /* 가동률 도넛 */
+        .ffm-util { display: flex; align-items: center; gap: 16px; flex: 1; }
+        .ffm-donut { width: 92px; height: 92px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .ffm-donut-hole { width: 64px; height: 64px; border-radius: 50%; background: var(--bg-card, #fff); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .ffm-donut-hole b { font-size: 1.15rem; font-weight: 800; color: var(--text-main); line-height: 1; }
+        .ffm-donut-hole span { font-size: 0.62rem; color: var(--text-muted); margin-top: 2px; }
+        .ffm-util-legend { display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: var(--text-muted); }
+        .ffm-util-legend > div { display: flex; align-items: center; gap: 6px; }
+        .ffm-util-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+        .ffm-util-legend b { color: var(--text-main); font-weight: 800; }
+        .ffm-util-total { margin-top: 2px; font-size: 0.72rem; opacity: 0.75; }
+
+        /* ETA 리스트 */
+        .ffm-eta { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
+        .ffm-eta li { display: flex; align-items: center; gap: 8px; font-size: 0.76rem; }
+        .ffm-eta-code { font-weight: 800; color: var(--text-main); min-width: 44px; }
+        .ffm-eta-prod { flex: 1; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .ffm-eta-time { font-weight: 700; color: #16a34a; white-space: nowrap; }
+
+        /* 오늘 생산 */
+        .ffm-today-num { font-size: 1.6rem; font-weight: 800; color: var(--text-main); line-height: 1.1; }
+        .ffm-today-num span { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
+        .ffm-today-cmp { font-size: 0.76rem; color: var(--text-muted); margin: 4px 0 10px; }
+        .ffm-today-cmp .up { color: #16a34a; font-weight: 700; }
+        .ffm-today-cmp .down { color: #ef4444; font-weight: 700; }
+        .ffm-today-bars { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
+        .ffm-today-bar { position: relative; height: 16px; background: var(--bg-subtle); border-radius: 8px; overflow: hidden; }
+        .ffm-today-bar span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 8px; min-width: 2px; transition: width 0.4s; }
+        .ffm-today-bar em { position: absolute; left: 8px; top: 0; bottom: 0; display: flex; align-items: center; font-style: normal; font-size: 0.62rem; font-weight: 700; color: #475569; }
+
+        /* 임박·지연 */
+        .ffm-alert-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+        .ffm-alert-row { display: flex; align-items: center; gap: 7px; font-size: 0.76rem; }
+        .ffm-tag { font-size: 0.64rem; font-weight: 800; padding: 2px 6px; border-radius: 6px; flex-shrink: 0; }
+        .ffm-tag.im { background: #dcfce7; color: #15803d; }
+        .ffm-tag.dl { background: #fee2e2; color: #b91c1c; }
+        .ffm-alert-label { flex: 1; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .ffm-alert-val { font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+
+        .ffm-empty-sm { font-size: 0.78rem; color: var(--text-muted); margin: auto; padding: 12px 0; text-align: center; }
+
         @media (max-width: 768px) {
           .ffm-grid { grid-auto-rows: 58px; gap: 7px; padding: 10px; }
           .ffm-code { font-size: 0.74rem; }
           .ffm-product { font-size: 0.62rem; }
+          /* 모바일: 우측 패널을 배치도 아래(전체 폭)로 내림 */
+          .ffm-side { grid-column: 1 / -1 !important; grid-row: 11 / 12 !important; grid-template-columns: 1fr; }
         }
       `}</style>
     </div>

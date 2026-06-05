@@ -2,8 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useTheme } from '../context/ThemeContext';
-import { Bell, Search, User, Menu, X, Check, Trash2, Sun, Moon } from 'lucide-react';
+import { Bell, Search, User, Menu, X, Check, Trash2, Sun, Moon, KeyRound, Lock } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import Modal from './Modal';
+import { supabase } from '../lib/supabase';
 
 const Header = ({ onToggleSidebar }) => {
     const { user } = useAuth();
@@ -12,6 +14,44 @@ const Header = ({ onToggleSidebar }) => {
     const location = useLocation();
     const navigate = useNavigate();
     const [showNotifications, setShowNotifications] = useState(false);
+
+    // 비밀번호 변경 모달
+    const [pwModalOpen, setPwModalOpen] = useState(false);
+    const [curPw, setCurPw] = useState('');
+    const [newPw, setNewPw] = useState('');
+    const [newPw2, setNewPw2] = useState('');
+    const [pwSaving, setPwSaving] = useState(false);
+    const [pwError, setPwError] = useState('');
+
+    const openPwModal = () => {
+        setCurPw(''); setNewPw(''); setNewPw2(''); setPwError(''); setPwModalOpen(true);
+    };
+
+    const handleChangePassword = async (e) => {
+        e.preventDefault();
+        setPwError('');
+        if (!curPw || !newPw || !newPw2) { setPwError('모든 항목을 입력하세요.'); return; }
+        if (newPw.length < 6) { setPwError('새 비밀번호는 6자 이상이어야 합니다.'); return; }
+        if (newPw !== newPw2) { setPwError('새 비밀번호가 일치하지 않습니다.'); return; }
+        if (newPw === curPw) { setPwError('현재 비밀번호와 다른 비밀번호를 입력하세요.'); return; }
+        setPwSaving(true);
+        try {
+            // 1) 현재 비밀번호 재확인 (본인 확인)
+            const { error: verifyErr } = await supabase.auth.signInWithPassword({
+                email: user?.email, password: curPw,
+            });
+            if (verifyErr) { setPwError('현재 비밀번호가 올바르지 않습니다.'); setPwSaving(false); return; }
+            // 2) 새 비밀번호로 변경
+            const { error: updateErr } = await supabase.auth.updateUser({ password: newPw });
+            if (updateErr) { setPwError('변경 실패: ' + updateErr.message); setPwSaving(false); return; }
+            setPwModalOpen(false);
+            alert('✅ 비밀번호가 변경되었습니다.');
+        } catch (err) {
+            setPwError('오류: ' + err.message);
+        } finally {
+            setPwSaving(false);
+        }
+    };
 
     // 현재 사용자의 알림만 필터
     const userNotifications = useMemo(() => {
@@ -188,16 +228,44 @@ const Header = ({ onToggleSidebar }) => {
                     </div>
                 )}
 
-                <div className="user-profile">
+                <div className="user-profile" onClick={openPwModal} title="비밀번호 변경" style={{ cursor: 'pointer' }}>
                     <div className="avatar">
                         <User size={20} />
                     </div>
                     <div className="user-info">
                         <span className="user-name">{user?.name}</span>
-                        <span className="user-role">관리자</span>
+                        <span className="user-role">{user?.position || '직원'}</span>
                     </div>
                 </div>
             </div>
+
+            {/* 비밀번호 변경 모달 */}
+            <Modal title="🔑 비밀번호 변경" isOpen={pwModalOpen} onClose={() => setPwModalOpen(false)}>
+                <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div className="input-group">
+                        <Lock size={20} className="input-icon" />
+                        <input type="password" placeholder="현재 비밀번호" value={curPw}
+                            onChange={(e) => setCurPw(e.target.value)} className="glass-input" autoComplete="current-password" />
+                    </div>
+                    <div className="input-group">
+                        <KeyRound size={20} className="input-icon" />
+                        <input type="password" placeholder="새 비밀번호 (6자 이상)" value={newPw}
+                            onChange={(e) => setNewPw(e.target.value)} className="glass-input" autoComplete="new-password" />
+                    </div>
+                    <div className="input-group">
+                        <KeyRound size={20} className="input-icon" />
+                        <input type="password" placeholder="새 비밀번호 확인" value={newPw2}
+                            onChange={(e) => setNewPw2(e.target.value)} className="glass-input" autoComplete="new-password" />
+                    </div>
+                    {pwError && <div className="error-message">{pwError}</div>}
+                    <div className="modal-actions" style={{ marginTop: '0.25rem' }}>
+                        <button type="button" className="btn-cancel" onClick={() => setPwModalOpen(false)}>취소</button>
+                        <button type="submit" className="btn-submit" disabled={pwSaving}>
+                            {pwSaving ? '변경 중...' : '비밀번호 변경'}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
 
             <style>{`
                 .header {

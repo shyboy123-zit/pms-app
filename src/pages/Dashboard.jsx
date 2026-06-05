@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import Modal from '../components/Modal';
 import AnalyticsSection from '../components/AnalyticsSection';
+import FactoryFloorMap from '../components/FactoryFloorMap';
 import {
     Activity,
     AlertTriangle,
@@ -525,72 +526,23 @@ const Dashboard = () => {
                         <span className="badge-live">LIVE</span>
                     </div>
                     <div className="widget-content">
-                        {runningEquipments.length > 0 ? (
-                            <div className="equipment-list">
-                                {runningEquipments.map(eq => {
-                                    const workOrder = workOrders.find(wo => wo.id === eq.current_work_order_id);
-                                    const product = workOrder ? products.find(p => p.id === workOrder.product_id) : null;
-                                    const progress = workOrder && workOrder.target_quantity > 0
-                                        ? Math.round((workOrder.produced_quantity / workOrder.target_quantity) * 100)
-                                        : 0;
-
-                                    return (
-                                        <div
-                                            key={eq.id}
-                                            className="equipment-item clickable"
-                                            onClick={() => {
-
-                                                if (!workOrder) return;
-
-
-
-                                                const condition = injectionConditions.find(
-                                                    c => c.product_id === workOrder.product_id && c.equipment_id === eq.id
-                                                );
-
-                                                if (condition) {
-                                                    setSelectedCondition(condition);
-                                                    setIsConditionModalOpen(true);
-                                                } else {
-                                                    alert('해당 제품-호기 조합의 사출조건이 등록되지 않았습니다.');
-                                                }
-                                            }}
-                                            title="클릭하여 사출조건 보기"
-                                        >
-                                            <div className="eq-header">
-                                                <div className="eq-name-section">
-                                                    <div className="status-dot active"></div>
-                                                    <div>
-                                                        <span className="eq-name">{eq.name}</span>
-                                                        {product?.cycle_time && (
-                                                            <span className="eq-temp">{product.cycle_time}초/사이클</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <FileText size={18} color="#6366f1" style={{ opacity: 0.6 }} />
-                                            </div>
-                                            <div className="eq-product">
-                                                <Package size={16} />
-                                                <span className="product-name">{product?.name || '제품 정보 없음'}</span>
-                                            </div>
-                                            <div className="eq-progress">
-                                                <div className="progress-bar">
-                                                    <div className="progress-fill" style={{ width: `${progress}%` }}></div>
-                                                </div>
-                                                <span className="progress-text">
-                                                    {workOrder?.produced_quantity || 0} / {workOrder?.target_quantity || 0} ({progress}%)
-                                                </span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <div className="empty-state">
-                                <Activity size={48} color="#cbd5e1" />
-                                <p>현재 가동중인 설비가 없습니다</p>
-                            </div>
-                        )}
+                        <FactoryFloorMap
+                            equipments={equipments}
+                            workOrders={workOrders}
+                            products={products}
+                            onMachineClick={(eq, workOrder) => {
+                                if (!workOrder) return;
+                                const condition = injectionConditions.find(
+                                    c => c.product_id === workOrder.product_id && c.equipment_id === eq.id
+                                );
+                                if (condition) {
+                                    setSelectedCondition(condition);
+                                    setIsConditionModalOpen(true);
+                                } else {
+                                    alert('해당 제품-호기 조합의 사출조건이 등록되지 않았습니다.');
+                                }
+                            }}
+                        />
                     </div>
                 </div>
 
@@ -1113,6 +1065,11 @@ const Dashboard = () => {
                     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
                     gap: 1.5rem;
                     margin-bottom: 2rem;
+                }
+
+                /* 호기 배치도 위젯은 전체 폭 사용 */
+                .widgets-grid .production-status {
+                    grid-column: 1 / -1;
                 }
 
                 .widget {

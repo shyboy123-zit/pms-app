@@ -923,7 +923,7 @@ const InventoryInOut = () => {
                                     <option value="">거래처를 선택하세요</option>
                                     {activeSuppliers.map(s => (
                                         <option key={s.id} value={s.name}>
-                                            {s.name}{s.contact_person ? ` (${s.contact_person})` : ''}
+                                            {s.name}
                                         </option>
                                     ))}
                                     <option value="__custom__">+ 직접 입력</option>
@@ -984,7 +984,7 @@ const InventoryInOut = () => {
                                     <option value="">거래처를 선택하세요</option>
                                     {activeSuppliers.map(s => (
                                         <option key={s.id} value={s.name}>
-                                            {s.name}{s.contact_person ? ` (${s.contact_person})` : ''}
+                                            {s.name}
                                         </option>
                                     ))}
                                     <option value="__custom__">+ 직접 입력</option>

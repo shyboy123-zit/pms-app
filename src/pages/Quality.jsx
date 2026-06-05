@@ -772,10 +772,8 @@ const Quality = () => {
                                 <td style={{ ...cellStyle, width: '35%' }}>{selectedSupplier?.phone || selectedSupplier?.contact_info || '-'}</td>
                             </tr>
                             <tr>
-                                <td style={{ ...cellStyle, ...headerCellStyle }}>담당자</td>
-                                <td style={cellStyle}>{selectedSupplier?.contact_person || '-'}</td>
                                 <td style={{ ...cellStyle, ...headerCellStyle }}>이메일</td>
-                                <td style={cellStyle}>{selectedSupplier?.email || '-'}</td>
+                                <td style={cellStyle} colSpan={3}>{selectedSupplier?.email || '-'}</td>
                             </tr>
                         </tbody>
                     </table>

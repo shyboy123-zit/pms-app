@@ -147,7 +147,7 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
       if (!matAgg[product.material_id]) {
         const mat = materials.find((m) => m.id === product.material_id);
         matAgg[product.material_id] = {
-          name: mat?.material_name || '원재료', unit: mat?.unit || 'kg',
+          name: mat?.name || mat?.material_name || '원재료', unit: mat?.unit || 'kg',
           stockKg: Number(mat?.stock) || 0, gPerHr: 0, machines: [],
         };
       }

@@ -167,15 +167,15 @@ async function runTool(name, input, supa, cache, isAdmin) {
         현재고: productStock(p, txns), 단위: p.unit, 안전재고: p.min_stock,
         단가: p.unit_price, 상태: p.status,
         제품중량_g: p.product_weight, 런너중량_g: p.runner_weight, 캐비티: p.cavity_count,
-        연결원재료: mat ? mat.material_name : null, 원재료재고: mat ? mat.stock : null, 원재료단위: mat ? mat.unit : null,
+        연결원재료: mat ? (mat.name || mat.material_name) : null, 원재료재고: mat ? mat.stock : null, 원재료단위: mat ? mat.unit : null,
       };
     });
   }
 
   if (name === 'find_materials') {
     const mats = await getMaterials();
-    return fuzzy(mats, input.query, ['material_name']).slice(0, 30).map((m) => ({
-      원재료명: m.material_name, 현재고: m.stock, 단위: m.unit, 안전재고: m.min_stock, 단가: m.unit_price,
+    return fuzzy(mats, input.query, ['name', 'material_name']).slice(0, 30).map((m) => ({
+      원재료명: m.name || m.material_name, 현재고: m.stock, 단위: m.unit, 안전재고: m.min_stock, 단가: m.unit_price,
     }));
   }
 
@@ -194,7 +194,7 @@ async function runTool(name, input, supa, cache, isAdmin) {
     if (name === 'calc_producible_quantity') {
       const producible = Math.floor((stockKg * 1000) / perUnit);
       return {
-        제품: p.name, 연결원재료: mat.material_name, 원재료재고_kg: stockKg,
+        제품: p.name, 연결원재료: mat.name || mat.material_name, 원재료재고_kg: stockKg,
         제품1개당_g: Math.round(perUnit * 1000) / 1000, 생산가능수량_개: producible,
       };
     }
@@ -204,7 +204,7 @@ async function runTool(name, input, supa, cache, isAdmin) {
     const neededKg = Math.round((neededG / 1000) * 1000) / 1000;
     return {
       제품: p.name, 목표수량_개: qty, 로스율_pct: scrap,
-      연결원재료: mat.material_name, 제품1개당_g: Math.round(perUnit * 1000) / 1000,
+      연결원재료: mat.name || mat.material_name, 제품1개당_g: Math.round(perUnit * 1000) / 1000,
       필요원재료_kg: neededKg, 현재원재료재고_kg: stockKg,
       생산가능여부: stockKg >= neededKg ? '가능' : '부족',
       부족분_kg: stockKg >= neededKg ? 0 : Math.round((neededKg - stockKg) * 1000) / 1000,
@@ -264,7 +264,7 @@ async function runTool(name, input, supa, cache, isAdmin) {
   if (name === 'list_low_stock') {
     const [mats, prods, txns] = [await getMaterials(), await getProducts(), await getTxns()];
     const lowMats = mats.filter((m) => parseFloat(m.min_stock) > 0 && parseFloat(m.stock) < parseFloat(m.min_stock))
-      .map((m) => ({ 구분: '원재료', 이름: m.material_name, 현재고: m.stock, 안전재고: m.min_stock, 단위: m.unit }));
+      .map((m) => ({ 구분: '원재료', 이름: m.name || m.material_name, 현재고: m.stock, 안전재고: m.min_stock, 단위: m.unit }));
     const lowProds = prods.filter((p) => parseFloat(p.min_stock) > 0 && productStock(p, txns) < parseFloat(p.min_stock))
       .map((p) => ({ 구분: '제품', 이름: p.name, 현재고: productStock(p, txns), 안전재고: p.min_stock, 단위: p.unit }));
     return { 미달항목수: lowMats.length + lowProds.length, 목록: [...lowMats, ...lowProds] };

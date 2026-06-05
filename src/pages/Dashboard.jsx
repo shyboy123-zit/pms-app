@@ -531,6 +531,7 @@ const Dashboard = () => {
                             workOrders={workOrders}
                             products={products}
                             productionLogs={productionLogs}
+                            materials={materials}
                             onMachineClick={(eq, workOrder) => {
                                 if (!workOrder) return;
                                 const condition = injectionConditions.find(

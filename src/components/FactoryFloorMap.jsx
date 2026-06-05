@@ -36,7 +36,15 @@ function findEquipment(equipments, code) {
   );
 }
 
-const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], productionLogs = [], onMachineClick }) => {
+// 소진 예상 시간(시간 단위)을 사람이 읽기 좋은 문구로
+const fmtDuration = (h) => {
+  if (!isFinite(h)) return '충분';
+  if (h < 1) return `${Math.round(h * 60)}분 후`;
+  if (h < 24) return `${h.toFixed(1)}시간 후`;
+  return `${Math.floor(h / 24)}일 후`;
+};
+
+const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], productionLogs = [], materials = [], onMachineClick }) => {
   // 배치도 각 칸의 상태/작업 계산 + 배치된 설비 id 집합
   const { cells, extras } = useMemo(() => {
     const matchedIds = new Set();
@@ -124,8 +132,37 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
       }
     });
 
-    return { total, running, idle, stopped, util, runDeg, idleDeg, eta, todayQty, yQty, todayMax, trendPct, imminent, delayed };
-  }, [equipments, workOrders, products, productionLogs]);
+    // 가동중 원재료 소진 예상 — 같은 원재료를 쓰는 호기는 소비속도를 합산
+    const matAgg = {};
+    equipments.filter((e) => e.status === '가동중' && e.current_work_order_id).forEach((e) => {
+      const wo = workOrders.find((w) => w.id === e.current_work_order_id);
+      if (!wo) return;
+      const product = products.find((p) => p.id === wo.product_id);
+      if (!product || !product.material_id) return;
+      const cavity = Number(product.cavity_count) || 1;
+      const shotG = cavity * (Number(product.product_weight) || 0) + (Number(product.runner_weight) || 0);
+      const cycleSec = Number(product.standard_cycle_time) || Number(e.cycle_time) || 0;
+      if (shotG <= 0 || cycleSec <= 0) return;
+      const gPerHr = (3600 / cycleSec) * shotG;
+      if (!matAgg[product.material_id]) {
+        const mat = materials.find((m) => m.id === product.material_id);
+        matAgg[product.material_id] = {
+          name: mat?.material_name || '원재료', unit: mat?.unit || 'kg',
+          stockKg: Number(mat?.stock) || 0, gPerHr: 0, machines: [],
+        };
+      }
+      matAgg[product.material_id].gPerHr += gPerHr;
+      matAgg[product.material_id].machines.push(e.name);
+    });
+    const materialForecast = Object.values(matAgg).map((m) => {
+      const kgPerHr = m.gPerHr / 1000;
+      const hours = kgPerHr > 0 ? m.stockKg / kgPerHr : Infinity;
+      const sev = hours < 4 ? 'critical' : hours < 12 ? 'warn' : 'ok';
+      return { ...m, kgPerHr, hours, sev };
+    }).sort((a, b) => a.hours - b.hours);
+
+    return { total, running, idle, stopped, util, runDeg, idleDeg, eta, todayQty, yQty, todayMax, trendPct, imminent, delayed, materialForecast };
+  }, [equipments, workOrders, products, productionLogs, materials]);
 
   const stateLabel = { running: '가동중', idle: '대기', fault: '점검/정지', missing: '미등록' };
 
@@ -234,6 +271,23 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
                 ))}
               </div>
             ) : <div className="ffm-empty-sm">특이사항 없음 ✓</div>}
+          </div>
+
+          {/* 5. 가동중 원재료 소진 예상 (전체 폭) */}
+          <div className="ffm-panel" style={{ gridColumn: '1 / -1' }}>
+            <div className="ffm-panel-title">🧱 가동중 원재료 소진 예상</div>
+            {stats.materialForecast.length > 0 ? (
+              <div className="ffm-mat-list">
+                {stats.materialForecast.slice(0, 4).map((m, i) => (
+                  <div key={i} className={`ffm-mat-row ${m.sev}`}>
+                    <span className="ffm-mat-name" title={`사용 호기: ${m.machines.join(', ')}`}>{m.name}</span>
+                    <span className="ffm-mat-stock">재고 {m.stockKg.toLocaleString()}{m.unit}</span>
+                    <span className="ffm-mat-rate">{m.kgPerHr.toFixed(1)}{m.unit}/h</span>
+                    <span className={`ffm-mat-eta ${m.sev}`}>{fmtDuration(m.hours)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="ffm-empty-sm">가동중 호기의 원재료 정보가 없습니다 (중량·사이클 입력 필요)</div>}
           </div>
         </div>
       </div>
@@ -387,6 +441,20 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
         .ffm-tag.dl { background: #fee2e2; color: #b91c1c; }
         .ffm-alert-label { flex: 1; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
         .ffm-alert-val { font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+
+        /* 원재료 소진 예상 */
+        .ffm-mat-list { display: flex; flex-direction: column; gap: 6px; }
+        .ffm-mat-row { display: flex; align-items: center; gap: 10px; font-size: 0.78rem; padding: 5px 8px; border-radius: 7px; background: var(--bg-subtle); border-left: 3px solid var(--border); }
+        .ffm-mat-row.critical { border-left-color: #ef4444; background: rgba(239,68,68,0.06); }
+        .ffm-mat-row.warn { border-left-color: #f59e0b; background: rgba(245,158,11,0.06); }
+        .ffm-mat-row.ok { border-left-color: #16a34a; }
+        .ffm-mat-name { font-weight: 700; color: var(--text-main); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .ffm-mat-stock { color: var(--text-muted); white-space: nowrap; }
+        .ffm-mat-rate { color: var(--text-muted); white-space: nowrap; opacity: 0.85; }
+        .ffm-mat-eta { font-weight: 800; white-space: nowrap; min-width: 64px; text-align: right; }
+        .ffm-mat-eta.critical { color: #ef4444; }
+        .ffm-mat-eta.warn { color: #d97706; }
+        .ffm-mat-eta.ok { color: #16a34a; }
 
         .ffm-empty-sm { font-size: 0.78rem; color: var(--text-muted); margin: auto; padding: 12px 0; text-align: center; }
 

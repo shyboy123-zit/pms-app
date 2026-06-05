@@ -227,6 +227,17 @@ const InventoryInOut = () => {
         { header: '거래처', accessor: 'client', render: (row) => row.client || '-' },
     ];
 
+    // 중복 매출전표 방지: 같은 (일자/품목/수량/거래처) 매출 전표가 이미 있으면 true
+    // (텔레그램 봇·중복 입력·수정과 겹쳐 전표가 부풀어 거래처 대사가 틀어지는 문제 방지)
+    const salesVoucherExists = (date, item, qty, client) =>
+        (vouchers || []).some(v =>
+            v.voucher_type === '매출' &&
+            v.voucher_date === date &&
+            (v.item_name || '') === (item || '') &&
+            parseFloat(v.quantity) === parseFloat(qty) &&
+            (v.client || '') === (client || '')
+        );
+
     const handleSave = async () => {
         // ── 수정 모드 (단일) ──
         if (isEditMode && editingId) {
@@ -309,8 +320,8 @@ const InventoryInOut = () => {
                                 client: newItem.client,
                                 notes: `[자동-입출고 수정] ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`
                             });
-                        } else if (addVoucher) {
-                            // 기존 voucher가 없으면 신규 생성 (과거 누락분 보완)
+                        } else if (addVoucher && !salesVoucherExists(newItem.transactionDate, newItem.itemName, newItem.quantity, newItem.client)) {
+                            // 기존 voucher가 없으면 신규 생성 (과거 누락분 보완) — 단, 동일 전표 중복 방지
                             await addVoucher({
                                 voucher_date: newItem.transactionDate, voucher_type: '매출',
                                 item_name: newItem.itemName, item_code: newItem.itemCode,
@@ -319,8 +330,8 @@ const InventoryInOut = () => {
                                 notes: `[자동-입출고 수정생성] ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`
                             });
                         }
-                    } else if (!wasOut && isOut && addVoucher) {
-                        // non-OUT → OUT: voucher 신규 생성
+                    } else if (!wasOut && isOut && addVoucher && !salesVoucherExists(newItem.transactionDate, newItem.itemName, newItem.quantity, newItem.client)) {
+                        // non-OUT → OUT: voucher 신규 생성 (동일 전표 중복 방지)
                         await addVoucher({
                             voucher_date: newItem.transactionDate, voucher_type: '매출',
                             item_name: newItem.itemName, item_code: newItem.itemCode,
@@ -391,6 +402,7 @@ const InventoryInOut = () => {
         }
 
         const voucherFailures = [];
+        const createdVoucherKeys = new Set(); // 한 배치 내 동일 전표 중복 방지
         for (const item of validItems) {
             await addInventoryTransaction({
                 transaction_type: batchCommon.transactionType,
@@ -406,6 +418,12 @@ const InventoryInOut = () => {
 
             // 출고 → 매출 전표 자동 생성 (입고는 제품 입고이므로 매입 아님)
             if (addVoucher && batchCommon.transactionType === 'OUT') {
+                // 중복 방지: 동일 (일자/품목/수량/거래처) 전표가 이미 있거나 이번 배치에서 만들었으면 스킵
+                const dupKey = `${batchCommon.transactionDate}|${item.itemName}|${parseFloat(item.quantity)}|${batchCommon.client || ''}`;
+                if (salesVoucherExists(batchCommon.transactionDate, item.itemName, item.quantity, batchCommon.client) || createdVoucherKeys.has(dupKey)) {
+                    continue;
+                }
+                createdVoucherKeys.add(dupKey);
                 try {
                     const { error: vErr } = await addVoucher({
                         voucher_date: batchCommon.transactionDate,

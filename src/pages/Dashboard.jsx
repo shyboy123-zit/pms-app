@@ -601,13 +601,14 @@ const Dashboard = () => {
                             <AlertTriangle size={20} />
                             안전재고 경고
                         </h3>
-                        {lowStockMaterials.length > 0 && (
-                            <span className="badge-alert">{lowStockMaterials.length}건</span>
+                        {(lowStockMaterials.length + lowStockProducts.length) > 0 && (
+                            <span className="badge-alert">{lowStockMaterials.length + lowStockProducts.length}건</span>
                         )}
                     </div>
                     <div className="widget-content">
                         {lowStockMaterials.length > 0 ? (
                             <div className="stock-alert-list">
+                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem', padding: '0 0.25rem' }}>🧱 원재료 안전재고 미달 ({lowStockMaterials.length}건)</div>
                                 {lowStockMaterials.map(material => {
                                     const shortage = material.min_stock - material.stock;
                                     const severity = material.stock === 0 ? 'critical' :
@@ -653,7 +654,7 @@ const Dashboard = () => {
                         {/* 완제품 안전재고 미달 */}
                         {lowStockProducts.length > 0 && (
                             <div className="stock-alert-list" style={{ marginTop: lowStockMaterials.length > 0 ? '0.75rem' : 0 }}>
-                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem', padding: '0 0.25rem' }}>📦 완제품 안전재고 미달</div>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem', padding: '0 0.25rem' }}>📦 제품 안전재고 미달 ({lowStockProducts.length}건)</div>
                                 {lowStockProducts.map(product => {
                                     const currentStock = getProductStock(product);
                                     const shortage = product.min_stock - currentStock;

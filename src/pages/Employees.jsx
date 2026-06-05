@@ -1,14 +1,18 @@
 import React, { useState, useRef } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, UserPlus, UserMinus, Shield, Trash2, Calendar, Edit, Download, FileText } from 'lucide-react';
+import { Plus, UserPlus, UserMinus, Shield, Trash2, Calendar, Edit, Download, FileText, KeyRound } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 const Employees = () => {
     // Consume global data from Supabase via DataContext
     const { employees, addEmployee, updateEmployee, deleteEmployee, attendance, addAttendance, updateAttendance, deleteAttendance } = useData();
+    const { user } = useAuth();
+    const isAdmin = user?.position === '관리자';
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isPermModalOpen, setIsPermModalOpen] = useState(false);
@@ -242,6 +246,29 @@ const Employees = () => {
         setIsModalOpen(true);
     };
 
+    // 관리자: 직원 비밀번호 초기화 (임시 비번 설정)
+    const handleResetPassword = async (emp) => {
+        const temp = window.prompt(
+            `[${emp.name}] 직원의 임시 비밀번호를 입력하세요 (6자 이상).\n초기화 후 직원에게 전달하고, 로그인 후 변경하도록 안내하세요.`,
+            'pms1234'
+        );
+        if (temp === null) return; // 취소
+        if (temp.length < 6) { alert('임시 비밀번호는 6자 이상이어야 합니다.'); return; }
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch('/api/admin-reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: session?.access_token, employeeId: emp.id, newPassword: temp }),
+            });
+            const data = await res.json();
+            if (!res.ok) { alert('초기화 실패: ' + (data.error || '오류')); return; }
+            alert(`✅ ${emp.name} 직원의 비밀번호가 초기화되었습니다.\n\n임시 비밀번호: ${temp}\n\n이 비밀번호를 직원에게 전달하세요. (로그인 후 변경 권장)`);
+        } catch (e) {
+            alert('초기화 중 오류: ' + e.message);
+        }
+    };
+
     const openPermModal = (emp) => {
         setSelectedEmp(emp);
         setTempPerms({ ...(emp.permissions || {}) });
@@ -414,6 +441,12 @@ const Employees = () => {
                         <button className="icon-btn" onClick={() => openPermModal(row)} title="접근 권한 설정">
                             <Shield size={16} />
                         </button>
+                        {isAdmin && (
+                            <button className="icon-btn" onClick={() => handleResetPassword(row)} title="비밀번호 초기화"
+                                style={{ color: '#f59e0b' }}>
+                                <KeyRound size={16} />
+                            </button>
+                        )}
                         <button className="icon-btn" onClick={() => openPdfModal(row)} title="인사 서식 다운로드"
                             style={{ color: '#6366f1' }}>
                             <FileText size={16} />

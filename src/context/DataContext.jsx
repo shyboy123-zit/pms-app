@@ -239,8 +239,15 @@ export const DataProvider = ({ children }) => {
         if (!error) setMolds(molds.map(m => m.id === id ? { ...m, ...fields } : m));
     };
     const deleteMold = async (id) => {
+        // 자식 레코드(수리이력)를 먼저 삭제 — mold_history FK는 CASCADE가 아니라
+        // 이력이 남아 있으면 금형 삭제가 막힌다. (mold_movement는 ON DELETE CASCADE라 자동 삭제)
+        await supabase.from('mold_history').delete().eq('mold_id', id);
         const { error } = await supabase.from('molds').delete().eq('id', id);
-        if (!error) setMolds(molds.filter(m => m.id !== id));
+        if (!error) {
+            setMolds(molds.filter(m => m.id !== id));
+            setRepairHistory(prev => prev.filter(h => h.mold_id !== id));
+            setMoldMovement(prev => prev.filter(mv => mv.mold_id !== id));
+        }
         return { error };
     };
 

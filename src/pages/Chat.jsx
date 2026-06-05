@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Send, Image as ImageIcon, X, Bell, BellRing, Trash2, AlertTriangle, Search } from 'lucide-react';
+import { Send, Image as ImageIcon, X, Bell, BellRing, Trash2, AlertTriangle, Search, MessageSquare, Sparkles } from 'lucide-react';
 import Modal from '../components/Modal';
+import AiAssistant from '../components/AiAssistant';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -17,6 +18,7 @@ const Chat = () => {
   const { user } = useAuth();
   const { uploadImage } = useData();
 
+  const [tab, setTab] = useState('chat'); // 'chat' | 'ai'
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -214,24 +216,30 @@ const Chat = () => {
     <div className="chat-page">
       <div className="chat-header">
         <div className="chat-header-top">
-          <div>
-            <h2 className="chat-title">💬 직원 채팅방</h2>
-            <p className="chat-sub">전 직원 단체방 · 실시간</p>
-          </div>
-          <div className="chat-header-actions">
-            <button className={`chat-tool-btn ${searchOpen ? 'active' : ''}`} onClick={() => { setSearchOpen(o => !o); if (searchOpen) setSearch(''); }} title="대화 검색">
-              <Search size={18} />
+          <div className="chat-tabs">
+            <button className={`chat-tab ${tab === 'chat' ? 'active' : ''}`} onClick={() => setTab('chat')}>
+              <MessageSquare size={16} /> 전체 채팅
             </button>
-            <button className={`chat-tool-btn ${issueOnly ? 'active warn' : ''}`} onClick={() => setIssueOnly(v => !v)} title="이슈만 보기">
-              <AlertTriangle size={16} /> 이슈
+            <button className={`chat-tab ${tab === 'ai' ? 'active' : ''}`} onClick={() => setTab('ai')}>
+              <Sparkles size={16} /> 질문방
             </button>
-            {perm !== 'granted' && pushSupported() && (
-              <button className="push-enable-btn" onClick={handleEnablePush}><Bell size={16} /> 알림 켜기</button>
-            )}
-            {perm === 'granted' && <span className="push-on"><BellRing size={15} /> ON</span>}
           </div>
+          {tab === 'chat' && (
+            <div className="chat-header-actions">
+              <button className={`chat-tool-btn ${searchOpen ? 'active' : ''}`} onClick={() => { setSearchOpen(o => !o); if (searchOpen) setSearch(''); }} title="대화 검색">
+                <Search size={18} />
+              </button>
+              <button className={`chat-tool-btn ${issueOnly ? 'active warn' : ''}`} onClick={() => setIssueOnly(v => !v)} title="이슈만 보기">
+                <AlertTriangle size={16} /> 이슈
+              </button>
+              {perm !== 'granted' && pushSupported() && (
+                <button className="push-enable-btn" onClick={handleEnablePush}><Bell size={16} /> 알림 켜기</button>
+              )}
+              {perm === 'granted' && <span className="push-on"><BellRing size={15} /> ON</span>}
+            </div>
+          )}
         </div>
-        {searchOpen && (
+        {tab === 'chat' && searchOpen && (
           <div className="chat-search-row">
             <Search size={16} />
             <input autoFocus className="chat-search-input" placeholder="대화 내용·이름 검색..."
@@ -242,6 +250,8 @@ const Chat = () => {
         )}
       </div>
 
+      {tab === 'ai' ? <AiAssistant /> : (
+      <>
       <div className="chat-messages" ref={listRef}>
         {loading ? (
           <div className="chat-empty">불러오는 중...</div>
@@ -333,12 +343,18 @@ const Chat = () => {
           </button>
         </div>
       </Modal>
+      </>
+      )}
 
       <style>{`
         /* 상단 헤더(80px) + main 상하 마진(2rem) 만큼 빼서 입력바가 항상 보이게 */
         .chat-page { display: flex; flex-direction: column; height: calc(100vh - 112px); max-height: calc(100vh - 112px); min-height: 0; }
         .chat-header { padding: 0.5rem 0.25rem 0.75rem; border-bottom: 1px solid var(--border); }
-        .chat-header-top { display: flex; justify-content: space-between; align-items: center; }
+        .chat-header-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .chat-tabs { display: flex; gap: 4px; background: var(--bg-subtle); padding: 4px; border-radius: 12px; border: 1px solid var(--border); }
+        .chat-tab { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 9px; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); transition: all 0.15s; }
+        .chat-tab:hover { color: var(--primary); }
+        .chat-tab.active { background: var(--bg-card, #fff); color: var(--primary); box-shadow: var(--shadow-sm); }
         .chat-title { font-size: 1.2rem; font-weight: 800; color: var(--text-main); }
         .chat-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
         .chat-header-actions { display: flex; align-items: center; gap: 8px; }

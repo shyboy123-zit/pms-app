@@ -21,6 +21,7 @@ import {
   ShoppingBag,
   Building,
   MessageSquare,
+  MessagesSquare,
   Briefcase,
   History
 } from 'lucide-react';
@@ -45,6 +46,14 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
       icon: LayoutDashboard,
       path: '/',
       key: 'dashboard',
+      standalone: true
+    },
+    {
+      id: 'chat',
+      label: '직원 채팅',
+      icon: MessagesSquare,
+      path: '/chat',
+      key: 'chat',
       standalone: true
     },
     {

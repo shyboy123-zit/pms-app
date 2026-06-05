@@ -24,6 +24,7 @@ import InjectionConditions from './pages/InjectionConditions';
 import Suppliers from './pages/Suppliers';
 import Purchase from './pages/Purchase';
 import Board from './pages/Board';
+import Chat from './pages/Chat';
 import GovernmentSupport from './pages/GovernmentSupport';
 import Payroll from './pages/Payroll';
 import AuditLog from './pages/AuditLog';
@@ -84,6 +85,7 @@ function App() {
                 <Route path="suppliers" element={<PermissionGate permissionKey="suppliers"><Suppliers /></PermissionGate>} />
                 <Route path="purchase" element={<PermissionGate permissionKey="purchase"><Purchase /></PermissionGate>} />
                 <Route path="board" element={<PermissionGate permissionKey="board"><Board /></PermissionGate>} />
+                <Route path="chat" element={<PermissionGate permissionKey="chat"><Chat /></PermissionGate>} />
                 <Route path="government-support" element={<PermissionGate permissionKey="government_support"><GovernmentSupport /></PermissionGate>} />
                 <Route path="payroll" element={<PermissionGate permissionKey="payroll"><Payroll /></PermissionGate>} />
                 <Route path="audit-log" element={<PermissionGate permissionKey="audit_log"><AuditLog /></PermissionGate>} />

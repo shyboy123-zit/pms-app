@@ -335,7 +335,8 @@ const Chat = () => {
       </Modal>
 
       <style>{`
-        .chat-page { display: flex; flex-direction: column; height: calc(100vh - 2rem); max-height: calc(100vh - 2rem); }
+        /* 상단 헤더(80px) + main 상하 마진(2rem) 만큼 빼서 입력바가 항상 보이게 */
+        .chat-page { display: flex; flex-direction: column; height: calc(100vh - 112px); max-height: calc(100vh - 112px); min-height: 0; }
         .chat-header { padding: 0.5rem 0.25rem 0.75rem; border-bottom: 1px solid var(--border); }
         .chat-header-top { display: flex; justify-content: space-between; align-items: center; }
         .chat-title { font-size: 1.2rem; font-weight: 800; color: var(--text-main); }
@@ -402,7 +403,7 @@ const Chat = () => {
         .chat-send:disabled { opacity: 0.4; }
 
         @media (max-width: 768px) {
-          .chat-page { height: calc(100vh - 1rem); }
+          .chat-page { height: calc(100vh - 92px); max-height: calc(100vh - 92px); }
           .chat-row { max-width: 88%; }
           .chat-img { max-width: 60vw; }
           .chat-header-actions { gap: 5px; }

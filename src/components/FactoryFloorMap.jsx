@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import Modal from './Modal';
 
 // 공장 호기 배치도 (모식도)
 // 실제 공장 레이아웃대로 호기를 사출성형기 모양으로 배치하고,
@@ -45,6 +46,8 @@ const fmtDuration = (h) => {
 };
 
 const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], productionLogs = [], materials = [], onMachineClick }) => {
+  // 폰에서 우측 패널을 버튼→팝업으로 띄울 때 선택된 패널
+  const [mobilePanel, setMobilePanel] = useState(null);
   // 배치도 각 칸의 상태/작업 계산 + 배치된 설비 id 집합
   const { cells, extras } = useMemo(() => {
     const matchedIds = new Set();
@@ -166,6 +169,87 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
 
   const stateLabel = { running: '가동중', idle: '대기', fault: '점검/정지', missing: '미등록' };
 
+  // ── 우측 종합 현황 패널 콘텐츠 (PC: 그리드 / 폰: 버튼→팝업 재사용) ──
+  const utilContent = (
+    <div className="ffm-util">
+      <div className="ffm-donut" style={{ background: `conic-gradient(#16a34a 0 ${stats.runDeg}deg, #94a3b8 ${stats.runDeg}deg ${stats.idleDeg}deg, #ef4444 ${stats.idleDeg}deg 360deg)` }}>
+        <div className="ffm-donut-hole"><b>{stats.util}%</b><span>가동률</span></div>
+      </div>
+      <div className="ffm-util-legend">
+        <div><i style={{ background: '#16a34a' }} /> 가동 <b>{stats.running}</b></div>
+        <div><i style={{ background: '#94a3b8' }} /> 대기 <b>{stats.idle}</b></div>
+        <div><i style={{ background: '#ef4444' }} /> 정지 <b>{stats.stopped}</b></div>
+        <div className="ffm-util-total">전체 {stats.total}대</div>
+      </div>
+    </div>
+  );
+  const etaContent = stats.eta.length > 0 ? (
+    <ul className="ffm-eta">
+      {stats.eta.slice(0, 6).map((e) => (
+        <li key={e.code}>
+          <span className="ffm-eta-code">{e.code}</span>
+          <span className="ffm-eta-prod" title={e.product || ''}>{e.product || '-'}</span>
+          <span className="ffm-eta-time">{e.etaText}</span>
+        </li>
+      ))}
+    </ul>
+  ) : <div className="ffm-empty-sm">가동 중인 호기가 없습니다</div>;
+  const todayContent = (
+    <>
+      <div className="ffm-today-num">{stats.todayQty.toLocaleString()}<span> 개</span></div>
+      <div className="ffm-today-cmp">
+        어제 {stats.yQty.toLocaleString()}개
+        {stats.trendPct !== null && (
+          <span className={stats.trendPct >= 0 ? 'up' : 'down'}>
+            {' '}· {stats.trendPct >= 0 ? '▲' : '▼'} {Math.abs(stats.trendPct)}%
+          </span>
+        )}
+      </div>
+      <div className="ffm-today-bars">
+        <div className="ffm-today-bar"><span style={{ width: `${(stats.todayQty / stats.todayMax) * 100}%`, background: '#6366f1' }} /><em>오늘</em></div>
+        <div className="ffm-today-bar"><span style={{ width: `${(stats.yQty / stats.todayMax) * 100}%`, background: '#cbd5e1' }} /><em>어제</em></div>
+      </div>
+    </>
+  );
+  const alertContent = (stats.imminent.length > 0 || stats.delayed.length > 0) ? (
+    <div className="ffm-alert-list">
+      {stats.imminent.map((w) => (
+        <div key={`im-${w.id}`} className="ffm-alert-row">
+          <span className="ffm-tag im">임박</span>
+          <span className="ffm-alert-label" title={w.label}>{w.label}</span>
+          <span className="ffm-alert-val">{w.prog}%</span>
+        </div>
+      ))}
+      {stats.delayed.map((w) => (
+        <div key={`dl-${w.id}`} className="ffm-alert-row">
+          <span className="ffm-tag dl">지연</span>
+          <span className="ffm-alert-label" title={w.label}>{w.label}</span>
+          <span className="ffm-alert-val">{w.days}일·{w.prog}%</span>
+        </div>
+      ))}
+    </div>
+  ) : <div className="ffm-empty-sm">특이사항 없음 ✓</div>;
+  const materialContent = stats.materialForecast.length > 0 ? (
+    <div className="ffm-mat-list">
+      {stats.materialForecast.slice(0, 4).map((m, i) => (
+        <div key={i} className={`ffm-mat-row ${m.sev}`}>
+          <span className="ffm-mat-name" title={`사용 호기: ${m.machines.join(', ')}`}>{m.name}</span>
+          <span className="ffm-mat-stock">재고 {m.stockKg.toLocaleString()}{m.unit}</span>
+          <span className="ffm-mat-rate">{m.kgPerHr.toFixed(1)}{m.unit}/h</span>
+          <span className={`ffm-mat-eta ${m.sev}`}>{fmtDuration(m.hours)}</span>
+        </div>
+      ))}
+    </div>
+  ) : <div className="ffm-empty-sm">가동중 호기의 원재료 정보가 없습니다 (중량·사이클 입력 필요)</div>;
+
+  const PANELS = [
+    { key: 'util', title: '🏭 가동 현황', short: '🏭 가동현황', node: utilContent, full: false },
+    { key: 'eta', title: '⏱️ 예상 완료 (ETA)', short: '⏱️ ETA', node: etaContent, full: false },
+    { key: 'today', title: '📈 오늘 생산', short: '📈 오늘생산', node: todayContent, full: false },
+    { key: 'alert', title: '🚨 임박·지연 작업', short: '🚨 임박·지연', node: alertContent, full: false },
+    { key: 'material', title: '🧱 가동중 원재료 소진 예상', short: '🧱 원재료소진', node: materialContent, full: true },
+  ];
+
   return (
     <div className="ffm-wrap">
       <div className="ffm-grid">
@@ -198,99 +282,28 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
           </div>
         ))}
 
-        {/* 우측 종합 현황 패널 (배치도 빈 공간 활용) */}
+        {/* 우측 종합 현황 패널 (PC 전용 — 배치도 빈 공간 활용) */}
         <div className="ffm-side" style={{ gridColumn: '2 / 6', gridRow: '1 / 10' }}>
-          {/* 1. 가동 현황 요약 */}
-          <div className="ffm-panel">
-            <div className="ffm-panel-title">🏭 가동 현황</div>
-            <div className="ffm-util">
-              <div className="ffm-donut" style={{ background: `conic-gradient(#16a34a 0 ${stats.runDeg}deg, #94a3b8 ${stats.runDeg}deg ${stats.idleDeg}deg, #ef4444 ${stats.idleDeg}deg 360deg)` }}>
-                <div className="ffm-donut-hole"><b>{stats.util}%</b><span>가동률</span></div>
-              </div>
-              <div className="ffm-util-legend">
-                <div><i style={{ background: '#16a34a' }} /> 가동 <b>{stats.running}</b></div>
-                <div><i style={{ background: '#94a3b8' }} /> 대기 <b>{stats.idle}</b></div>
-                <div><i style={{ background: '#ef4444' }} /> 정지 <b>{stats.stopped}</b></div>
-                <div className="ffm-util-total">전체 {stats.total}대</div>
-              </div>
+          {PANELS.map((p) => (
+            <div key={p.key} className="ffm-panel" style={p.full ? { gridColumn: '1 / -1' } : undefined}>
+              <div className="ffm-panel-title">{p.title}</div>
+              {p.node}
             </div>
-          </div>
-
-          {/* 2. 가동 호기 예상 완료 (ETA) */}
-          <div className="ffm-panel">
-            <div className="ffm-panel-title">⏱️ 예상 완료 (ETA)</div>
-            {stats.eta.length > 0 ? (
-              <ul className="ffm-eta">
-                {stats.eta.slice(0, 6).map((e) => (
-                  <li key={e.code}>
-                    <span className="ffm-eta-code">{e.code}</span>
-                    <span className="ffm-eta-prod" title={e.product || ''}>{e.product || '-'}</span>
-                    <span className="ffm-eta-time">{e.etaText}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : <div className="ffm-empty-sm">가동 중인 호기가 없습니다</div>}
-          </div>
-
-          {/* 3. 오늘 생산 실적 */}
-          <div className="ffm-panel">
-            <div className="ffm-panel-title">📈 오늘 생산</div>
-            <div className="ffm-today-num">{stats.todayQty.toLocaleString()}<span> 개</span></div>
-            <div className="ffm-today-cmp">
-              어제 {stats.yQty.toLocaleString()}개
-              {stats.trendPct !== null && (
-                <span className={stats.trendPct >= 0 ? 'up' : 'down'}>
-                  {' '}· {stats.trendPct >= 0 ? '▲' : '▼'} {Math.abs(stats.trendPct)}%
-                </span>
-              )}
-            </div>
-            <div className="ffm-today-bars">
-              <div className="ffm-today-bar"><span style={{ width: `${(stats.todayQty / stats.todayMax) * 100}%`, background: '#6366f1' }} /><em>오늘</em></div>
-              <div className="ffm-today-bar"><span style={{ width: `${(stats.yQty / stats.todayMax) * 100}%`, background: '#cbd5e1' }} /><em>어제</em></div>
-            </div>
-          </div>
-
-          {/* 4. 임박·지연 작업 */}
-          <div className="ffm-panel">
-            <div className="ffm-panel-title">🚨 임박·지연 작업</div>
-            {(stats.imminent.length > 0 || stats.delayed.length > 0) ? (
-              <div className="ffm-alert-list">
-                {stats.imminent.map((w) => (
-                  <div key={`im-${w.id}`} className="ffm-alert-row">
-                    <span className="ffm-tag im">임박</span>
-                    <span className="ffm-alert-label" title={w.label}>{w.label}</span>
-                    <span className="ffm-alert-val">{w.prog}%</span>
-                  </div>
-                ))}
-                {stats.delayed.map((w) => (
-                  <div key={`dl-${w.id}`} className="ffm-alert-row">
-                    <span className="ffm-tag dl">지연</span>
-                    <span className="ffm-alert-label" title={w.label}>{w.label}</span>
-                    <span className="ffm-alert-val">{w.days}일·{w.prog}%</span>
-                  </div>
-                ))}
-              </div>
-            ) : <div className="ffm-empty-sm">특이사항 없음 ✓</div>}
-          </div>
-
-          {/* 5. 가동중 원재료 소진 예상 (전체 폭) */}
-          <div className="ffm-panel" style={{ gridColumn: '1 / -1' }}>
-            <div className="ffm-panel-title">🧱 가동중 원재료 소진 예상</div>
-            {stats.materialForecast.length > 0 ? (
-              <div className="ffm-mat-list">
-                {stats.materialForecast.slice(0, 4).map((m, i) => (
-                  <div key={i} className={`ffm-mat-row ${m.sev}`}>
-                    <span className="ffm-mat-name" title={`사용 호기: ${m.machines.join(', ')}`}>{m.name}</span>
-                    <span className="ffm-mat-stock">재고 {m.stockKg.toLocaleString()}{m.unit}</span>
-                    <span className="ffm-mat-rate">{m.kgPerHr.toFixed(1)}{m.unit}/h</span>
-                    <span className={`ffm-mat-eta ${m.sev}`}>{fmtDuration(m.hours)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : <div className="ffm-empty-sm">가동중 호기의 원재료 정보가 없습니다 (중량·사이클 입력 필요)</div>}
-          </div>
+          ))}
         </div>
       </div>
+
+      {/* 폰 전용 — 패널 버튼(누르면 팝업) */}
+      <div className="ffm-mobile-tabs">
+        {PANELS.map((p) => (
+          <button key={p.key} className="ffm-mtab" onClick={() => setMobilePanel(p)}>{p.short}</button>
+        ))}
+      </div>
+
+      {/* 폰 패널 팝업 */}
+      <Modal title={mobilePanel?.title} isOpen={!!mobilePanel} onClose={() => setMobilePanel(null)}>
+        <div className="ffm-modal-panel">{mobilePanel?.node}</div>
+      </Modal>
 
       {/* 범례 */}
       <div className="ffm-legend">
@@ -458,12 +471,24 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
 
         .ffm-empty-sm { font-size: 0.78rem; color: var(--text-muted); margin: auto; padding: 12px 0; text-align: center; }
 
+        /* 폰 전용 버튼 (PC 숨김) */
+        .ffm-mobile-tabs { display: none; }
+        .ffm-modal-panel { display: flex; flex-direction: column; gap: 6px; min-height: 120px; }
+
         @media (max-width: 768px) {
           .ffm-grid { grid-auto-rows: 58px; gap: 7px; padding: 10px; }
           .ffm-code { font-size: 0.74rem; }
           .ffm-product { font-size: 0.62rem; }
-          /* 모바일: 우측 패널을 배치도 아래(전체 폭)로 내림 */
-          .ffm-side { grid-column: 1 / -1 !important; grid-row: 11 / 12 !important; grid-template-columns: 1fr; }
+          /* 폰: 우측 패널 숨기고, 아래 버튼으로 대체 */
+          .ffm-side { display: none !important; }
+          .ffm-mobile-tabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
+          .ffm-mtab {
+            padding: 12px 10px; border-radius: 10px; border: 1px solid var(--border);
+            background: var(--bg-card, #fff); color: var(--text-main);
+            font-size: 0.85rem; font-weight: 700; cursor: pointer;
+            box-shadow: var(--shadow-xs); text-align: center;
+          }
+          .ffm-mtab:active { background: var(--primary-soft); border-color: var(--primary); }
         }
       `}</style>
     </div>

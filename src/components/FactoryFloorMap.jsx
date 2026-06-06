@@ -45,6 +45,16 @@ const fmtDuration = (h) => {
   return `${Math.floor(h / 24)}일 후`;
 };
 
+// 큰 수를 짧게 (20000 → '2만', 11180 → '1.1만') — 호기 카드 게이지 글자 잘림 방지
+const compactNum = (n) => {
+  const v = Number(n) || 0;
+  if (v >= 10000) {
+    const man = v / 10000;
+    return (man >= 10 ? Math.round(man) : Math.round(man * 10) / 10) + '만';
+  }
+  return v.toLocaleString();
+};
+
 const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], productionLogs = [], materials = [], onMachineClick }) => {
   // 폰에서 우측 패널을 버튼→팝업으로 띄울 때 선택된 패널
   const [mobilePanel, setMobilePanel] = useState(null);
@@ -272,7 +282,7 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
                   <div className="ffm-product" title={c.product?.name || ''}>{c.product?.name || '제품 미지정'}</div>
                   <div className="ffm-gauge">
                     <div className="ffm-gauge-fill" style={{ width: `${c.progress}%` }} />
-                    <span className="ffm-gauge-text">{c.produced.toLocaleString()}/{c.target.toLocaleString()} · {c.progress}%</span>
+                    <span className="ffm-gauge-text">{compactNum(c.produced)}/{compactNum(c.target)} · {c.progress}%</span>
                   </div>
                 </>
               ) : (
@@ -291,13 +301,13 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
             </div>
           ))}
         </div>
-      </div>
 
-      {/* 폰 전용 — 패널 버튼(누르면 팝업) */}
-      <div className="ffm-mobile-tabs">
-        {PANELS.map((p) => (
-          <button key={p.key} className="ffm-mtab" onClick={() => setMobilePanel(p)}>{p.short}</button>
-        ))}
+        {/* 폰 전용 — 패널 버튼 (배치도 옆 빈 공간에 배치) */}
+        <div className="ffm-mobile-tabs" style={{ gridColumn: '2 / 6', gridRow: '1 / 10' }}>
+          {PANELS.map((p) => (
+            <button key={p.key} className="ffm-mtab" onClick={() => setMobilePanel(p)}>{p.short}</button>
+          ))}
+        </div>
       </div>
 
       {/* 폰 패널 팝업 */}
@@ -478,15 +488,17 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
         @media (max-width: 768px) {
           .ffm-grid { grid-auto-rows: 58px; gap: 7px; padding: 10px; }
           .ffm-code { font-size: 0.74rem; }
-          .ffm-product { font-size: 0.62rem; }
-          /* 폰: 우측 패널 숨기고, 아래 버튼으로 대체 */
+          .ffm-product { font-size: 0.6rem; }
+          .ffm-gauge-text { font-size: 0.52rem; }
+          .ffm-machine { padding: 5px 6px; }
+          /* 폰: 우측 패널 숨기고, 배치도 옆 빈 공간에 버튼 세로 배치 */
           .ffm-side { display: none !important; }
-          .ffm-mobile-tabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
+          .ffm-mobile-tabs { display: flex; flex-direction: column; gap: 8px; padding: 2px 2px 2px 4px; align-content: start; }
           .ffm-mtab {
-            padding: 12px 10px; border-radius: 10px; border: 1px solid var(--border);
+            padding: 11px 10px; border-radius: 10px; border: 1px solid var(--border);
             background: var(--bg-card, #fff); color: var(--text-main);
-            font-size: 0.85rem; font-weight: 700; cursor: pointer;
-            box-shadow: var(--shadow-xs); text-align: center;
+            font-size: 0.84rem; font-weight: 700; cursor: pointer;
+            box-shadow: var(--shadow-xs); text-align: center; width: 100%;
           }
           .ffm-mtab:active { background: var(--primary-soft); border-color: var(--primary); }
         }

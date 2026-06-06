@@ -4,6 +4,7 @@ import Modal from '../components/Modal';
 import ExcelToolbar from '../components/ExcelToolbar';
 import { Plus, Play, CheckCircle, XCircle, Edit, FileText, Wrench, PenTool, Truck, ClipboardList } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import LevelGauge from '../components/viz/LevelGauge';
 
 const WorkOrders = () => {
     const {
@@ -13,6 +14,7 @@ const WorkOrders = () => {
     } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [viewMode, setViewMode] = useState('table'); // 'table' | 'kanban'
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [currentOrder, setCurrentOrder] = useState(null);
@@ -265,19 +267,25 @@ const WorkOrders = () => {
                 </div>
             </div>
 
-            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
-                {['전체', '대기', '진행중', '완료', '취소'].map(status => (
-                    <button
-                        key={status}
-                        className={`filter-btn ${filterStatus === status ? 'active' : ''}`}
-                        onClick={() => setFilterStatus(status)}
-                    >
-                        {status}
-                    </button>
-                ))}
+            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {viewMode === 'table' && ['전체', '대기', '진행중', '완료', '취소'].map(status => (
+                        <button
+                            key={status}
+                            className={`filter-btn ${filterStatus === status ? 'active' : ''}`}
+                            onClick={() => setFilterStatus(status)}
+                        >
+                            {status}
+                        </button>
+                    ))}
+                </div>
+                <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-subtle)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                    <button className={`filter-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setViewMode('table')}>📋 표</button>
+                    <button className={`filter-btn ${viewMode === 'kanban' ? 'active' : ''}`} onClick={() => setViewMode('kanban')}>🗂️ 칸반</button>
+                </div>
             </div>
 
-            <Table
+            {viewMode === 'table' && <Table
                 columns={columns}
                 data={filteredOrders || []}
                 actions={(row) => (
@@ -322,7 +330,85 @@ const WorkOrders = () => {
                         )}
                     </div>
                 )}
-            />
+            />}
+
+            {/* 칸반 보드 */}
+            {viewMode === 'kanban' && (
+                <div className="wo-kanban">
+                    {[
+                        { key: '대기', tone: '#f59e0b' },
+                        { key: '진행중', tone: '#16a34a' },
+                        { key: '완료', tone: '#94a3b8' },
+                        { key: '취소', tone: '#ef4444' },
+                    ].map(col => {
+                        const items = (workOrders || []).filter(wo => wo.status === col.key);
+                        return (
+                            <div key={col.key} className="wo-col">
+                                <div className="wo-col-head" style={{ borderTopColor: col.tone }}>
+                                    <span style={{ color: col.tone }}>{col.key}</span>
+                                    <span className="wo-col-count">{items.length}</span>
+                                </div>
+                                <div className="wo-col-body">
+                                    {items.length === 0 ? <div className="wo-empty">없음</div> : items.map(wo => {
+                                        const target = wo.target_quantity || 0;
+                                        const made = wo.produced_quantity || 0;
+                                        const prog = target > 0 ? Math.round((made / target) * 100) : 0;
+                                        return (
+                                            <div key={wo.id} className="wo-card">
+                                                <div className="wo-card-head">
+                                                    <span className="wo-code">{wo.order_code}</span>
+                                                    <button className="icon-btn" onClick={() => openHistory(wo)} title="이력" style={{ color: '#6366f1' }}><FileText size={14} /></button>
+                                                </div>
+                                                <div className="wo-prod">{getProductName(wo.product_id)}</div>
+                                                <div className="wo-eq">⚙ {getEquipmentName(wo.equipment_id)}</div>
+                                                {target > 0 && (
+                                                    <LevelGauge value={made} max={target} color="#6366f1"
+                                                        text={`${made.toLocaleString()}/${target.toLocaleString()} (${prog}%)`} />
+                                                )}
+                                                <div className="wo-card-actions">
+                                                    {wo.status === '대기' && (<>
+                                                        <button className="wo-btn start" onClick={() => handleStart(wo)}><Play size={13} /> 시작</button>
+                                                        <button className="icon-btn" onClick={() => handleEdit(wo)} title="수정"><Edit size={14} /></button>
+                                                        <button className="icon-btn delete-btn" onClick={() => handleCancel(wo)} title="취소"><XCircle size={14} /></button>
+                                                    </>)}
+                                                    {wo.status === '진행중' && (<>
+                                                        <button className="wo-btn qty" onClick={() => openUpdateModal(wo)}>수량</button>
+                                                        <button className="wo-btn done" onClick={() => handleComplete(wo)}><CheckCircle size={13} /> 완료</button>
+                                                        <button className="icon-btn delete-btn" onClick={() => handleCancel(wo)} title="취소"><XCircle size={14} /></button>
+                                                    </>)}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            <style>{`
+                .wo-kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: start; }
+                .wo-col { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; min-width: 0; }
+                .wo-col-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; font-weight: 800; font-size: 0.9rem; background: var(--bg-card, #fff); border-top: 3px solid; border-bottom: 1px solid var(--border); }
+                .wo-col-count { background: var(--bg-subtle); color: var(--text-muted); font-size: 0.72rem; padding: 1px 8px; border-radius: 10px; font-weight: 700; }
+                .wo-col-body { padding: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 65vh; overflow-y: auto; }
+                .wo-empty { text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 14px 0; }
+                .wo-card { background: var(--bg-card, #fff); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; box-shadow: var(--shadow-xs); }
+                .wo-card-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+                .wo-code { font-weight: 800; font-size: 0.82rem; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .wo-prod { font-size: 0.85rem; font-weight: 600; color: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .wo-eq { font-size: 0.74rem; color: var(--text-muted); }
+                .wo-card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+                .wo-btn { display: inline-flex; align-items: center; gap: 3px; font-size: 0.74rem; font-weight: 700; padding: 4px 9px; border-radius: 7px; cursor: pointer; border: none; }
+                .wo-btn.start { background: #fef3c7; color: #b45309; }
+                .wo-btn.done { background: #dcfce7; color: #15803d; }
+                .wo-btn.qty { background: var(--primary-soft); color: var(--primary); }
+                @media (max-width: 768px) {
+                    .wo-kanban { grid-template-columns: 1fr; }
+                    .wo-col-body { max-height: none; }
+                }
+            `}</style>
 
             {/* Add/Edit Work Order Modal */}
             <Modal

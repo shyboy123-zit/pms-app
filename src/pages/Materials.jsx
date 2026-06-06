@@ -3,6 +3,7 @@ import Table from '../components/Table';
 import Modal from '../components/Modal';
 import ExcelToolbar from '../components/ExcelToolbar';
 import MiniKpiCards from '../components/MiniKpiCards';
+import LevelGauge from '../components/viz/LevelGauge';
 import { Plus, ShoppingCart, AlertCircle, PlayCircle, Edit, Trash2, Calendar, CheckCircle, AlertTriangle, Package, TrendingDown } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -46,9 +47,21 @@ const Materials = () => {
         { header: '유형', accessor: 'type' },
         {
             header: '현재재고', accessor: 'stock', render: (row) => (
-                <span style={{ fontWeight: 600, color: row.stock < row.min_stock ? 'var(--danger)' : 'inherit' }}>
-                    {row.stock.toLocaleString()} {row.unit}
-                </span>
+                <div style={{ minWidth: 130 }}>
+                    <span style={{ fontWeight: 600, color: row.stock < row.min_stock ? 'var(--danger)' : 'inherit' }}>
+                        {row.stock.toLocaleString()} {row.unit}
+                        {row.min_stock > 0 && (
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500, marginLeft: 4 }}>
+                                ({Math.round((parseFloat(row.stock || 0) / parseFloat(row.min_stock)) * 100)}%)
+                            </span>
+                        )}
+                    </span>
+                    {row.min_stock > 0 && (
+                        <div style={{ marginTop: 5 }}>
+                            <LevelGauge value={parseFloat(row.stock || 0)} max={parseFloat(row.min_stock)} height={8} showText={false} />
+                        </div>
+                    )}
+                </div>
             )
         },
         { header: '안전재고', accessor: 'min_stock', render: (row) => `${row.min_stock} ${row.unit}` }, // DB min_stock

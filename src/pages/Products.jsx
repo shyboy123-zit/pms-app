@@ -5,6 +5,7 @@ import ExcelToolbar from '../components/ExcelToolbar';
 import { Plus, Package, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { parsers } from '../lib/excel';
+import LevelGauge from '../components/viz/LevelGauge';
 
 const Products = () => {
     const { products, materials, inventoryTransactions, addProduct, updateProduct, deleteProduct } = useData();
@@ -95,14 +96,21 @@ const Products = () => {
                 const currentStock = getProductStock(row);
                 const isLow = row.min_stock > 0 && currentStock < row.min_stock;
                 return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span style={{ fontWeight: 600, color: isLow ? '#dc2626' : 'inherit' }}>
-                            {currentStock.toLocaleString()} {row.unit}
-                        </span>
-                        {isLow && (
-                            <span style={{ padding: '1px 6px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: 700, background: '#fee2e2', color: '#dc2626' }}>
-                                부족
+                    <div style={{ minWidth: 130 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ fontWeight: 600, color: isLow ? '#dc2626' : 'inherit' }}>
+                                {currentStock.toLocaleString()} {row.unit}
                             </span>
+                            {isLow && (
+                                <span style={{ padding: '1px 6px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: 700, background: '#fee2e2', color: '#dc2626' }}>
+                                    부족
+                                </span>
+                            )}
+                        </div>
+                        {row.min_stock > 0 && (
+                            <div style={{ marginTop: 5 }}>
+                                <LevelGauge value={currentStock} max={row.min_stock} height={8} showText={false} />
+                            </div>
                         )}
                     </div>
                 );

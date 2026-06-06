@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import Modal from './Modal';
 
 // 공장 호기 배치도 (모식도)
 // 실제 공장 레이아웃대로 호기를 사출성형기 모양으로 배치하고,
@@ -310,10 +309,18 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
         </div>
       </div>
 
-      {/* 폰 패널 팝업 */}
-      <Modal title={mobilePanel?.title} isOpen={!!mobilePanel} onClose={() => setMobilePanel(null)}>
-        <div className="ffm-modal-panel">{mobilePanel?.node}</div>
-      </Modal>
+      {/* 폰 패널 팝업 — 콘텐츠 크기에 맞춤, 바깥 터치 시 닫힘 */}
+      {mobilePanel && (
+        <div className="ffm-pop-overlay" onClick={(e) => { if (e.target === e.currentTarget) setMobilePanel(null); }}>
+          <div className="ffm-pop">
+            <div className="ffm-pop-head">
+              <span>{mobilePanel.title}</span>
+              <button className="ffm-pop-x" onClick={() => setMobilePanel(null)} aria-label="닫기">✕</button>
+            </div>
+            <div className="ffm-pop-body">{mobilePanel.node}</div>
+          </div>
+        </div>
+      )}
 
       {/* 범례 */}
       <div className="ffm-legend">
@@ -483,7 +490,16 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
 
         /* 폰 전용 버튼 (PC 숨김) */
         .ffm-mobile-tabs { display: none; }
-        .ffm-modal-panel { display: flex; flex-direction: column; gap: 6px; min-height: 120px; }
+
+        /* 폰 패널 팝업 (콘텐츠 크기에 맞춤) */
+        .ffm-pop-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 24px; animation: ffmPopFade 0.15s ease-out; }
+        @keyframes ffmPopFade { from { opacity: 0; } to { opacity: 1; } }
+        .ffm-pop { background: var(--bg-card, #fff); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 420px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: var(--shadow-xl); overflow: hidden; }
+        .ffm-pop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+        .ffm-pop-head span { font-size: 1rem; font-weight: 800; color: var(--text-main); }
+        .ffm-pop-x { width: 32px; height: 32px; border-radius: 50%; background: var(--bg-subtle); color: var(--text-muted); font-size: 1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1; }
+        .ffm-pop-x:active { background: var(--border); color: var(--text-main); }
+        .ffm-pop-body { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 
         @media (max-width: 768px) {
           .ffm-grid { grid-auto-rows: 58px; gap: 7px; padding: 10px; }

@@ -329,7 +329,10 @@ const Employees = () => {
         setIsPdfModalOpen(true);
     };
 
-    const generatePdf = async () => {
+    const generatePdf = async (opts = {}) => {
+        // opts.type / opts.trainingCode 가 있으면 우선 사용 (항목별 다운로드 시 클로저 stale 방지)
+        const effType = opts.type || pdfType;
+        const effTraining = opts.trainingCode || trainingType;
         setIsGeneratingPdf(true);
         setIsPdfPreview(true);
         await new Promise(r => setTimeout(r, 800));
@@ -370,7 +373,7 @@ const Employees = () => {
             }
 
             // Training photos on separate page
-            if (pdfType === 'training' && trainingPhotoPdfRef.current && trainingPhotos.length > 0) {
+            if (effType === 'training' && trainingPhotoPdfRef.current && trainingPhotos.length > 0) {
                 const photoCanvas = await html2canvas(trainingPhotoPdfRef.current, canvasOpts);
                 const photoImgData = photoCanvas.toDataURL('image/png');
                 const photoImgHeight = (photoCanvas.height * pdfWidth) / photoCanvas.width;
@@ -384,10 +387,10 @@ const Employees = () => {
                 promotion: `연차사용촉진_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
                 application: `연차사용신청서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
                 retirement: `퇴직금계산서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
-                training: `의무교육_${TRAININGS.find(t => t.code === trainingType)?.name || ''}_${new Date().toISOString().split('T')[0]}.pdf`,
+                training: `의무교육_${TRAININGS.find(t => t.code === effTraining)?.name || ''}_${new Date().toISOString().split('T')[0]}.pdf`,
                 contract: `근로계약서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`
             };
-            const fileName = fileNames[pdfType] || fileNames.promotion;
+            const fileName = fileNames[effType] || fileNames.promotion;
             pdf.save(fileName);
         } catch (err) {
             console.error('PDF 생성 실패:', err);
@@ -396,6 +399,15 @@ const Employees = () => {
             setIsGeneratingPdf(false);
             setIsPdfPreview(false);
         }
+    };
+
+    // 의무교육 항목별 양식 다운로드 — 해당 교육으로 전환 후 PDF 생성
+    const downloadTrainingForm = async (code) => {
+        setPdfType('training');
+        setTrainingType(code);
+        // 미리보기(pdfRef)가 선택된 교육으로 재렌더될 시간을 준 뒤 생성
+        await new Promise(r => setTimeout(r, 80));
+        await generatePdf({ type: 'training', trainingCode: code });
     };
 
     const today = new Date();
@@ -999,19 +1011,38 @@ const Employees = () => {
                                     <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: '6px', display: 'block' }}>교육 유형 선택</label>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                                         {TRAININGS.map(t => (
-                                            <button key={t.code}
-                                                onClick={() => setTrainingType(t.code)}
+                                            <div key={t.code}
                                                 style={{
-                                                    padding: '8px 10px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                                                    fontSize: '0.75rem', fontWeight: 600, textAlign: 'left',
-                                                    background: trainingType === t.code ? '#4f46e5' : '#f1f5f9',
-                                                    color: trainingType === t.code ? 'white' : '#64748b',
+                                                    padding: '8px 10px', borderRadius: '8px',
+                                                    display: 'flex', flexDirection: 'column', gap: '6px',
+                                                    background: trainingType === t.code ? '#eef2ff' : '#f8fafc',
+                                                    border: trainingType === t.code ? '2px solid #4f46e5' : '1px solid #e2e8f0',
                                                     transition: 'all 0.2s'
                                                 }}
                                             >
-                                                {t.icon} {t.name}
-                                                <div style={{ fontSize: '0.65rem', opacity: 0.8, marginTop: '2px' }}>{t.law}</div>
-                                            </button>
+                                                <button onClick={() => setTrainingType(t.code)}
+                                                    style={{
+                                                        background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+                                                        padding: 0, fontSize: '0.75rem', fontWeight: 600,
+                                                        color: trainingType === t.code ? '#4f46e5' : '#334155'
+                                                    }}
+                                                >
+                                                    {t.icon} {t.name}
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.8, marginTop: '2px', color: '#64748b' }}>{t.law}</div>
+                                                </button>
+                                                <button onClick={() => downloadTrainingForm(t.code)} disabled={isGeneratingPdf}
+                                                    title={`${t.name} 양식 다운로드`}
+                                                    style={{
+                                                        padding: '5px 8px', borderRadius: '6px', border: 'none',
+                                                        cursor: isGeneratingPdf ? 'wait' : 'pointer',
+                                                        background: '#4f46e5', color: 'white', fontSize: '0.68rem', fontWeight: 700,
+                                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                                                        opacity: isGeneratingPdf ? 0.6 : 1
+                                                    }}
+                                                >
+                                                    <Download size={12} /> 양식 다운로드
+                                                </button>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
@@ -1278,7 +1309,7 @@ const Employees = () => {
 
                         <div className="modal-actions">
                             <button className="btn-cancel" onClick={() => setIsPdfModalOpen(false)}>취소</button>
-                            <button className="btn-submit" onClick={generatePdf} disabled={isGeneratingPdf}
+                            <button className="btn-submit" onClick={() => generatePdf()} disabled={isGeneratingPdf}
                                 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <Download size={16} /> {isGeneratingPdf ? 'PDF 생성 중...' : 'PDF 다운로드'}
                             </button>

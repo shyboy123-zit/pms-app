@@ -24,6 +24,9 @@ const Dashboard = () => {
     const { user } = useAuth();
     const isAdmin = user?.position === '관리자';
 
+    // 상단 KPI 카드 클릭 시 상세 내역 모달 ('running' | 'lowstock' | 'defect')
+    const [cardModal, setCardModal] = useState(null);
+
     // 입출고 데이터로 제품 재고 계산
     const getProductStock = (product) => {
         const key = product.product_code || product.name;
@@ -241,7 +244,7 @@ const Dashboard = () => {
 
             {/* 핵심 통계 카드 */}
             <div className="stats-grid">
-                <div className="stat-card running">
+                <div className="stat-card running" style={{ cursor: 'pointer' }} onClick={() => setCardModal('running')}>
                     <div className="stat-icon">
                         <Activity />
                     </div>
@@ -252,7 +255,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div className={`stat-card stock ${(lowStockMaterials.length + lowStockProducts.length) > 0 ? 'alert' : ''}`}>
+                <div className={`stat-card stock ${(lowStockMaterials.length + lowStockProducts.length) > 0 ? 'alert' : ''}`} style={{ cursor: 'pointer' }} onClick={() => setCardModal('lowstock')}>
                     <div className="stat-icon">
                         <AlertTriangle />
                     </div>
@@ -263,7 +266,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div className={`stat-card defect ${todayDefects.length > 0 ? 'warning' : 'good'}`}>
+                <div className={`stat-card defect ${todayDefects.length > 0 ? 'warning' : 'good'}`} style={{ cursor: 'pointer' }} onClick={() => setCardModal('defect')}>
                     <div className="stat-icon">
                         <AlertCircle />
                     </div>
@@ -274,6 +277,74 @@ const Dashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* 상단 카드 클릭 → 상세 내역 모달 */}
+            <Modal
+                title={cardModal === 'running' ? '🟢 가동중인 설비' : cardModal === 'lowstock' ? '⚠️ 재고 부족 항목' : '🔴 금일 불량 내역'}
+                isOpen={!!cardModal}
+                onClose={() => setCardModal(null)}
+            >
+                <div className="card-detail-list">
+                    {cardModal === 'running' && (
+                        runningEquipments.length > 0 ? runningEquipments.map(eq => {
+                            const wo = workOrders.find(w => w.id === eq.current_work_order_id);
+                            const product = wo ? products.find(p => p.id === wo.product_id) : null;
+                            const prog = wo && wo.target_quantity > 0 ? Math.round((wo.produced_quantity / wo.target_quantity) * 100) : 0;
+                            return (
+                                <div key={eq.id} className="cd-row">
+                                    <span className="cd-name">{eq.name}</span>
+                                    <span className="cd-mid">{product?.name || '제품 미지정'}</span>
+                                    <span className="cd-val">{wo ? `${(wo.produced_quantity || 0).toLocaleString()}/${(wo.target_quantity || 0).toLocaleString()} (${prog}%)` : '-'}</span>
+                                </div>
+                            );
+                        }) : <div className="cd-empty">현재 가동중인 설비가 없습니다.</div>
+                    )}
+                    {cardModal === 'lowstock' && (
+                        (lowStockMaterials.length + lowStockProducts.length) > 0 ? (
+                            <>
+                                {lowStockMaterials.map(m => (
+                                    <div key={'m' + m.id} className="cd-row">
+                                        <span className="cd-tag mat">원재료</span>
+                                        <span className="cd-name">{m.name}</span>
+                                        <span className="cd-val danger">{(m.stock || 0).toLocaleString()} / {(m.min_stock || 0).toLocaleString()} {m.unit || ''}</span>
+                                    </div>
+                                ))}
+                                {lowStockProducts.map(p => {
+                                    const cur = getProductStock(p);
+                                    return (
+                                        <div key={'p' + p.id} className="cd-row">
+                                            <span className="cd-tag prod">제품</span>
+                                            <span className="cd-name">{p.name}</span>
+                                            <span className="cd-val danger">{cur.toLocaleString()} / {(p.min_stock || 0).toLocaleString()} {p.unit || ''}</span>
+                                        </div>
+                                    );
+                                })}
+                            </>
+                        ) : <div className="cd-empty">안전재고 미달 항목이 없습니다. ✓</div>
+                    )}
+                    {cardModal === 'defect' && (
+                        todayDefects.length > 0 ? todayDefects.map(i => (
+                            <div key={i.id} className="cd-row">
+                                <span className="cd-name">{i.product || '-'}</span>
+                                <span className="cd-mid">{i.check_item || ''}</span>
+                                <span className="cd-val danger">{i.ng_type || '불량'}</span>
+                            </div>
+                        )) : <div className="cd-empty">금일 불량 내역이 없습니다. ✓</div>
+                    )}
+                </div>
+                <style>{`
+                    .card-detail-list { display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow-y: auto; }
+                    .cd-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--bg-subtle); border-radius: 8px; font-size: 0.88rem; }
+                    .cd-name { font-weight: 700; color: var(--text-main); flex: 1; min-width: 0; }
+                    .cd-mid { color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
+                    .cd-val { font-weight: 700; color: var(--text-main); white-space: nowrap; }
+                    .cd-val.danger { color: var(--danger); }
+                    .cd-tag { font-size: 0.68rem; font-weight: 800; padding: 2px 7px; border-radius: 6px; flex-shrink: 0; }
+                    .cd-tag.mat { background: #fef3c7; color: #b45309; }
+                    .cd-tag.prod { background: #dbeafe; color: #1d4ed8; }
+                    .cd-empty { padding: 2rem; text-align: center; color: var(--text-muted); }
+                `}</style>
+            </Modal>
 
             {/* 연차사용촉진 알림 */}
             {(() => {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import AnalyticsSection from '../components/AnalyticsSection';
 import FactoryFloorMap from '../components/FactoryFloorMap';
@@ -20,6 +21,8 @@ import {
 
 const Dashboard = () => {
     const { equipments, materials, inspections, products, workOrders, molds, moldMovement, injectionConditions, productionLogs, employees, inventoryTransactions } = useData();
+    const { user } = useAuth();
+    const isAdmin = user?.position === '관리자';
 
     // 입출고 데이터로 제품 재고 계산
     const getProductStock = (product) => {
@@ -1682,8 +1685,8 @@ const Dashboard = () => {
                 }
             `}</style>
 
-            {/* ──────────────── 30일 분석 섹션 (Phase 3a) ──────────────── */}
-            <AnalyticsSection />
+            {/* ──────────────── 30일 분석 섹션 (Phase 3a) — 관리자 전용 ──────────────── */}
+            {isAdmin && <AnalyticsSection />}
 
             {/* 불량 사진 뷰어 모달 */}
             <Modal title="불량 사진 보기" isOpen={isViewerOpen} onClose={() => setIsViewerOpen(false)}>

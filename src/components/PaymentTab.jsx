@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import Modal from './Modal';
 import { Wallet, AlertCircle, CheckCircle2, DollarSign, X, Calendar } from 'lucide-react';
+import DonutKpi from './viz/DonutKpi';
+import MiniBar from './viz/MiniBar';
 
 /**
  * 결제 관리 탭
@@ -266,6 +268,36 @@ const PaymentTab = () => {
                     </div>
                 </div>
             </div>
+
+            {/* 미결제 시각화 — 미수/미지급 도넛 + 거래처별 순잔액 막대 */}
+            {clientBalances.length > 0 && (
+                <div className="section-card">
+                    <h3 className="section-title">미결제 시각화</h3>
+                    <div style={{ display: 'flex', gap: '1.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                            <DonutKpi size={120}
+                                segments={[{ value: totals.receivable, color: '#dc2626' }, { value: totals.payable, color: '#2563eb' }]}
+                                centerValue={`${(totals.receivable - totals.payable) >= 0 ? '+' : '-'}${Math.abs(Math.round((totals.receivable - totals.payable) / 10000)).toLocaleString()}만`}
+                                centerLabel="순잔액" />
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <span><i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#dc2626', marginRight: 5 }} />미수금 ₩{totals.receivable.toLocaleString()}</span>
+                                <span><i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#2563eb', marginRight: 5 }} />미지급 ₩{totals.payable.toLocaleString()}</span>
+                            </div>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 260 }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 700, marginBottom: 10, color: 'var(--text-main)' }}>
+                                거래처별 순잔액 TOP <span style={{ fontWeight: 500, color: 'var(--text-muted)', fontSize: '0.72rem' }}>(🟢받을 · 🔴줄)</span>
+                            </div>
+                            <MiniBar unit="원"
+                                items={clientBalances
+                                    .map(b => ({ label: b.client, net: b.receivable - b.payable }))
+                                    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net))
+                                    .slice(0, 6)
+                                    .map(b => ({ label: b.label, value: Math.abs(b.net), color: b.net >= 0 ? '#16a34a' : '#ef4444' }))} />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* 거래처별 잔액 표 */}
             <div className="section-card">

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import Modal from './Modal';
 import { Wallet, AlertCircle, CheckCircle2, DollarSign, X, Calendar } from 'lucide-react';
@@ -23,6 +23,10 @@ const PaymentTab = () => {
         paid_date: new Date().toISOString().split('T')[0],
         payment_notes: ''
     });
+
+    // 일괄 결제용 — 선택된 전표 id 집합 + 결제일
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [bulkDate, setBulkDate] = useState(new Date().toISOString().split('T')[0]);
 
     // payment_status가 없는 옛 데이터(컬럼 추가 전)는 paid_amount/total_amount로 계산
     const getPaymentStatus = (v) => {
@@ -179,6 +183,59 @@ const PaymentTab = () => {
         });
     };
 
+    // ===== 일괄 결제 =====
+    // 필터/보기 변경 시 선택 초기화 (다른 목록의 선택이 남지 않도록)
+    useEffect(() => { setSelectedIds(new Set()); }, [filter, view, clientFilter]);
+
+    const selectedVouchers = useMemo(
+        () => filteredVouchers.filter(v => selectedIds.has(v.id)),
+        [filteredVouchers, selectedIds]
+    );
+    const selectedTotal = useMemo(
+        () => selectedVouchers.reduce((s, v) => s + getOutstanding(v), 0),
+        [selectedVouchers]
+    );
+    const allVisibleSelected = filteredVouchers.length > 0 && filteredVouchers.every(v => selectedIds.has(v.id));
+
+    const toggleAll = () => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (filteredVouchers.every(v => next.has(v.id))) {
+                filteredVouchers.forEach(v => next.delete(v.id)); // 전체 해제
+            } else {
+                filteredVouchers.forEach(v => next.add(v.id));    // 전체 선택
+            }
+            return next;
+        });
+    };
+    const toggleOne = (id) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    };
+
+    const handleBulkPay = async () => {
+        if (selectedVouchers.length === 0) return;
+        if (!window.confirm(
+            `선택한 ${selectedVouchers.length}건을 ${bulkDate} 자로 일괄 결제 처리합니다.\n` +
+            `합계 ₩${selectedTotal.toLocaleString()}\n\n진행하시겠습니까?`
+        )) return;
+
+        await Promise.all(selectedVouchers.map(v => {
+            const total = parseFloat(v.total_amount || v.quantity * v.unit_price || 0);
+            const existingNote = v.payment_notes || '';
+            return updateVoucher(v.id, {
+                paid_amount: total,
+                paid_date: bulkDate,
+                payment_notes: `${existingNote}${existingNote ? '\n' : ''}[${bulkDate}] 일괄 결제`
+            });
+        }));
+        setSelectedIds(new Set());
+        alert(`✅ ${selectedVouchers.length}건 일괄 결제 완료 (합계 ₩${selectedTotal.toLocaleString()})`);
+    };
+
     return (
         <div className="payment-tab">
             {/* 전체 잔액 요약 */}
@@ -291,10 +348,40 @@ const PaymentTab = () => {
                     </div>
                 )}
 
+                {view === 'outstanding' && (
+                    <div className="bulk-bar">
+                        <label className="bulk-all">
+                            <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll}
+                                disabled={filteredVouchers.length === 0} />
+                            전체 선택
+                        </label>
+                        <div className="bulk-info">
+                            선택 <b>{selectedVouchers.length}</b>건 · 합계 <b>₩{selectedTotal.toLocaleString()}</b>
+                        </div>
+                        <div className="bulk-right">
+                            <label className="bulk-date-label">결제일
+                                <input type="date" className="bulk-date" value={bulkDate}
+                                    onChange={(e) => setBulkDate(e.target.value)} />
+                            </label>
+                            <button className="bulk-pay-btn" onClick={handleBulkPay} disabled={selectedVouchers.length === 0}>
+                                <CheckCircle2 size={15} /> 선택 일괄 결제
+                            </button>
+                            {selectedVouchers.length > 0 && (
+                                <button className="bulk-clear" onClick={() => setSelectedIds(new Set())}>해제</button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {filteredVouchers.length > 0 ? (
                     <table className="voucher-table">
                         <thead>
                             <tr>
+                                {view === 'outstanding' && (
+                                    <th style={{ width: '36px', textAlign: 'center' }}>
+                                        <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} />
+                                    </th>
+                                )}
                                 <th>{view === 'paid' ? '결제일' : '일자'}</th>
                                 <th>거래처</th>
                                 <th>품목</th>
@@ -312,7 +399,12 @@ const PaymentTab = () => {
                                 const total = parseFloat(v.total_amount || v.quantity * v.unit_price || 0);
                                 const paid = parseFloat(v.paid_amount || 0);
                                 return (
-                                    <tr key={v.id}>
+                                    <tr key={v.id} className={selectedIds.has(v.id) ? 'row-selected' : ''}>
+                                        {view === 'outstanding' && (
+                                            <td style={{ textAlign: 'center' }}>
+                                                <input type="checkbox" checked={selectedIds.has(v.id)} onChange={() => toggleOne(v.id)} />
+                                            </td>
+                                        )}
                                         <td>{view === 'paid' ? (v.paid_date || v.voucher_date) : v.voucher_date}</td>
                                         <td className="client-cell">{v.client || '-'}</td>
                                         <td>
@@ -462,6 +554,22 @@ const PaymentTab = () => {
                 .full-pay-btn:hover { opacity: 0.85; }
 
                 .empty-msg { padding: 2.5rem; text-align: center; color: var(--text-subtle); }
+
+                /* 일괄 결제 바 */
+                .bulk-bar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 0.65rem 0.9rem; margin-bottom: 0.75rem; background: var(--primary-soft); border: 1px solid var(--primary); border-radius: var(--radius-sm); }
+                .bulk-all { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--text-main); cursor: pointer; }
+                .bulk-all input { width: 16px; height: 16px; cursor: pointer; }
+                .bulk-info { font-size: 0.88rem; color: var(--text-main); }
+                .bulk-info b { color: var(--primary); font-weight: 800; }
+                .bulk-right { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+                .bulk-date-label { font-size: 0.8rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.35rem; }
+                .bulk-date { padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--text-main); font-size: 0.82rem; }
+                .bulk-pay-btn { display: inline-flex; align-items: center; gap: 5px; background: var(--gradient-primary); color: var(--primary-text); padding: 0.45rem 0.9rem; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem; font-weight: 700; transition: all var(--transition-base); }
+                .bulk-pay-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+                .bulk-pay-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+                .bulk-clear { background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 0.45rem 0.7rem; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.82rem; }
+                .voucher-table tr.row-selected td { background: var(--primary-soft); }
+                .voucher-table input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 
                 .voucher-info { background: var(--bg-subtle); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.9rem; color: var(--text-main); border: 1px solid var(--border); }
                 .voucher-info strong { color: var(--text-muted); font-weight: 600; margin-right: 0.5rem; }

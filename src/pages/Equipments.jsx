@@ -3,6 +3,8 @@ import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { Plus, Settings, Activity, Power, History, Wrench, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import DonutKpi from '../components/viz/DonutKpi';
+import StatusTile from '../components/viz/StatusTile';
 
 const Equipments = () => {
     const { equipments, eqHistory, workOrders, products, employees, addEquipment, updateEquipment, deleteEquipment, addEqHistory, deleteEqHistory, uploadImage, addNotification } = useData();
@@ -202,24 +204,56 @@ const Equipments = () => {
                 </button>
             </div>
 
-            <div className="stats-row">
-                <div className="glass-panel simple-stat">
-                    <span className="label">총 설비</span>
-                    <span className="value">{equipments ? equipments.length : 0}대</span>
-                </div>
-                <div className="glass-panel simple-stat">
-                    <span className="label">가동 중</span>
-                    <span className="value" style={{ color: 'var(--success)' }}>
-                        {equipments ? equipments.filter(m => m.status === '가동중').length : 0}대
-                    </span>
-                </div>
-                <div className="glass-panel simple-stat">
-                    <span className="label">가동률</span>
-                    <span className="value">
-                        {equipments && equipments.length > 0 ? ((equipments.filter(m => m.status === '가동중').length / equipments.length) * 100).toFixed(1) : 0}%
-                    </span>
-                </div>
-            </div>
+            {/* 설비 상태 보드 — 가동률 도넛 + 설비 색상 타일 (한눈에) */}
+            {(() => {
+                const eqList = equipments || [];
+                const eqRunning = eqList.filter(e => e.status === '가동중').length;
+                const eqIdle = eqList.filter(e => e.status === '대기').length;
+                const eqStopped = eqList.length - eqRunning - eqIdle;
+                const eqUtil = eqList.length > 0 ? Math.round((eqRunning / eqList.length) * 100) : 0;
+                return (
+                    <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '1rem', display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                            <DonutKpi
+                                size={120}
+                                segments={[
+                                    { value: eqRunning, color: '#16a34a' },
+                                    { value: eqIdle, color: '#94a3b8' },
+                                    { value: eqStopped, color: '#ef4444' },
+                                ]}
+                                centerValue={`${eqUtil}%`}
+                                centerLabel="가동률"
+                            />
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: '0.78rem', color: 'var(--text-muted)', justifyContent: 'center' }}>
+                                <span><i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#16a34a', marginRight: 4 }} />가동 <b style={{ color: 'var(--text-main)' }}>{eqRunning}</b></span>
+                                <span><i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#94a3b8', marginRight: 4 }} />대기 <b style={{ color: 'var(--text-main)' }}>{eqIdle}</b></span>
+                                <span><i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#ef4444', marginRight: 4 }} />정지 <b style={{ color: 'var(--text-main)' }}>{eqStopped}</b></span>
+                                <span style={{ opacity: 0.75 }}>전체 {eqList.length}대</span>
+                            </div>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+                            {eqList.length === 0 ? (
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>등록된 설비가 없습니다.</div>
+                            ) : eqList.map(eq => {
+                                const tone = eq.status === '가동중' ? 'success' : eq.status === '대기' ? 'neutral' : 'danger';
+                                const wo = eq.current_work_order_id ? workOrders.find(w => w.id === eq.current_work_order_id) : null;
+                                const product = wo ? products.find(p => p.id === wo.product_id) : null;
+                                const prog = wo && wo.target_quantity > 0 ? Math.round((wo.produced_quantity / wo.target_quantity) * 100) : null;
+                                return (
+                                    <StatusTile
+                                        key={eq.id}
+                                        tone={tone}
+                                        title={eq.name}
+                                        sub={eq.status === '가동중' ? (product?.name || '제품 미지정') : eq.status}
+                                        badge={prog != null ? `${prog}%` : null}
+                                        onClick={() => openHistory(eq)}
+                                    />
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            })()}
 
             <Table
                 columns={columns}

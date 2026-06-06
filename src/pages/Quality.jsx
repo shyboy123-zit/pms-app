@@ -7,6 +7,9 @@ import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import DonutKpi from '../components/viz/DonutKpi';
+import MiniBar from '../components/viz/MiniBar';
 
 const Quality = () => {
     const { inspections, employees, products, workOrders, molds, suppliers, addInspection, updateInspection, deleteInspection, uploadImage, addNotification } = useData();
@@ -73,6 +76,31 @@ const Quality = () => {
         const ok = total - ng;
         const rate = total > 0 ? ((ng / total) * 100).toFixed(1) : '0.0';
         return { total, ng, ok, rate };
+    }, [filteredInspections]);
+
+    // 일별 불량률 추이
+    const trendData = useMemo(() => {
+        const byDate = {};
+        filteredInspections.forEach(i => {
+            const d = i.date;
+            if (!d) return;
+            if (!byDate[d]) byDate[d] = { date: d, total: 0, ng: 0 };
+            byDate[d].total += 1;
+            if (i.result === 'NG') byDate[d].ng += 1;
+        });
+        return Object.values(byDate)
+            .sort((a, b) => (a.date < b.date ? -1 : 1))
+            .map(d => ({ date: d.date.slice(5), 불량률: d.total > 0 ? Math.round((d.ng / d.total) * 1000) / 10 : 0 }));
+    }, [filteredInspections]);
+
+    // 불량유형 파레토 (TOP 6)
+    const ngPareto = useMemo(() => {
+        const m = {};
+        filteredInspections.filter(i => i.result === 'NG').forEach(i => {
+            const t = i.ng_type || '기타';
+            m[t] = (m[t] || 0) + 1;
+        });
+        return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value }));
     }, [filteredInspections]);
 
     // image_url 파싱 (단일 URL 또는 JSON 배열 호환)
@@ -402,6 +430,54 @@ const Quality = () => {
                     </div>
                 </div>
             </div>
+
+            {/* 품질 시각 블록 — OK/NG 도넛 · 일별 불량률 추이 · 불량유형 파레토 */}
+            {stats.total > 0 && (
+                <div className="qa-viz">
+                    <div className="qa-card">
+                        <div className="qa-card-title">합격 / 불량</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                            <DonutKpi size={108}
+                                segments={[{ value: stats.ok, color: '#16a34a' }, { value: stats.ng, color: '#ef4444' }]}
+                                centerValue={`${stats.rate}%`} centerLabel="불량률" />
+                            <div style={{ fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <span><i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#16a34a', marginRight: 5 }} />합격 <b>{stats.ok}</b></span>
+                                <span><i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#ef4444', marginRight: 5 }} />불량 <b>{stats.ng}</b></span>
+                                <span style={{ color: 'var(--text-muted)' }}>총 {stats.total}건</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="qa-card">
+                        <div className="qa-card-title">일별 불량률 추이 (%)</div>
+                        {trendData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={160}>
+                                <LineChart data={trendData} margin={{ top: 5, right: 12, left: -20, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                                    <YAxis tick={{ fontSize: 11 }} />
+                                    <Tooltip formatter={(v) => `${v}%`} />
+                                    <Line type="monotone" dataKey="불량률" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : <div className="qa-empty">기간 내 데이터 없음</div>}
+                    </div>
+
+                    <div className="qa-card">
+                        <div className="qa-card-title">불량유형 TOP (파레토)</div>
+                        {ngPareto.length > 0
+                            ? <MiniBar items={ngPareto} unit="건" barColor="#ef4444" />
+                            : <div className="qa-empty">불량 없음 ✓</div>}
+                    </div>
+                </div>
+            )}
+
+            <style>{`
+                .qa-viz { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+                .qa-card { background: var(--bg-card, #fff); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; box-shadow: var(--shadow-sm); min-width: 0; }
+                .qa-card-title { font-size: 0.85rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.75rem; }
+                .qa-empty { color: var(--text-muted); font-size: 0.85rem; padding: 1.5rem 0; text-align: center; }
+            `}</style>
 
             <Table columns={columns} data={filteredInspections} />
 

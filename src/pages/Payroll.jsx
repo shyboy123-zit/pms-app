@@ -3,6 +3,8 @@ import { useData } from '../context/DataContext';
 import { Calculator, Download, Users, ChevronDown, ChevronUp, DollarSign, Clock, Save, History, Trash2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import DonutKpi from '../components/viz/DonutKpi';
+import MiniBar from '../components/viz/MiniBar';
 
 // ===== 2026년 4대보험 요율 =====
 const INSURANCE_RATES = {
@@ -392,6 +394,55 @@ const Payroll = () => {
                     </div>
                 ))}
             </div>
+
+            {/* 인건비 시각화 — 부서별 도넛(선택월) + 월별 추이 */}
+            {(() => {
+                const monthRecords = (payrollRecords || []).filter(r => r.year_month === yearMonth);
+                const byDept = {};
+                monthRecords.forEach(r => {
+                    const emp = employees.find(e => e.id === r.employee_id);
+                    const d = emp?.department || '미지정';
+                    byDept[d] = (byDept[d] || 0) + (parseFloat(r.net_pay || 0) || 0);
+                });
+                const byMonth = {};
+                (payrollRecords || []).forEach(r => {
+                    if (!r.year_month) return;
+                    byMonth[r.year_month] = (byMonth[r.year_month] || 0) + (parseFloat(r.net_pay || 0) || 0);
+                });
+                const months = Object.keys(byMonth).sort().slice(-6);
+                if (monthRecords.length === 0 && months.length === 0) return null;
+                const palette = ['#6366f1', '#16a34a', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#06b6d4', '#94a3b8'];
+                const deptEntries = Object.entries(byDept).sort((a, b) => b[1] - a[1]);
+                const monthTotal = monthRecords.reduce((s, r) => s + (parseFloat(r.net_pay || 0) || 0), 0);
+                return (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: '16px 18px' }}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 800, marginBottom: 12 }}>부서별 실수령액 ({yearMonth})</div>
+                            {deptEntries.length > 0 ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                                    <DonutKpi size={112}
+                                        segments={deptEntries.map(([, v], i) => ({ value: v, color: palette[i % palette.length] }))}
+                                        centerValue={`${Math.round(monthTotal / 10000).toLocaleString()}만`} centerLabel="합계" />
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: '0.82rem' }}>
+                                        {deptEntries.map(([d, v], i) => (
+                                            <span key={d} style={{ color: 'var(--text-muted)' }}>
+                                                <i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 3, background: palette[i % palette.length], marginRight: 5 }} />
+                                                {d} <b style={{ color: 'var(--text-main)' }}>₩{Math.round(v).toLocaleString()}</b>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '1rem 0' }}>해당 월 급여 기록이 없습니다.</div>}
+                        </div>
+                        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: '16px 18px' }}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 800, marginBottom: 12 }}>월별 인건비 추이</div>
+                            {months.length > 0
+                                ? <MiniBar unit="원" barColor="#6366f1" items={months.map(m => ({ label: m.slice(2), value: Math.round(byMonth[m]) }))} />
+                                : <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '1rem 0' }}>급여 기록이 없습니다.</div>}
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* 설정 영역 */}
             <div style={{

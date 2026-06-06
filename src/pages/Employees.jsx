@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import DonutKpi from '../components/viz/DonutKpi';
 
 const Employees = () => {
     // Consume global data from Supabase via DataContext
@@ -441,6 +442,30 @@ const Employees = () => {
                     퇴사자 ({employees.filter(e => e.status === '퇴사').length})
                 </button>
             </div>
+
+            {/* 부서별 인원 도넛 (재직자) */}
+            {(() => {
+                const active = employees.filter(e => e.status === '재직');
+                if (active.length === 0) return null;
+                const byDept = {};
+                active.forEach(e => { const d = e.department || '미지정'; byDept[d] = (byDept[d] || 0) + 1; });
+                const palette = ['#6366f1', '#16a34a', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#06b6d4', '#94a3b8'];
+                const entries = Object.entries(byDept).sort((a, b) => b[1] - a[1]);
+                const segments = entries.map(([, v], i) => ({ value: v, color: palette[i % palette.length] }));
+                return (
+                    <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '1rem', display: 'flex', gap: '1.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <DonutKpi size={120} segments={segments} centerValue={`${active.length}명`} centerLabel="재직" />
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px' }}>
+                            {entries.map(([dept, v], i) => (
+                                <span key={dept} style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                    <i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: palette[i % palette.length], marginRight: 5 }} />
+                                    {dept} <b style={{ color: 'var(--text-main)' }}>{v}</b>
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                );
+            })()}
 
             <Table
                 columns={columns}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { History, Filter, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import MiniBar from '../components/viz/MiniBar';
 
 /**
  * 감사 로그 뷰어 페이지
@@ -183,6 +184,17 @@ const AuditLog = () => {
                     </select>
                 </div>
             </div>
+
+            {logs.length > 0 && (
+                <div className="glass-panel" style={{ padding: '1rem 1.25rem', marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: 10 }}>작업 유형 분포 (현재 조회분)</div>
+                    <MiniBar unit="건" items={[
+                        { label: '등록(INSERT)', value: logs.filter(l => l.action === 'INSERT').length, color: '#16a34a' },
+                        { label: '수정(UPDATE)', value: logs.filter(l => l.action === 'UPDATE').length, color: '#3b82f6' },
+                        { label: '삭제(DELETE)', value: logs.filter(l => l.action === 'DELETE').length, color: '#ef4444' },
+                    ]} />
+                </div>
+            )}
 
             {error && (
                 <div className="error-banner">

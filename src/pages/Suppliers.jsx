@@ -5,9 +5,10 @@ import ExcelToolbar from '../components/ExcelToolbar';
 import { Plus, Edit, Trash2, Phone, Mail, Building } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { parsers } from '../lib/excel';
+import MiniBar from '../components/viz/MiniBar';
 
 const Suppliers = () => {
-    const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useData();
+    const { suppliers, addSupplier, updateSupplier, deleteSupplier, vouchers } = useData();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -128,6 +129,24 @@ const Suppliers = () => {
                     </button>
                 </div>
             </div>
+
+            {(() => {
+                const byClient = {};
+                (vouchers || []).forEach(v => {
+                    const c = v.client || '미지정';
+                    byClient[c] = (byClient[c] || 0) + (parseFloat(v.total_amount || (v.quantity * v.unit_price) || 0) || 0);
+                });
+                const top = Object.entries(byClient).filter(([, amt]) => amt > 0)
+                    .sort((a, b) => b[1] - a[1]).slice(0, 6)
+                    .map(([label, value]) => ({ label, value: Math.round(value) }));
+                if (top.length === 0) return null;
+                return (
+                    <div className="glass-panel" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: 10 }}>거래처별 거래액 TOP (전표 합계)</div>
+                        <MiniBar unit="원" items={top} barColor="#6366f1" />
+                    </div>
+                );
+            })()}
 
             <Table
                 columns={columns}

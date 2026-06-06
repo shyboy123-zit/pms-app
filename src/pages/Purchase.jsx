@@ -3,6 +3,7 @@ import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { Plus, Check, X, Clock, ShoppingBag, Truck, AlertTriangle, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import MiniBar from '../components/viz/MiniBar';
 import { useAuth } from '../context/AuthContext';
 
 const Purchase = () => {
@@ -134,6 +135,19 @@ const Purchase = () => {
                     <div className="summary-value success">{purchaseRequests.filter(r => r.status === '입고완료').length}건</div>
                 </div>
             </div>
+
+            {(purchaseRequests || []).length > 0 && (
+                <div className="glass-panel" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: 10 }}>발주 단계별 현황</div>
+                    <MiniBar unit="건" items={[
+                        { label: '승인대기', value: purchaseRequests.filter(r => r.status === '대기').length, color: '#f59e0b' },
+                        { label: '승인완료', value: purchaseRequests.filter(r => r.status === '승인됨').length, color: '#3b82f6' },
+                        { label: '발주완료', value: purchaseRequests.filter(r => r.status === '발주완료').length, color: '#6366f1' },
+                        { label: '입고완료', value: purchaseRequests.filter(r => r.status === '입고완료').length, color: '#16a34a' },
+                        { label: '반려', value: purchaseRequests.filter(r => r.status === '반려').length, color: '#ef4444' },
+                    ]} />
+                </div>
+            )}
 
             <Table
                 columns={columns}

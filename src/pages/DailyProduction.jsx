@@ -3,6 +3,7 @@ import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { Plus, Calendar, TrendingUp, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import HeatCalendar from '../components/viz/HeatCalendar';
 
 const DailyProduction = () => {
     const { workOrders, equipments, products, materials, employees, updateWorkOrder, addNotification, addProductionLog, productionLogs, updateProductionLog, deleteProductionLog } = useData();
@@ -339,6 +340,23 @@ const DailyProduction = () => {
                     <p className="page-description">날짜별 생산 수량을 기록하고 작업 진행률을 관리합니다.</p>
                 </div>
             </div>
+
+            {/* 최근 35일 생산 히트맵 — 일자별 생산량 색농도 */}
+            {(() => {
+                const byDate = {};
+                (productionLogs || []).forEach(l => {
+                    if (!l.production_date) return;
+                    byDate[l.production_date] = (byDate[l.production_date] || 0) + (Number(l.daily_quantity) || 0);
+                });
+                return (
+                    <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.85rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <TrendingUp size={17} /> 최근 35일 생산량 히트맵
+                        </div>
+                        <HeatCalendar valuesByDate={byDate} days={35} unit="개" />
+                    </div>
+                );
+            })()}
 
             {/* 날짜 필터 */}
             <div className="filter-row">

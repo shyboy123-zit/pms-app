@@ -3,6 +3,10 @@ import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { Plus, PenTool, History, Wrench, LogOut, LogIn, PackageX, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import DonutKpi from '../components/viz/DonutKpi';
+import LevelGauge from '../components/viz/LevelGauge';
+
+const MOLD_CHECK_CYCLE = 90; // 점검 주기(일)
 
 const Molds = () => {
     const {
@@ -43,7 +47,25 @@ const Molds = () => {
         { header: '금형명', accessor: 'name' },
         { header: '관리분류코드', accessor: 'code' },
         { header: '현재 타수', accessor: 'cycle_count', render: (row) => row.cycle_count ? row.cycle_count.toLocaleString() : '0' },
-        { header: '최종 점검일', accessor: 'last_check' },
+        {
+            header: '점검 주기', accessor: 'last_check', render: (row) => {
+                if (!row.last_check) return <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>점검일 없음</span>;
+                if (row.status === '폐기' || row.status === '단종') return <span style={{ fontSize: '0.82rem' }}>{row.last_check}</span>;
+                const days = Math.floor((Date.now() - new Date(row.last_check).getTime()) / 86400000);
+                const left = MOLD_CHECK_CYCLE - days;
+                const ratio = days / MOLD_CHECK_CYCLE;
+                const color = ratio >= 1 ? '#ef4444' : ratio >= 0.8 ? '#f59e0b' : '#16a34a';
+                const ddayText = left > 0 ? `D-${left}` : `D+${-left} 초과`;
+                return (
+                    <div style={{ minWidth: 140 }}>
+                        <div style={{ fontSize: '0.8rem' }}>{row.last_check} <b style={{ color }}>{ddayText}</b></div>
+                        <div style={{ marginTop: 5 }}>
+                            <LevelGauge value={days} max={MOLD_CHECK_CYCLE} color={color} height={8} showText={false} />
+                        </div>
+                    </div>
+                );
+            }
+        },
         {
             header: '상태', accessor: 'status', render: (row) => (
                 <span className={`status-badge ${row.status === '사용가능' ? 'status-active' :
@@ -212,6 +234,43 @@ const Molds = () => {
                     <Plus size={18} /> 금형 등록
                 </button>
             </div>
+
+            {/* 점검 현황 요약 — 사용가능 도넛 + 점검 임박/초과 카운트 */}
+            {(() => {
+                const list = molds || [];
+                const usable = list.filter(m => m.status === '사용가능').length;
+                const active = list.filter(m => m.status !== '폐기' && m.status !== '단종');
+                let due = 0, soon = 0;
+                active.forEach(m => {
+                    if (!m.last_check) return;
+                    const days = Math.floor((Date.now() - new Date(m.last_check).getTime()) / 86400000);
+                    if (days >= MOLD_CHECK_CYCLE) due += 1;
+                    else if (days >= MOLD_CHECK_CYCLE * 0.8) soon += 1;
+                });
+                const other = list.length - usable;
+                return (
+                    <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '1rem', display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                            <DonutKpi size={104}
+                                segments={[{ value: usable, color: '#16a34a' }, { value: other, color: '#cbd5e1' }]}
+                                centerValue={`${list.length ? Math.round((usable / list.length) * 100) : 0}%`} centerLabel="사용가능" />
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                전체 <b style={{ color: 'var(--text-main)' }}>{list.length}</b>개 · 사용가능 <b style={{ color: '#16a34a' }}>{usable}</b>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                            <div style={{ background: due > 0 ? 'rgba(239,68,68,0.08)' : 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 12, padding: '0.85rem 1.25rem', textAlign: 'center', minWidth: 110 }}>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>🔴 점검 초과</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: due > 0 ? '#ef4444' : 'var(--text-main)' }}>{due}건</div>
+                            </div>
+                            <div style={{ background: soon > 0 ? 'rgba(245,158,11,0.08)' : 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 12, padding: '0.85rem 1.25rem', textAlign: 'center', minWidth: 110 }}>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>🟠 점검 임박</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: soon > 0 ? '#d97706' : 'var(--text-main)' }}>{soon}건</div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             <Table
                 columns={columns}

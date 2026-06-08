@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
-import { Plus, PenTool, History, Wrench, LogOut, LogIn, PackageX, Edit, Trash2 } from 'lucide-react';
+import { Plus, PenTool, History, Wrench, LogOut, LogIn, PackageX, Edit, Trash2, AlertTriangle } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import DonutKpi from '../components/viz/DonutKpi';
 import LevelGauge from '../components/viz/LevelGauge';
@@ -11,9 +11,10 @@ const MOLD_CHECK_CYCLE = 90; // 점검 주기(일)
 const Molds = () => {
     const {
         molds, repairHistory, addMold, addMoldHistory, deleteMoldHistory, updateMold, deleteMold,
-        moldMovement, addMoldOutgoing, processMoldIncoming, getMoldMovements
+        moldMovement, addMoldOutgoing, processMoldIncoming, getMoldMovements, inspections
     } = useData();
 
+    const [defectMold, setDefectMold] = useState(null); // 불량 이력 모달 대상 금형
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [isRepairOpen, setIsRepairOpen] = useState(false);
@@ -287,6 +288,9 @@ const Molds = () => {
                             <button className="icon-btn" onClick={() => handleHistory(row)} title="수리/점검 이력">
                                 <History size={16} />
                             </button>
+                            <button className="icon-btn" onClick={() => setDefectMold(row)} title="불량 이력" style={{ color: '#ef4444' }}>
+                                <AlertTriangle size={16} />
+                            </button>
                             {canGoOut && (
                                 <button className="icon-btn outgoing-btn" onClick={() => handleOpenOutgoing(row)} title="수리 출고">
                                     <LogOut size={16} />
@@ -307,6 +311,45 @@ const Molds = () => {
                     );
                 }}
             />
+
+            {/* 금형별 불량 이력 모달 */}
+            <Modal title={defectMold ? `🔺 불량 이력 - ${defectMold.name}` : '불량 이력'} isOpen={!!defectMold} onClose={() => setDefectMold(null)}>
+                {defectMold && (() => {
+                    const name = defectMold.name || '';
+                    const defects = (inspections || [])
+                        .filter(i => i.result === 'NG' && i.product && (i.product === name || i.product.includes(name) || name.includes(i.product)))
+                        .sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at));
+                    const byType = {};
+                    defects.forEach(d => { const t = d.ng_type || '기타'; byType[t] = (byType[t] || 0) + 1; });
+                    const typeEntries = Object.entries(byType).sort((a, b) => b[1] - a[1]);
+                    if (defects.length === 0) {
+                        return <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>이 금형(제품)의 불량 이력이 없습니다. ✓</div>;
+                    }
+                    return (
+                        <div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: '1rem' }}>
+                                {typeEntries.map(([t, c]) => (
+                                    <span key={t} style={{ background: '#fee2e2', color: '#dc2626', fontWeight: 700, fontSize: '0.78rem', padding: '4px 10px', borderRadius: 8 }}>
+                                        {t} {c}건
+                                    </span>
+                                ))}
+                            </div>
+                            <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                {defects.map((d, i) => (
+                                    <div key={i} style={{ padding: '10px 12px', background: 'var(--bg-subtle)', borderRadius: 8, fontSize: '0.85rem', borderLeft: '3px solid #ef4444' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                                            <span style={{ fontWeight: 700, color: '#dc2626' }}>{d.ng_type || '불량'}</span>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{d.date || d.created_at?.split('T')[0]}</span>
+                                        </div>
+                                        {d.check_item && <div style={{ color: 'var(--text-main)' }}>검사항목: {d.check_item}</div>}
+                                        {d.action && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 2 }}>조치: {d.action}</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })()}
+            </Modal>
 
             <Modal title={isEditing ? "금형 정보 수정" : "신규 금형 등록"} isOpen={isModalOpen} onClose={() => {
                 setIsModalOpen(false);

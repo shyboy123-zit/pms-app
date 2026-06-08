@@ -2,14 +2,14 @@ import React, { useState, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import ExcelToolbar from '../components/ExcelToolbar';
-import { Plus, Play, CheckCircle, XCircle, Edit, FileText, Wrench, PenTool, Truck, ClipboardList } from 'lucide-react';
+import { Plus, Play, CheckCircle, XCircle, Edit, FileText, Wrench, PenTool, Truck, ClipboardList, AlertTriangle } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import LevelGauge from '../components/viz/LevelGauge';
 
 const WorkOrders = () => {
     const {
         workOrders, products, equipments, molds,
-        repairHistory, eqHistory, moldMovement,
+        repairHistory, eqHistory, moldMovement, inspections,
         addWorkOrder, updateWorkOrder, startWork, completeWork
     } = useData();
 
@@ -209,7 +209,13 @@ const WorkOrders = () => {
             .sort((a, b) => new Date(b.order_date) - new Date(a.order_date))
             .slice(0, 10);
 
-        return { productName, equipmentName, matchedMold, equipHistory, moldRepairHist, moldMoveHist, pastOrders };
+        // 불량 이력 (이 제품/금형의 NG 검사) — 제품명 매칭
+        const moldDefects = (inspections || [])
+            .filter(i => i.result === 'NG' && i.product && (i.product === productName || i.product.includes(productName) || productName?.includes(i.product)))
+            .sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at))
+            .slice(0, 15);
+
+        return { productName, equipmentName, matchedMold, equipHistory, moldRepairHist, moldMoveHist, pastOrders, moldDefects };
     }, [historyOrder, molds, eqHistory, repairHistory, moldMovement, workOrders]);
 
     return (
@@ -566,6 +572,7 @@ const WorkOrders = () => {
                             {[
                                 { key: 'equipment', label: '설비 이력', icon: <Wrench size={13} />, count: historyData.equipHistory.length },
                                 { key: 'mold', label: '금형 이력', icon: <PenTool size={13} />, count: historyData.moldRepairHist.length },
+                                { key: 'defect', label: '불량 이력', icon: <AlertTriangle size={13} />, count: historyData.moldDefects.length },
                                 { key: 'movement', label: '출입고', icon: <Truck size={13} />, count: historyData.moldMoveHist.length },
                                 { key: 'orders', label: '과거 작업', icon: <ClipboardList size={13} />, count: historyData.pastOrders.length },
                             ].map(tab => (
@@ -626,6 +633,26 @@ const WorkOrders = () => {
                                         </div>
                                         <div style={{ color: '#334155' }}>{h.note || '-'}</div>
                                         {h.cost > 0 && <div style={{ fontSize: '0.78rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>비용: {Number(h.cost).toLocaleString()}원</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* 불량 이력 탭 */}
+                        {historyTab === 'defect' && (
+                            <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                                {historyData.moldDefects.length === 0 ? (
+                                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.9rem' }}>이 제품/금형의 불량 이력이 없습니다.</div>
+                                ) : historyData.moldDefects.map((d, i) => (
+                                    <div key={i} style={{ padding: '10px 14px', background: i % 2 === 0 ? '#fef2f2' : 'white', borderRadius: '8px', marginBottom: '4px', fontSize: '0.85rem', borderLeft: '3px solid #ef4444' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                            <span style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, background: '#fee2e2', color: '#dc2626' }}>
+                                                {d.ng_type || '불량'}
+                                            </span>
+                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{d.date || d.created_at?.split('T')[0]}</span>
+                                        </div>
+                                        {d.check_item && <div style={{ color: '#334155' }}>검사항목: {d.check_item}</div>}
+                                        {d.action && <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>조치: {d.action}</div>}
                                     </div>
                                 ))}
                             </div>

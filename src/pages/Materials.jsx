@@ -7,6 +7,7 @@ import LevelGauge from '../components/viz/LevelGauge';
 import { Plus, ShoppingCart, AlertCircle, PlayCircle, Edit, Trash2, Calendar, CheckCircle, AlertTriangle, Package, TrendingDown } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { parsers } from '../lib/excel';
 
 const Materials = () => {
@@ -15,9 +16,75 @@ const Materials = () => {
         materialUsage, addMaterialUsage, updateMaterialUsage, deleteMaterialUsage,
         addPurchaseRequest,
         vouchers,
-        addVoucher
+        addVoucher,
+        productionLogs,
+        products
     } = useData();
     const { can } = useAuth();
+
+    // ===== 월 소모량 분석 =====
+    const [anMonth, setAnMonth] = useState(() => new Date().toISOString().slice(0, 7)); // 'YYYY-MM'
+
+    const matName = (id) => (materials || []).find(m => m.id === id)?.name || '원재료';
+
+    // 월별 원재료 소모(kg): { 'YYYY-MM': { materialId: kg } }
+    const consumptionByMonth = useMemo(() => {
+        const map = {};
+        (productionLogs || []).forEach(log => {
+            const ym = (log.production_date || '').slice(0, 7);
+            if (!ym) return;
+            const qty = Number(log.daily_quantity) || 0;
+            if (qty <= 0) return;
+            const product = (products || []).find(p => p.id === log.product_id);
+            if (!product || !product.material_id) return;
+            const shotW = (Number(product.product_weight) || 0) + (Number(product.runner_weight) || 0);
+            const kg = (shotW * qty) / 1000;
+            (map[ym] = map[ym] || {});
+            map[ym][product.material_id] = (map[ym][product.material_id] || 0) + kg;
+        });
+        return map;
+    }, [productionLogs, products]);
+
+    const last6Months = useMemo(() => {
+        const [y, m] = anMonth.split('-').map(Number);
+        const arr = [];
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(y, (m - 1) - i, 1);
+            arr.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        }
+        return arr;
+    }, [anMonth]);
+
+    const consumptionAnalysis = useMemo(() => {
+        const thisM = consumptionByMonth[anMonth] || {};
+        const prevKey = last6Months[last6Months.length - 2];
+        const prevM = consumptionByMonth[prevKey] || {};
+        const totals = {};
+        last6Months.forEach(mm => {
+            const obj = consumptionByMonth[mm] || {};
+            Object.entries(obj).forEach(([id, kg]) => { totals[id] = (totals[id] || 0) + kg; });
+        });
+        const topIds = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id]) => id);
+        const chartData = last6Months.map(mm => {
+            const row = { month: mm.slice(2) };
+            topIds.forEach(id => { row[matName(id)] = Math.round(((consumptionByMonth[mm] || {})[id] || 0) * 10) / 10; });
+            return row;
+        });
+        const ids = new Set([...Object.keys(thisM), ...Object.keys(prevM)]);
+        const rows = [...ids].map(id => {
+            const cur = thisM[id] || 0, prev = prevM[id] || 0;
+            const change = prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : (cur > 0 ? null : 0);
+            return { id, name: matName(id), cur, prev, change };
+        }).sort((a, b) => b.cur - a.cur);
+        return { chartData, topIds, rows };
+    }, [consumptionByMonth, anMonth, last6Months, materials]);
+
+    const stepMonth = (delta) => {
+        const [y, m] = anMonth.split('-').map(Number);
+        const d = new Date(y, (m - 1) + delta, 1);
+        setAnMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    };
+    const MC_PALETTE = ['#6366f1', '#16a34a', '#f59e0b', '#ef4444', '#06b6d4'];
 
     const [trackingDate, setTrackingDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -448,6 +515,64 @@ const Materials = () => {
                     color: 'var(--success)'
                 }
             ]} />
+
+            {/* 월 소모량 분석 — 월별 추이(원재료별) + 전월 대비 */}
+            <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)' }}>📉 원재료 월 소모량 분석</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button className="icon-btn" onClick={() => stepMonth(-1)}>◀</button>
+                        <input type="month" className="form-input" style={{ width: 150 }} value={anMonth} onChange={(e) => setAnMonth(e.target.value)} />
+                        <button className="icon-btn" onClick={() => stepMonth(1)}>▶</button>
+                    </div>
+                </div>
+
+                {consumptionAnalysis.topIds.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={230}>
+                        <LineChart data={consumptionAnalysis.chartData} margin={{ top: 5, right: 16, left: -18, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                            <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} />
+                            <Tooltip formatter={(v) => `${v} kg`} />
+                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                            {consumptionAnalysis.topIds.map((id, i) => (
+                                <Line key={id} type="monotone" dataKey={matName(id)} stroke={MC_PALETTE[i % MC_PALETTE.length]} strokeWidth={2} dot={{ r: 2 }} />
+                            ))}
+                        </LineChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem', fontSize: '0.9rem' }}>
+                        생산 기록(일일작업현황)이 있어야 소모량이 집계됩니다.
+                    </div>
+                )}
+
+                {consumptionAnalysis.rows.length > 0 && (
+                    <div style={{ marginTop: '1rem', overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                            <thead>
+                                <tr style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                                    <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid var(--border)' }}>원재료</th>
+                                    <th style={{ textAlign: 'right', padding: '8px 6px', borderBottom: '1px solid var(--border)' }}>이번달</th>
+                                    <th style={{ textAlign: 'right', padding: '8px 6px', borderBottom: '1px solid var(--border)' }}>전월</th>
+                                    <th style={{ textAlign: 'right', padding: '8px 6px', borderBottom: '1px solid var(--border)' }}>증감</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {consumptionAnalysis.rows.map(r => (
+                                    <tr key={r.id}>
+                                        <td style={{ padding: '8px 6px', borderBottom: '1px solid var(--border)', fontWeight: 600, color: 'var(--text-main)' }}>{r.name}</td>
+                                        <td style={{ padding: '8px 6px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontWeight: 700 }}>{r.cur.toFixed(1)} kg</td>
+                                        <td style={{ padding: '8px 6px', borderBottom: '1px solid var(--border)', textAlign: 'right', color: 'var(--text-muted)' }}>{r.prev.toFixed(1)} kg</td>
+                                        <td style={{ padding: '8px 6px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontWeight: 700, color: r.change == null ? '#6366f1' : r.change > 0 ? '#dc2626' : r.change < 0 ? '#16a34a' : 'var(--text-muted)' }}>
+                                            {r.change == null ? '신규' : r.change === 0 ? '–' : `${r.change > 0 ? '▲' : '▼'} ${Math.abs(r.change)}%`}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
 
             <Table
                 columns={columns}

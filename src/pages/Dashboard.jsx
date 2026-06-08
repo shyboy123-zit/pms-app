@@ -93,8 +93,9 @@ const Dashboard = () => {
     const [viewerImages, setViewerImages] = useState([]);
     const [isViewerOpen, setIsViewerOpen] = useState(false);
 
-    // 원재료 소모 날짜 선택
+    // 원재료 소모 날짜 선택 + 일/월 모드
     const [mcDate, setMcDate] = useState(new Date().toISOString().split('T')[0]);
+    const [mcMode, setMcMode] = useState('day'); // 'day' | 'month'
 
     // image_url 파싱 (단일 URL 또는 JSON 배열 호환)
     const parseImageUrls = (imageUrl) => {
@@ -134,7 +135,10 @@ const Dashboard = () => {
     const materialConsumption = (() => {
         const consumptionMap = {};
 
-        const filteredLogs = productionLogs.filter(log => log.production_date === mcDate);
+        const monthKey = mcDate.slice(0, 7);
+        const filteredLogs = productionLogs.filter(log =>
+            mcMode === 'month' ? (log.production_date || '').startsWith(monthKey) : log.production_date === mcDate
+        );
 
         filteredLogs.forEach(log => {
             const dailyQty = log.daily_quantity || 0;
@@ -766,26 +770,31 @@ const Dashboard = () => {
                     <div className="widget-header">
                         <h3>
                             <Droplets size={20} />
-                            원재료 소모 현황
+                            원재료 소모 현황 <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)' }}>({mcMode === 'month' ? '월별' : '일별'})</span>
                         </h3>
                         <div className="mc-date-picker">
+                            <div style={{ display: 'inline-flex', gap: 2, background: 'var(--bg-subtle)', borderRadius: 8, padding: 2, marginRight: 6 }}>
+                                <button onClick={() => setMcMode('day')} style={{ padding: '4px 10px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700, border: 'none', cursor: 'pointer', background: mcMode === 'day' ? 'var(--bg-card, #fff)' : 'transparent', color: mcMode === 'day' ? 'var(--primary)' : 'var(--text-muted)' }}>일별</button>
+                                <button onClick={() => setMcMode('month')} style={{ padding: '4px 10px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700, border: 'none', cursor: 'pointer', background: mcMode === 'month' ? 'var(--bg-card, #fff)' : 'transparent', color: mcMode === 'month' ? 'var(--primary)' : 'var(--text-muted)' }}>월별</button>
+                            </div>
                             <button className="mc-date-btn" onClick={() => {
                                 const d = new Date(mcDate);
-                                d.setDate(d.getDate() - 1);
+                                if (mcMode === 'month') d.setMonth(d.getMonth() - 1); else d.setDate(d.getDate() - 1);
                                 setMcDate(d.toISOString().split('T')[0]);
                             }}>◀</button>
-                            <input
-                                type="date"
-                                className="mc-date-input"
-                                value={mcDate}
-                                onChange={(e) => setMcDate(e.target.value)}
-                            />
+                            {mcMode === 'month' ? (
+                                <input type="month" className="mc-date-input" value={mcDate.slice(0, 7)}
+                                    onChange={(e) => setMcDate(e.target.value + '-01')} />
+                            ) : (
+                                <input type="date" className="mc-date-input" value={mcDate}
+                                    onChange={(e) => setMcDate(e.target.value)} />
+                            )}
                             <button className="mc-date-btn" onClick={() => {
                                 const d = new Date(mcDate);
-                                d.setDate(d.getDate() + 1);
+                                if (mcMode === 'month') d.setMonth(d.getMonth() + 1); else d.setDate(d.getDate() + 1);
                                 setMcDate(d.toISOString().split('T')[0]);
                             }}>▶</button>
-                            <button className="mc-today-btn" onClick={() => setMcDate(today)}>Today</button>
+                            <button className="mc-today-btn" onClick={() => setMcDate(today)}>{mcMode === 'month' ? '이번달' : 'Today'}</button>
                         </div>
                     </div>
                     <div className="widget-content">

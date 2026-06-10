@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import AnalyticsSection from '../components/AnalyticsSection';
 import FactoryFloorMap from '../components/FactoryFloorMap';
+import WorkStandardSheet from '../components/WorkStandardSheet';
 import {
     Activity,
     AlertTriangle,
@@ -1653,6 +1654,11 @@ const Dashboard = () => {
                     padding: 0 4px;
                 }
             `}</style>
+
+            {/* ──────────────── 작업표준서 다운로드 (사출조건 + 불량이력 연동) ──────────────── */}
+            <div className="widgets-grid" style={{ marginTop: '1.5rem' }}>
+                <WorkStandardSheet />
+            </div>
 
             {/* ──────────────── 30일 분석 섹션 (Phase 3a) — 관리자 전용 ──────────────── */}
             {isAdmin && <AnalyticsSection />}

@@ -119,8 +119,8 @@ const Dashboard = () => {
     // 2. 안전재고 미달 원재료
     const lowStockMaterials = materials.filter(m => m.stock < m.min_stock);
 
-    // 2-1. 안전재고 미달 완제품
-    const lowStockProducts = products.filter(p => p.min_stock > 0 && getProductStock(p) < p.min_stock);
+    // 2-1. 안전재고 미달 완제품 (단종 제품은 재고부족 경고에서 제외)
+    const lowStockProducts = products.filter(p => p.status !== '단종' && p.min_stock > 0 && getProductStock(p) < p.min_stock);
 
     // 3. 일일 불량 현황
     const todayInspections = inspections.filter(i => i.date === today);

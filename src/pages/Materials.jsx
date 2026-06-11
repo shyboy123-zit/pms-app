@@ -268,13 +268,22 @@ const Materials = () => {
             }
         }
         const price = parseFloat(incomingEditForm.unit_price) || 0;
-        await updateVoucher(editingIncoming.id, {
+        // total_amount 는 DB 생성 컬럼(quantity*unit_price 자동) — 보내면 안 됨
+        const { error } = await updateVoucher(editingIncoming.id, {
             client: incomingEditForm.client,
             quantity: newQty,
             unit_price: price,
-            total_amount: newQty * price,
             voucher_date: incomingEditForm.voucher_date,
         });
+        if (error) {
+            // 수량 보정 롤백
+            if (delta !== 0) {
+                const mat = (materials || []).find(m => m.name === editingIncoming.item_name);
+                if (mat) await updateMaterial(mat.id, { stock: (parseFloat(mat.stock) || 0) - delta });
+            }
+            alert('수정에 실패했습니다: ' + (error.message || error));
+            return;
+        }
         setEditingIncoming(null);
         alert('✓ 입고 내역이 수정되었습니다.' + (delta !== 0 ? `\n재고 ${delta > 0 ? '+' : ''}${delta} 보정됨.` : ''));
     };

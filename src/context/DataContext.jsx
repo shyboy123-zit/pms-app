@@ -680,7 +680,16 @@ export const DataProvider = ({ children }) => {
         const { error } = await supabase.from('products').delete().eq('id', id);
         if (error) {
             console.error('Error deleting product:', error);
-            alert('제품 삭제에 실패했습니다.');
+            // 외래키 위반(23503)이면 어느 데이터가 막는지 안내
+            if (error.code === '23503') {
+                alert(
+                    '이 제품은 다른 데이터(작업지시·생산실적·재고·검사 등)에서 사용 중이라 삭제할 수 없습니다.\n' +
+                    '먼저 연결된 데이터를 정리하거나, 삭제 대신 상태를 "단종"으로 변경하세요.\n\n' +
+                    `상세: ${error.details || error.message}`
+                );
+            } else {
+                alert(`제품 삭제에 실패했습니다.\n\n사유: ${error.message}${error.details ? '\n상세: ' + error.details : ''}${error.hint ? '\n힌트: ' + error.hint : ''}`);
+            }
             return;
         }
         setProducts(products.filter(p => p.id !== id));

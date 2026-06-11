@@ -17,6 +17,8 @@ const Materials = () => {
         addPurchaseRequest,
         vouchers,
         addVoucher,
+        updateVoucher,
+        deleteVoucher,
         productionLogs,
         products,
         suppliers
@@ -235,6 +237,59 @@ const Materials = () => {
 
         setIsOrderModalOpen(false);
         setOrderItem(null);
+    };
+
+    // 입고 기록(매입 전표) 수정 — 일일 입출고 조회에서 직접 수정/삭제
+    const [editingIncoming, setEditingIncoming] = useState(null); // 수정 대상 voucher
+    const [incomingEditForm, setIncomingEditForm] = useState({ client: '', quantity: 0, unit_price: 0, voucher_date: '' });
+
+    const openIncomingEdit = (voucher) => {
+        setEditingIncoming(voucher);
+        setIncomingEditForm({
+            client: voucher.client || '',
+            quantity: parseFloat(voucher.quantity) || 0,
+            unit_price: parseFloat(voucher.unit_price) || 0,
+            voucher_date: voucher.voucher_date || new Date().toISOString().split('T')[0],
+        });
+    };
+
+    const saveIncomingEdit = async () => {
+        if (!editingIncoming) return;
+        const newQty = parseFloat(incomingEditForm.quantity) || 0;
+        if (newQty <= 0) return alert('수량은 0보다 커야 합니다.');
+        const oldQty = parseFloat(editingIncoming.quantity) || 0;
+        const delta = newQty - oldQty;
+
+        // 수량이 바뀌면 원재료 재고도 그만큼 보정 (입고 시 재고에 더해졌으므로)
+        if (delta !== 0) {
+            const mat = (materials || []).find(m => m.name === editingIncoming.item_name);
+            if (mat) {
+                await updateMaterial(mat.id, { stock: (parseFloat(mat.stock) || 0) + delta });
+            }
+        }
+        const price = parseFloat(incomingEditForm.unit_price) || 0;
+        await updateVoucher(editingIncoming.id, {
+            client: incomingEditForm.client,
+            quantity: newQty,
+            unit_price: price,
+            total_amount: newQty * price,
+            voucher_date: incomingEditForm.voucher_date,
+        });
+        setEditingIncoming(null);
+        alert('✓ 입고 내역이 수정되었습니다.' + (delta !== 0 ? `\n재고 ${delta > 0 ? '+' : ''}${delta} 보정됨.` : ''));
+    };
+
+    const deleteIncoming = async () => {
+        if (!editingIncoming) return;
+        if (!window.confirm(`'${editingIncoming.item_name}' 입고 기록을 삭제합니다.\n재고에서 ${parseFloat(editingIncoming.quantity).toLocaleString()}${editingIncoming.unit || ''} 차감되고 매입 전표가 제거됩니다.\n진행하시겠습니까?`)) return;
+        const oldQty = parseFloat(editingIncoming.quantity) || 0;
+        const mat = (materials || []).find(m => m.name === editingIncoming.item_name);
+        if (mat) {
+            await updateMaterial(mat.id, { stock: (parseFloat(mat.stock) || 0) - oldQty });
+        }
+        await deleteVoucher(editingIncoming.id);
+        setEditingIncoming(null);
+        alert('✓ 입고 기록이 삭제되고 재고가 차감되었습니다.');
     };
 
     // 원재료 입고 등록
@@ -935,6 +990,56 @@ const Materials = () => {
                 </div>
             </Modal>
 
+            {/* 입고 기록 수정 모달 */}
+            <Modal title="입고 내역 수정" isOpen={!!editingIncoming} onClose={() => setEditingIncoming(null)}>
+                {editingIncoming && (
+                    <div>
+                        <div style={{ background: 'var(--bg-subtle)', padding: '0.75rem 1rem', borderRadius: 8, marginBottom: '1rem', fontSize: '0.9rem' }}>
+                            <strong>자재:</strong> {editingIncoming.item_name}
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">거래처(공급사)</label>
+                            <select className="form-input" value={incomingEditForm.client}
+                                onChange={(e) => setIncomingEditForm({ ...incomingEditForm, client: e.target.value })}>
+                                <option value="">— 거래처 선택 —</option>
+                                {supplierNames.map(name => <option key={name} value={name}>{name}</option>)}
+                                {incomingEditForm.client && !supplierNames.includes(incomingEditForm.client) && (
+                                    <option value={incomingEditForm.client}>{incomingEditForm.client} (미등록)</option>
+                                )}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">입고일</label>
+                            <input type="date" className="form-input" value={incomingEditForm.voucher_date}
+                                onChange={(e) => setIncomingEditForm({ ...incomingEditForm, voucher_date: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">입고 수량 ({editingIncoming.unit || 'kg'})</label>
+                            <input type="number" className="form-input" value={incomingEditForm.quantity}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => setIncomingEditForm({ ...incomingEditForm, quantity: parseFloat(e.target.value) || 0 })} />
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 4, display: 'block' }}>수량을 바꾸면 원재료 재고가 차이만큼 자동 보정됩니다.</span>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">단가</label>
+                            <input type="number" className="form-input" value={incomingEditForm.unit_price}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => setIncomingEditForm({ ...incomingEditForm, unit_price: parseFloat(e.target.value) || 0 })} />
+                        </div>
+                        <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', marginTop: '1rem' }}>
+                            <button className="btn-cancel" onClick={deleteIncoming}
+                                style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '0.5rem 1rem', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                                🗑 입고 삭제
+                            </button>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button className="btn-cancel" onClick={() => setEditingIncoming(null)}>취소</button>
+                                <button className="btn-submit" onClick={saveIncomingEdit}>저장</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
             {/* 일일 입출고 조회 */}
             <div className="usage-history-section">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '2px solid var(--border)' }}>
@@ -1009,6 +1114,7 @@ const Materials = () => {
                                                 <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>자재명</th>
                                                 <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>수량</th>
                                                 <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>비고</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600, width: 70 }}>수정</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -1022,6 +1128,12 @@ const Materials = () => {
                                                         +{parseFloat(t.quantity).toLocaleString()} {t.unit}
                                                     </td>
                                                     <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{t.client || '-'}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                        <button onClick={() => openIncomingEdit(t)} title="입고 수정"
+                                                            style={{ background: '#eef2ff', color: '#4f46e5', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
+                                                            ✏️ 수정
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             ))}
                                             {dayOutgoing.map((u) => (
@@ -1036,6 +1148,7 @@ const Materials = () => {
                                                     <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                                                         {u.work_order ? `작업: ${u.work_order}` : ''}{u.work_order && u.notes ? ' / ' : ''}{u.notes || (!u.work_order ? '-' : '')}
                                                     </td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center', color: '#cbd5e1', fontSize: '0.8rem' }}>—</td>
                                                 </tr>
                                             ))}
                                         </tbody>

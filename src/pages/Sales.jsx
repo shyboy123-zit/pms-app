@@ -17,6 +17,7 @@ const Sales = () => {
     const [editingId, setEditingId] = useState(null);
     const [voucherFilter, setVoucherFilter] = useState('all'); // 'all', '매입', '매출'
     const [reconView, setReconView] = useState('monthly'); // 'monthly', 'client'
+    const [reconClient, setReconClient] = useState(''); // 거래처별 월별 대사에서 선택된 거래처
     const [clientSearch, setClientSearch] = useState('');
     const [showClientDropdown, setShowClientDropdown] = useState(false);
     const [clientFilter, setClientFilter] = useState('all'); // 거래처별 필터
@@ -384,6 +385,29 @@ const Sales = () => {
             return (b.txSales + b.txPurchases) - (a.txSales + a.txPurchases);
         });
     }, [inventoryTransactions, vouchers, selectedYear]);
+
+    // 거래처별 월별 매입/매출 (마감용) — 선택한 거래처의 1~12월 전표 기준 집계
+    const clientMonthlyData = useMemo(() => {
+        if (!reconClient) return null;
+        const months = Array.from({ length: 12 }, (_, i) => ({
+            month: i + 1, monthLabel: `${i + 1}월`, sales: 0, purchases: 0
+        }));
+        (vouchers || []).forEach(v => {
+            if (v.client !== reconClient) return;
+            const d = (v.voucher_date || '');
+            if (!d.startsWith(String(selectedYear))) return;
+            const m = parseInt(d.slice(5, 7), 10);
+            if (!(m >= 1 && m <= 12)) return;
+            const amount = parseFloat(v.total_amount || v.quantity * v.unit_price || 0);
+            if (v.voucher_type === '매출') months[m - 1].sales += amount;
+            else if (v.voucher_type === '매입') months[m - 1].purchases += amount;
+        });
+        const totals = months.reduce((acc, m) => ({
+            sales: acc.sales + m.sales,
+            purchases: acc.purchases + m.purchases
+        }), { sales: 0, purchases: 0 });
+        return { months, totals };
+    }, [vouchers, selectedYear, reconClient]);
 
     // 전표 테이블 컬럼
     const voucherColumns = [
@@ -861,10 +885,74 @@ const Sales = () => {
                         </div>
                     )}
 
+                    {/* 거래처별 월별 매입/매출 (마감용) */}
+                    {reconView === 'client' && (
+                        <div className="glass-panel table-section" style={{ marginBottom: '1.5rem' }}>
+                            <h3 className="section-title"><TrendingUp size={18} /> 거래처별 월별 매입/매출 (마감용)</h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                                <label style={{ fontWeight: 600, color: '#475569' }}>거래처 선택</label>
+                                <select
+                                    className="form-input"
+                                    style={{ maxWidth: 280 }}
+                                    value={reconClient}
+                                    onChange={(e) => setReconClient(e.target.value)}
+                                >
+                                    <option value="">— 거래처를 선택하세요 —</option>
+                                    {clientList.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                                <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{selectedYear}년 · 전표 기준</span>
+                            </div>
+                            {!reconClient ? (
+                                <p style={{ color: '#94a3b8', textAlign: 'center', padding: '1.5rem' }}>거래처를 선택하면 1~12월 매출/매입이 표시됩니다.</p>
+                            ) : !clientMonthlyData || (clientMonthlyData.totals.sales === 0 && clientMonthlyData.totals.purchases === 0) ? (
+                                <p style={{ color: '#94a3b8', textAlign: 'center', padding: '1.5rem' }}>{selectedYear}년 해당 거래처의 전표가 없습니다.</p>
+                            ) : (
+                                <div className="closing-table-wrapper">
+                                    <table className="closing-table recon-table">
+                                        <thead>
+                                            <tr>
+                                                <th>월</th>
+                                                <th className="recon-header-sales">매출</th>
+                                                <th className="recon-header-purchase">매입</th>
+                                                <th>순액 (매출−매입)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {clientMonthlyData.months.map(m => {
+                                                const net = m.sales - m.purchases;
+                                                const empty = m.sales === 0 && m.purchases === 0;
+                                                return (
+                                                    <tr key={m.month} className={empty ? '' : undefined} style={empty ? { color: '#cbd5e1' } : undefined}>
+                                                        <td style={{ fontWeight: 600, textAlign: 'left' }}>{m.monthLabel}</td>
+                                                        <td className="amount-cell">{m.sales > 0 ? `₩${m.sales.toLocaleString()}` : '-'}</td>
+                                                        <td className="amount-cell">{m.purchases > 0 ? `₩${m.purchases.toLocaleString()}` : '-'}</td>
+                                                        <td className="amount-cell" style={{ fontWeight: 600, color: net > 0 ? '#059669' : net < 0 ? '#dc2626' : 'inherit' }}>
+                                                            {net !== 0 ? `${net > 0 ? '+' : ''}₩${net.toLocaleString()}` : '-'}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            <tr style={{ borderTop: '2px solid #94a3b8', fontWeight: 700, background: '#f8fafc' }}>
+                                                <td style={{ textAlign: 'left' }}>합계</td>
+                                                <td className="amount-cell">₩{clientMonthlyData.totals.sales.toLocaleString()}</td>
+                                                <td className="amount-cell">₩{clientMonthlyData.totals.purchases.toLocaleString()}</td>
+                                                <td className="amount-cell" style={{ color: (clientMonthlyData.totals.sales - clientMonthlyData.totals.purchases) >= 0 ? '#059669' : '#dc2626' }}>
+                                                    {(() => { const n = clientMonthlyData.totals.sales - clientMonthlyData.totals.purchases; return `${n > 0 ? '+' : ''}₩${n.toLocaleString()}`; })()}
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* 거래처별 대사 테이블 */}
                     {reconView === 'client' && (
                         <div className="glass-panel table-section">
-                            <h3 className="section-title"><Search size={18} /> 거래처별 입출고 vs 전표 비교</h3>
+                            <h3 className="section-title"><Search size={18} /> 거래처별 입출고 vs 전표 비교 (연간)</h3>
                             {clientReconciliationData.length === 0 ? (
                                 <p style={{ color: '#94a3b8', textAlign: 'center', padding: '2rem' }}>거래처 데이터가 없습니다.</p>
                             ) : (

@@ -46,6 +46,7 @@ const Products = () => {
         cavity_count: 1,
         material_id: '',
         min_stock: 0,
+        max_stock: 0,
         status: '생산중'
     });
 
@@ -95,15 +96,21 @@ const Products = () => {
             header: '재고', accessor: 'stock', render: (row) => {
                 const currentStock = getProductStock(row);
                 const isLow = row.min_stock > 0 && currentStock < row.min_stock;
+                const isOver = row.max_stock > 0 && currentStock > row.max_stock;
                 return (
                     <div style={{ minWidth: 130 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <span style={{ fontWeight: 600, color: isLow ? '#dc2626' : 'inherit' }}>
+                            <span style={{ fontWeight: 600, color: isLow ? '#dc2626' : isOver ? '#d97706' : 'inherit' }}>
                                 {currentStock.toLocaleString()} {row.unit}
                             </span>
                             {isLow && (
                                 <span style={{ padding: '1px 6px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: 700, background: '#fee2e2', color: '#dc2626' }}>
                                     부족
+                                </span>
+                            )}
+                            {isOver && (
+                                <span style={{ padding: '1px 6px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: 700, background: '#fef3c7', color: '#d97706' }}>
+                                    초과
                                 </span>
                             )}
                         </div>
@@ -117,6 +124,7 @@ const Products = () => {
             }
         },
         { header: '안전재고', accessor: 'min_stock', render: (row) => row.min_stock > 0 ? `${(row.min_stock).toLocaleString()} ${row.unit}` : '-' },
+        { header: '초과재고', accessor: 'max_stock', render: (row) => row.max_stock > 0 ? `${(row.max_stock).toLocaleString()} ${row.unit}` : '-' },
         {
             header: '상태', accessor: 'status', render: (row) => (
                 <span className={`status-badge ${row.status === '생산중' ? 'status-active' : 'status-danger'}`}>
@@ -153,6 +161,7 @@ const Products = () => {
             cavity_count: product.cavity_count || 1,
             material_id: product.material_id || '',
             min_stock: product.min_stock || 0,
+            max_stock: product.max_stock || 0,
             status: product.status
         });
         setIsEditMode(true);
@@ -178,6 +187,7 @@ const Products = () => {
             cavity_count: 1,
             material_id: '',
             min_stock: 0,
+            max_stock: 0,
             status: '생산중'
         });
         setCurrentProduct(null);
@@ -203,6 +213,7 @@ const Products = () => {
                             { key: 'standard_cycle_time', label: '표준사이클타임(초)', sample: 30, parse: parsers.number, format: (v) => parseFloat(v || 0) },
                             { key: 'unit_price', label: '단가', sample: 5000, parse: parsers.number, format: (v) => parseFloat(v || 0) },
                             { key: 'min_stock', label: '안전재고', sample: 100, parse: parsers.number, format: (v) => parseFloat(v || 0) },
+                            { key: 'max_stock', label: '초과재고', sample: 1000, parse: parsers.number, format: (v) => parseFloat(v || 0) },
                             { key: 'status', label: '상태', sample: '생산중', parse: parsers.string }
                         ]}
                         fileName="제품목록"
@@ -221,6 +232,7 @@ const Products = () => {
                                         standard_cycle_time: parseInt(r.standard_cycle_time) || 30,
                                         unit_price: parseFloat(r.unit_price) || 0,
                                         min_stock: parseFloat(r.min_stock) || 0,
+                                        max_stock: parseFloat(r.max_stock) || 0,
                                         status: r.status || '생산중'
                                     });
                                     ok++;
@@ -426,6 +438,19 @@ const Products = () => {
                         placeholder="예: 100"
                     />
                     <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>현재 재고는 입출고관리 재고현황에서 자동 계산됩니다</span>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">초과재고 수량 (상한선)</label>
+                    <input
+                        type="number"
+                        className="form-input"
+                        value={formData.max_stock}
+                        onChange={(e) => setFormData({ ...formData, max_stock: parseInt(e.target.value) || 0 })}
+                        onFocus={(e) => e.target.select()}
+                        min="0"
+                        placeholder="예: 1000 (0이면 경고 없음)"
+                    />
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>현재고가 이 수량을 넘으면 대시보드에 초과재고 경고가 표시됩니다</span>
                 </div>
                 <div className="form-group">
                     <label className="form-label">상태</label>

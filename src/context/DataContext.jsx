@@ -659,6 +659,7 @@ export const DataProvider = ({ children }) => {
             cavity_count: item.cavity_count || 1,
             material_id: item.material_id || null,
             min_stock: item.min_stock || 0,
+            max_stock: item.max_stock || 0,
             status: item.status || '생산중'
         }]).select();
 

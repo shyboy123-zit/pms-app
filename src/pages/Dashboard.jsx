@@ -122,6 +122,9 @@ const Dashboard = () => {
     // 2-1. 안전재고 미달 완제품 (단종 제품은 재고부족 경고에서 제외)
     const lowStockProducts = products.filter(p => p.status !== '단종' && p.min_stock > 0 && getProductStock(p) < p.min_stock);
 
+    // 2-2. 초과재고 완제품 (현재고 > 초과재고 상한선, 단종 제외)
+    const overStockProducts = products.filter(p => p.status !== '단종' && p.max_stock > 0 && getProductStock(p) > p.max_stock);
+
     // 3. 일일 불량 현황
     const todayInspections = inspections.filter(i => i.date === today);
     const todayDefects = todayInspections.filter(i => i.result === 'NG');
@@ -271,6 +274,17 @@ const Dashboard = () => {
                     </div>
                 </div>
 
+                <div className={`stat-card overstock ${overStockProducts.length > 0 ? 'warning' : ''}`} style={{ cursor: 'pointer' }} onClick={() => setCardModal('overstock')}>
+                    <div className="stat-icon">
+                        <Package />
+                    </div>
+                    <div className="stat-content">
+                        <p className="stat-label">초과재고</p>
+                        <h3 className="stat-value">{overStockProducts.length}건</h3>
+                        <p className="stat-desc">초과재고 상한선 초과</p>
+                    </div>
+                </div>
+
                 <div className={`stat-card defect ${todayDefects.length > 0 ? 'warning' : 'good'}`} style={{ cursor: 'pointer' }} onClick={() => setCardModal('defect')}>
                     <div className="stat-icon">
                         <AlertCircle />
@@ -285,7 +299,7 @@ const Dashboard = () => {
 
             {/* 상단 카드 클릭 → 상세 내역 모달 */}
             <Modal
-                title={cardModal === 'running' ? '🟢 가동중인 설비' : cardModal === 'lowstock' ? '⚠️ 재고 부족 항목' : '🔴 금일 불량 내역'}
+                title={cardModal === 'running' ? '🟢 가동중인 설비' : cardModal === 'lowstock' ? '⚠️ 재고 부족 항목' : cardModal === 'overstock' ? '📦 초과재고 항목' : '🔴 금일 불량 내역'}
                 isOpen={!!cardModal}
                 onClose={() => setCardModal(null)}
             >
@@ -327,6 +341,20 @@ const Dashboard = () => {
                             </>
                         ) : <div className="cd-empty">안전재고 미달 항목이 없습니다. ✓</div>
                     )}
+                    {cardModal === 'overstock' && (
+                        overStockProducts.length > 0 ? (
+                            overStockProducts.map(p => {
+                                const cur = getProductStock(p);
+                                return (
+                                    <div key={'os' + p.id} className="cd-row">
+                                        <span className="cd-tag prod">제품</span>
+                                        <span className="cd-name">{p.name}</span>
+                                        <span className="cd-val warn">{cur.toLocaleString()} / 상한 {(p.max_stock || 0).toLocaleString()} {p.unit || ''}</span>
+                                    </div>
+                                );
+                            })
+                        ) : <div className="cd-empty">초과재고 항목이 없습니다. ✓</div>
+                    )}
                     {cardModal === 'defect' && (
                         todayDefects.length > 0 ? todayDefects.map(i => (
                             <div key={i.id} className="cd-row">
@@ -344,6 +372,7 @@ const Dashboard = () => {
                     .cd-mid { color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
                     .cd-val { font-weight: 700; color: var(--text-main); white-space: nowrap; }
                     .cd-val.danger { color: var(--danger); }
+                    .cd-val.warn { color: #d97706; }
                     .cd-tag { font-size: 0.68rem; font-weight: 800; padding: 2px 7px; border-radius: 6px; flex-shrink: 0; }
                     .cd-tag.mat { background: #fef3c7; color: #b45309; }
                     .cd-tag.prod { background: #dbeafe; color: #1d4ed8; }
@@ -984,6 +1013,16 @@ const Dashboard = () => {
                 .stat-card.stock.alert .stat-icon {
                     background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
                     color: #991b1b;
+                }
+
+                .stat-card.overstock .stat-icon {
+                    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+                    color: #1e40af;
+                }
+
+                .stat-card.overstock.warning .stat-icon {
+                    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+                    color: #92400e;
                 }
 
                 .stat-card.defect .stat-icon {

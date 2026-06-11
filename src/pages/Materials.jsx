@@ -18,8 +18,15 @@ const Materials = () => {
         vouchers,
         addVoucher,
         productionLogs,
-        products
+        products,
+        suppliers
     } = useData();
+
+    // 공급사 드롭다운 옵션 (거래처 마스터 기준, 이름 정렬)
+    const supplierNames = useMemo(
+        () => Array.from(new Set((suppliers || []).map(s => s.name).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+        [suppliers]
+    );
     const { can } = useAuth();
 
     // ===== 월 소모량 분석 =====
@@ -665,7 +672,15 @@ const Materials = () => {
                 </div>
                 <div className="form-group">
                     <label className="form-label">공급사</label>
-                    <input className="form-input" value={newItem.supplier} onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })} />
+                    <select className="form-input" value={newItem.supplier} onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })}>
+                        <option value="">— 거래처 선택 —</option>
+                        {supplierNames.map(name => (
+                            <option key={name} value={name}>{name}</option>
+                        ))}
+                        {newItem.supplier && !supplierNames.includes(newItem.supplier) && (
+                            <option value={newItem.supplier}>{newItem.supplier} (미등록)</option>
+                        )}
+                    </select>
                 </div>
 
                 <div className="modal-actions">
@@ -795,12 +810,24 @@ const Materials = () => {
                 </div>
                 <div className="form-group">
                     <label className="form-label">공급사</label>
-                    <input
+                    <select
                         className="form-input"
                         value={incomingData.supplier}
                         onChange={(e) => setIncomingData({ ...incomingData, supplier: e.target.value })}
-                        placeholder="공급사명"
-                    />
+                    >
+                        <option value="">— 거래처 선택 —</option>
+                        {supplierNames.map(name => (
+                            <option key={name} value={name}>{name}</option>
+                        ))}
+                        {incomingData.supplier && !supplierNames.includes(incomingData.supplier) && (
+                            <option value={incomingData.supplier}>{incomingData.supplier} (미등록)</option>
+                        )}
+                    </select>
+                    {supplierNames.length === 0 && (
+                        <span style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: 4, display: 'block' }}>
+                            등록된 거래처가 없습니다. 거래처 관리에서 먼저 등록하세요.
+                        </span>
+                    )}
                 </div>
                 <div className="form-group">
                     <label className="form-label">발주 수량 <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(주문한 수량)</span></label>

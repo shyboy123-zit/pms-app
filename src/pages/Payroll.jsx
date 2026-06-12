@@ -156,7 +156,9 @@ const Payroll = () => {
         mealAllowance: '',    // 식대 (비과세)
         transportAllowance: '',// 교통비 (비과세)
         dependents: '1',      // 부양가족 수
-        childDependents: '0'  // 자녀 수
+        childDependents: '0', // 자녀 수
+        yearEndTax: '',       // 연말정산 정산세액 (2월)
+        yearEndType: 'refund' // refund(환급) | pay(추가납부)
     });
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [showPaystub, setShowPaystub] = useState(false);
@@ -309,7 +311,13 @@ const Payroll = () => {
         // 지방소득세 (소득세의 10%)
         const localIncomeTax = Math.round(incomeTax * 0.1);
 
-        const totalDeduction = totalInsurance + incomeTax + localIncomeTax;
+        // 연말정산 정산세액 (보통 2월 급여 반영): 환급(+)이면 공제 감소, 추가납부(−)면 공제 증가
+        const yearEndAmount = parseFloat(payData.yearEndTax) || 0;
+        const yearEndType = payData.yearEndType || 'refund';
+        // 공제에 더하는 보정값: 추가납부면 +금액(공제↑), 환급이면 -금액(공제↓)
+        const yearEndAdjust = yearEndType === 'pay' ? yearEndAmount : -yearEndAmount;
+
+        const totalDeduction = totalInsurance + incomeTax + localIncomeTax + yearEndAdjust;
         const netPay = totalPay - totalDeduction;
 
         return {
@@ -318,7 +326,7 @@ const Payroll = () => {
             holidayBonus, performanceBonus, weeklyHolidayPay,
             taxableTotal, nonTaxMeal, nonTaxTransport, nonTaxTotal, totalPay,
             nationalPension, healthInsurance, longTermCare, employmentInsurance, totalInsurance,
-            incomeTax, localIncomeTax, totalDeduction, netPay,
+            incomeTax, localIncomeTax, yearEndAmount, yearEndType, yearEndAdjust, totalDeduction, netPay,
             effectiveHourly, monthlyContractHours, is209Pattern, weeklyBreakdown
         };
     }, [payData, payType, rates]);
@@ -449,6 +457,7 @@ const Payroll = () => {
             weeklyWorkedDays: ['', '', '', '', ''],
             nightHours: '', holidayHours: '', // 주말 특근·야간은 실제 근무분만 매월 입력
             bonus: '', performanceBonus: '', holidayBonus: '', annualLeavePay: '',
+            yearEndTax: '', // 연말정산은 2월에만 직접 입력
             ...carried,
             annualLeaveDays: remaining ? String(remaining) : ''
         }));
@@ -1127,6 +1136,35 @@ const Payroll = () => {
                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
                         </div>
                     </div>
+
+                    {/* 연말정산 (2월 급여 반영) */}
+                    <div style={{ marginTop: '12px', padding: '10px 12px', background: month === 2 ? '#eff6ff' : 'var(--card)', border: `1px solid ${month === 2 ? '#bfdbfe' : 'var(--border)'}`, borderRadius: '10px' }}>
+                        <label style={{ fontSize: '0.74rem', fontWeight: 700, color: '#1d4ed8', display: 'block', marginBottom: '6px' }}>
+                            🧾 연말정산 정산세액 {month === 2 ? '(2월 — 해당월)' : '(보통 2월 급여 반영)'}
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
+                            <div>
+                                <select value={payData.yearEndType}
+                                    onChange={(e) => setPayData({ ...payData, yearEndType: e.target.value })}
+                                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }}>
+                                    <option value="refund">환급 (+, 돌려받음)</option>
+                                    <option value="pay">추가납부 (−, 더 냄)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <input type="number" placeholder="0" min="0" value={payData.yearEndTax}
+                                    onChange={(e) => setPayData({ ...payData, yearEndTax: e.target.value })}
+                                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
+                            </div>
+                        </div>
+                        {calculation.yearEndAmount > 0 && (
+                            <div style={{ fontSize: '0.66rem', marginTop: '5px', fontWeight: 600, color: payData.yearEndType === 'pay' ? '#dc2626' : '#059669' }}>
+                                {payData.yearEndType === 'pay'
+                                    ? `추가납부 −${fmt(calculation.yearEndAmount)}원 → 실수령액 차감`
+                                    : `환급 +${fmt(calculation.yearEndAmount)}원 → 실수령액 가산`}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* 계산 결과 */}
@@ -1227,6 +1265,17 @@ const Payroll = () => {
                                 <span style={{ fontWeight: 600, color: '#dc2626' }}>-{fmt(row.value)}원</span>
                             </div>
                         ))}
+                        {/* 연말정산 — 환급(+)/추가납부(−) */}
+                        {calculation.yearEndAmount > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: '0.8rem' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>
+                                    연말정산 {calculation.yearEndType === 'pay' ? '추가납부' : '환급'}
+                                </span>
+                                <span style={{ fontWeight: 600, color: calculation.yearEndType === 'pay' ? '#dc2626' : '#059669' }}>
+                                    {calculation.yearEndType === 'pay' ? '-' : '+'}{fmt(calculation.yearEndAmount)}원
+                                </span>
+                            </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '0.85rem', borderTop: '1px solid var(--border)', marginTop: '4px', fontWeight: 700, color: '#dc2626' }}>
                             <span>공제총액</span>
                             <span>-{fmt(calculation.totalDeduction)}원</span>
@@ -1401,7 +1450,12 @@ const Payroll = () => {
                             { label: '장기요양보험', calc: `건강보험료 × ${(rates.longTermCare * 100).toFixed(2)}%`, value: calculation.longTermCare },
                             { label: '고용보험', calc: `${(rates.employmentInsurance * 100).toFixed(1)}%`, value: calculation.employmentInsurance },
                             { label: '소득세 (갑근세)', calc: '간이세액표', value: calculation.incomeTax },
-                            { label: '지방소득세', calc: '소득세 × 10%', value: calculation.localIncomeTax }
+                            { label: '지방소득세', calc: '소득세 × 10%', value: calculation.localIncomeTax },
+                            ...(calculation.yearEndAmount > 0 ? [{
+                                label: `연말정산 ${calculation.yearEndType === 'pay' ? '추가납부' : '환급'}`,
+                                calc: calculation.yearEndType === 'pay' ? '추가 징수' : '환급 (공제 차감)',
+                                value: calculation.yearEndAdjust
+                            }] : [])
                         ];
 
                         const th = { padding: '7px 8px', background: '#ecfdf5', border: '1px solid #e2e8f0', fontWeight: 600 };

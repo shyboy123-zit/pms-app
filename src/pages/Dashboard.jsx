@@ -180,6 +180,35 @@ const Dashboard = () => {
         return Object.values(consumptionMap).sort((a, b) => b.totalConsumedKg - a.totalConsumedKg);
     })();
 
+    // 진행중 작업지시 남은수량 기준 필요 원재료 (신재/분쇄 비율 반영)
+    const materialRequirement = (() => {
+        const byMaterial = {};
+        const rows = [];
+        (workOrders || []).filter(w => w.status === '진행중').forEach(wo => {
+            const product = products.find(p => p.id === wo.product_id);
+            if (!product) return;
+            const remaining = Math.max(0, (wo.target_quantity || 0) - (wo.produced_quantity || 0));
+            if (remaining <= 0) return;
+            const shotWeight = (product.product_weight || 0) + (product.runner_weight || 0);
+            const neededKg = (shotWeight * remaining) / 1000;
+            if (neededKg <= 0) return;
+            const vr = (product.virgin_ratio ?? 50);
+            const virginKg = neededKg * vr / 100;
+            const regrindKg = neededKg * (100 - vr) / 100;
+            const material = materials.find(m => m.id === product.material_id);
+            const matName = material?.name || '(원재료 미지정)';
+            rows.push({ product: product.name, material: matName, remaining, neededKg, virginKg, regrindKg, vr });
+            if (!byMaterial[matName]) byMaterial[matName] = { material: matName, needed: 0, virgin: 0, regrind: 0, stock: material ? parseFloat(material.stock) || 0 : null };
+            byMaterial[matName].needed += neededKg;
+            byMaterial[matName].virgin += virginKg;
+            byMaterial[matName].regrind += regrindKg;
+        });
+        const mats = Object.values(byMaterial).sort((a, b) => b.needed - a.needed);
+        const totalVirgin = mats.reduce((s, m) => s + m.virgin, 0);
+        const totalRegrind = mats.reduce((s, m) => s + m.regrind, 0);
+        return { rows: rows.sort((a, b) => b.neededKg - a.neededKg), mats, totalVirgin, totalRegrind, totalNeeded: totalVirgin + totalRegrind };
+    })();
+
     return (
         <div className="dashboard-container">
             {/* 실시간 뉴스 속보 티커 */}
@@ -1693,6 +1722,92 @@ const Dashboard = () => {
                     padding: 0 4px;
                 }
             `}</style>
+
+            {/* ──────────────── 작업 필요 원재료 (신재/분쇄 비율) ──────────────── */}
+            <div className="widgets-grid" style={{ marginTop: '1.5rem' }}>
+                <div className="widget glass-panel" style={{ gridColumn: '1 / -1' }}>
+                    <div className="widget-header">
+                        <h3><Droplets size={20} /> 작업 필요 원재료 (신재/분쇄)</h3>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>진행중 작업지시 남은수량 기준</span>
+                    </div>
+                    <div className="widget-content">
+                        {materialRequirement.rows.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                                진행중인 작업지시가 없습니다.
+                            </div>
+                        ) : (
+                            <>
+                                {/* 원재료별 합계 카드 */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                                    {materialRequirement.mats.map(m => {
+                                        const short = m.stock != null && m.virgin > m.stock; // 신재 부족 여부
+                                        return (
+                                            <div key={m.material} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '0.75rem 0.9rem', background: 'var(--bg-card)' }}>
+                                                <div style={{ fontWeight: 700, color: 'var(--text-main)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span>{m.material}</span>
+                                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>총 {m.needed.toFixed(1)}kg</span>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: 8, fontSize: '0.85rem' }}>
+                                                    <span style={{ flex: 1, background: '#dbeafe', color: '#1e40af', borderRadius: 6, padding: '4px 8px', fontWeight: 700 }}>
+                                                        신재 {m.virgin.toFixed(1)}kg
+                                                    </span>
+                                                    <span style={{ flex: 1, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '4px 8px', fontWeight: 700 }}>
+                                                        분쇄 {m.regrind.toFixed(1)}kg
+                                                    </span>
+                                                </div>
+                                                {m.stock != null && (
+                                                    <div style={{ marginTop: 6, fontSize: '0.76rem', color: short ? '#dc2626' : '#94a3b8', fontWeight: short ? 700 : 400 }}>
+                                                        신재 재고 {m.stock.toLocaleString()}kg {short ? `→ ${(m.virgin - m.stock).toFixed(1)}kg 부족 ⚠️` : '✓'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* 제품별 상세 표 */}
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                        <thead>
+                                            <tr style={{ background: 'var(--bg-subtle)', borderBottom: '2px solid var(--border)' }}>
+                                                <th style={{ padding: '0.5rem 0.6rem', textAlign: 'left' }}>제품</th>
+                                                <th style={{ padding: '0.5rem 0.6rem', textAlign: 'left' }}>원재료</th>
+                                                <th style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>남은수량</th>
+                                                <th style={{ padding: '0.5rem 0.6rem', textAlign: 'center' }}>신재:분쇄</th>
+                                                <th style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>필요(kg)</th>
+                                                <th style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: '#1e40af' }}>신재(kg)</th>
+                                                <th style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: '#166534' }}>분쇄(kg)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {materialRequirement.rows.map((r, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                    <td style={{ padding: '0.5rem 0.6rem', fontWeight: 600 }}>{r.product}</td>
+                                                    <td style={{ padding: '0.5rem 0.6rem', color: 'var(--text-muted)' }}>{r.material}</td>
+                                                    <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>{r.remaining.toLocaleString()}</td>
+                                                    <td style={{ padding: '0.5rem 0.6rem', textAlign: 'center', color: 'var(--text-muted)' }}>{r.vr >= 100 ? '신재100%' : `${r.vr}:${100 - r.vr}`}</td>
+                                                    <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', fontWeight: 600 }}>{r.neededKg.toFixed(1)}</td>
+                                                    <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: '#1e40af', fontWeight: 700 }}>{r.virginKg.toFixed(1)}</td>
+                                                    <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: '#166534', fontWeight: 700 }}>{r.regrindKg.toFixed(1)}</td>
+                                                </tr>
+                                            ))}
+                                            <tr style={{ borderTop: '2px solid #94a3b8', fontWeight: 800, background: 'var(--bg-subtle)' }}>
+                                                <td style={{ padding: '0.6rem' }} colSpan={4}>합계</td>
+                                                <td style={{ padding: '0.6rem', textAlign: 'right' }}>{materialRequirement.totalNeeded.toFixed(1)}</td>
+                                                <td style={{ padding: '0.6rem', textAlign: 'right', color: '#1e40af' }}>{materialRequirement.totalVirgin.toFixed(1)}</td>
+                                                <td style={{ padding: '0.6rem', textAlign: 'right', color: '#166534' }}>{materialRequirement.totalRegrind.toFixed(1)}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#94a3b8' }}>
+                                    💡 분쇄는 자체 재생분이라 신재만 구매하면 됩니다. "신재(kg)" 합계만큼만 발주하세요.
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
 
             {/* ──────────────── 작업표준서 다운로드 (사출조건 + 불량이력 연동) ──────────────── */}
             <div className="widgets-grid" style={{ marginTop: '1.5rem' }}>

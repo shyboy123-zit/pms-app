@@ -660,6 +660,7 @@ export const DataProvider = ({ children }) => {
             material_id: item.material_id || null,
             min_stock: item.min_stock || 0,
             max_stock: item.max_stock || 0,
+            virgin_ratio: item.virgin_ratio ?? 50,
             status: item.status || '생산중'
         }]).select();
 

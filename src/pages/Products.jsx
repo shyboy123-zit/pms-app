@@ -47,6 +47,7 @@ const Products = () => {
         material_id: '',
         min_stock: 0,
         max_stock: 0,
+        virgin_ratio: 50,
         status: '생산중'
     });
 
@@ -90,6 +91,22 @@ const Products = () => {
                 return mat ? (
                     <span style={{ fontWeight: 600, color: '#0369a1' }}>{mat.name}</span>
                 ) : <span style={{ color: '#94a3b8' }}>-</span>;
+            }
+        },
+        {
+            header: '신재:분쇄', accessor: 'virgin_ratio', render: (row) => {
+                const v = row.virgin_ratio ?? 50;
+                const r = 100 - v;
+                const isVirginOnly = v >= 100;
+                return (
+                    <span style={{
+                        padding: '2px 8px', borderRadius: '10px', fontSize: '0.78rem', fontWeight: 700,
+                        background: isVirginOnly ? '#dbeafe' : '#f1f5f9',
+                        color: isVirginOnly ? '#1e40af' : '#475569'
+                    }}>
+                        {isVirginOnly ? '신재 100%' : `${v}:${r}`}
+                    </span>
+                );
             }
         },
         {
@@ -162,6 +179,7 @@ const Products = () => {
             material_id: product.material_id || '',
             min_stock: product.min_stock || 0,
             max_stock: product.max_stock || 0,
+            virgin_ratio: product.virgin_ratio ?? 50,
             status: product.status
         });
         setIsEditMode(true);
@@ -188,6 +206,7 @@ const Products = () => {
             material_id: '',
             min_stock: 0,
             max_stock: 0,
+            virgin_ratio: 50,
             status: '생산중'
         });
         setCurrentProduct(null);
@@ -214,6 +233,7 @@ const Products = () => {
                             { key: 'unit_price', label: '단가', sample: 5000, parse: parsers.number, format: (v) => parseFloat(v || 0) },
                             { key: 'min_stock', label: '안전재고', sample: 100, parse: parsers.number, format: (v) => parseFloat(v || 0) },
                             { key: 'max_stock', label: '초과재고', sample: 1000, parse: parsers.number, format: (v) => parseFloat(v || 0) },
+                            { key: 'virgin_ratio', label: '신재비율(%)', sample: 50, parse: parsers.number, format: (v) => parseFloat(v ?? 50) },
                             { key: 'status', label: '상태', sample: '생산중', parse: parsers.string }
                         ]}
                         fileName="제품목록"
@@ -233,6 +253,7 @@ const Products = () => {
                                         unit_price: parseFloat(r.unit_price) || 0,
                                         min_stock: parseFloat(r.min_stock) || 0,
                                         max_stock: parseFloat(r.max_stock) || 0,
+                                        virgin_ratio: (r.virgin_ratio === '' || r.virgin_ratio == null) ? 50 : parseFloat(r.virgin_ratio),
                                         status: r.status || '생산중'
                                     });
                                     ok++;
@@ -451,6 +472,27 @@ const Products = () => {
                         placeholder="예: 1000 (0이면 경고 없음)"
                     />
                     <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>현재고가 이 수량을 넘으면 대시보드에 초과재고 경고가 표시됩니다</span>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">신재 비율 (%)</label>
+                    <input
+                        type="number"
+                        className="form-input"
+                        value={formData.virgin_ratio}
+                        onChange={(e) => {
+                            let v = parseInt(e.target.value);
+                            if (isNaN(v)) v = 0;
+                            v = Math.max(0, Math.min(100, v));
+                            setFormData({ ...formData, virgin_ratio: v });
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        min="0" max="100"
+                        placeholder="50"
+                    />
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                        신재 {formData.virgin_ratio ?? 50}% : 분쇄 {100 - (formData.virgin_ratio ?? 50)}%
+                        {' '}— 1:1 혼합이면 50, 신재만 쓰면 100
+                    </span>
                 </div>
                 <div className="form-group">
                     <label className="form-label">상태</label>

@@ -153,6 +153,7 @@ const Payroll = () => {
         bonus: '',            // 상여금
         annualLeavePay: '',   // 연차수당 (직접입력 시)
         annualLeaveDays: '',  // 미사용 연차일수 (자동계산용)
+        leavePromotion: false,// 연차사용촉진 시행 여부 (시행 시 수당 미지급)
         holidayBonus: '',     // 명절수당 (설날/추석)
         performanceBonus: '', // 성과금
         mealAllowance: '',    // 식대 (비과세)
@@ -483,15 +484,18 @@ const Payroll = () => {
                     mealAllowance: p.mealAllowance || '',
                     transportAllowance: p.transportAllowance || '',
                     dependents: p.dependents || '1',
-                    childDependents: p.childDependents || '0'
+                    childDependents: p.childDependents || '0',
+                    leavePromotion: !!p.leavePromotion // 연차사용촉진 시행 여부 (고정)
                 };
             } catch { /* 손상된 기록은 무시하고 빈 폼 */ }
         }
 
         // ② 근속연수 기준 미사용 연차를 연차수당 일수에 자동 반영
+        //    단, 연차사용촉진을 시행하는 직원은 수당 지급 의무가 없으므로 0 처리(제61조)
         const ref = new Date(year, month, 0);
         const svc = getServiceInfo(emp.join_date, ref);
         const remaining = svc ? Math.max(0, svc.grantedLeave - (parseInt(emp.used_leave) || 0)) : 0;
+        const promo = !!carried.leavePromotion;
 
         setPayData(prevData => ({
             ...prevData,
@@ -503,7 +507,7 @@ const Payroll = () => {
             bonus: '', performanceBonus: '', holidayBonus: '', annualLeavePay: '',
             yearEndTax: '', // 연말정산은 2월에만 직접 입력
             ...carried,
-            annualLeaveDays: remaining ? String(remaining) : ''
+            annualLeaveDays: promo ? '0' : (remaining ? String(remaining) : '')
         }));
     };
 
@@ -1108,8 +1112,9 @@ const Payroll = () => {
                         <div>
                             <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>미사용 연차 (일수)</label>
                             <input type="number" placeholder="0" min="0" value={payData.annualLeaveDays}
+                                disabled={!!payData.leavePromotion}
                                 onChange={(e) => setPayData({ ...payData, annualLeaveDays: e.target.value, annualLeavePay: '' })}
-                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: payData.leavePromotion ? '#f1f5f9' : 'var(--card)', color: payData.leavePromotion ? '#94a3b8' : 'var(--text)', fontSize: '0.82rem' }} />
                             {/* 근속연수 기준 발생/미사용 연차 안내 + 자동입력 */}
                             {serviceInfo && (
                                 <div style={{
@@ -1124,7 +1129,7 @@ const Payroll = () => {
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
                                         <span>→ 미사용 <strong style={{ color: '#dc2626' }}>{remainingLeave}일</strong></span>
-                                        {remainingLeave > 0 && String(remainingLeave) !== String(payData.annualLeaveDays) && (
+                                        {!payData.leavePromotion && remainingLeave > 0 && String(remainingLeave) !== String(payData.annualLeaveDays) && (
                                             <button type="button"
                                                 onClick={() => setPayData({ ...payData, annualLeaveDays: String(remainingLeave), annualLeavePay: '' })}
                                                 style={{ padding: '2px 8px', borderRadius: '5px', border: '1px solid #4f46e5', background: '#4f46e5', color: 'white', fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
@@ -1132,6 +1137,17 @@ const Payroll = () => {
                                             </button>
                                         )}
                                     </div>
+                                    {/* 연차사용촉진 시행 시 미사용 연차수당 지급 의무 면제 (근로기준법 제61조) */}
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '6px', paddingTop: '5px', borderTop: '1px dashed #c7d2fe', cursor: 'pointer' }}>
+                                        <input type="checkbox" checked={!!payData.leavePromotion}
+                                            onChange={(e) => setPayData({ ...payData, leavePromotion: e.target.checked, annualLeaveDays: e.target.checked ? '0' : '', annualLeavePay: '' })} />
+                                        <span style={{ fontWeight: 700 }}>연차사용촉진 시행 (수당 미지급)</span>
+                                    </label>
+                                    {payData.leavePromotion && (
+                                        <div style={{ marginTop: '4px', color: '#059669', fontWeight: 600 }}>
+                                            ✅ 사용촉진(제61조) 시행 → 미사용 연차수당 지급 의무 면제. 연차수당 0 처리.
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             {calculation.dailyWage > 0 && (

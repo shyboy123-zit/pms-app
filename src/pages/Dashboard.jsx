@@ -28,6 +28,10 @@ const Dashboard = () => {
     // 상단 KPI 카드 클릭 시 상세 내역 모달 ('running' | 'lowstock' | 'defect')
     const [cardModal, setCardModal] = useState(null);
 
+    // 작업 필요 원재료 위젯 — 기준(전체/일일) + 일일 가동시간
+    const [reqMode, setReqMode] = useState('total'); // 'total' | 'daily'
+    const [dailyHours, setDailyHours] = useState(24);
+
     // 입출고 데이터로 제품 재고 계산
     const getProductStock = (product) => {
         const key = product.product_code || product.name;
@@ -193,14 +197,23 @@ const Dashboard = () => {
             const pw = product.product_weight || 0;
             const rw = product.runner_weight || 0;
             const cv = product.cavity_count || 1;
-            const shots = remaining / cv;
+            // 기준 수량: 전체 남은량 vs 일일 생산능력(가동시간×3600/사이클×C/V), 남은량 초과 금지
+            let qty = remaining;
+            if (reqMode === 'daily') {
+                const cycle = parseFloat(product.standard_cycle_time) || 0;
+                const dailyCap = cycle > 0 ? Math.floor((dailyHours * 3600 / cycle) * cv) : remaining;
+                qty = Math.min(remaining, dailyCap);
+            }
+            if (qty <= 0) return;
+            const remainingForCalc = qty;
+            const shots = remainingForCalc / cv;
             const virginOnly = (product.virgin_ratio ?? 50) >= 100;
             let virginKg, regrindKg;
             if (virginOnly) {
                 virginKg = (pw * cv + rw) * shots / 1000; // 전량 신재 (런너도 신재로)
                 regrindKg = 0;
             } else {
-                virginKg = pw * remaining / 1000;          // 제품 출하분만 신재 보충
+                virginKg = pw * remainingForCalc / 1000;   // 제품 출하분만 신재 보충
                 regrindKg = rw * shots / 1000;             // 런너 발생분 = 자체 분쇄
             }
             const neededKg = virginKg + regrindKg;
@@ -209,7 +222,7 @@ const Dashboard = () => {
             const regPct = shot > 0 ? Math.round(rw / shot * 100) : 0;
             const material = materials.find(m => m.id === product.material_id);
             const matName = material?.name || '(원재료 미지정)';
-            rows.push({ product: product.name, material: matName, remaining, neededKg, virginKg, regrindKg, virginOnly, regPct });
+            rows.push({ product: product.name, material: matName, qty: remainingForCalc, neededKg, virginKg, regrindKg, virginOnly, regPct });
             if (!byMaterial[matName]) byMaterial[matName] = { material: matName, needed: 0, virgin: 0, regrind: 0, stock: material ? parseFloat(material.stock) || 0 : null };
             byMaterial[matName].needed += neededKg;
             byMaterial[matName].virgin += virginKg;
@@ -1740,7 +1753,28 @@ const Dashboard = () => {
                 <div className="widget glass-panel" style={{ gridColumn: '1 / -1' }}>
                     <div className="widget-header">
                         <h3><Droplets size={20} /> 작업 필요 원재료 (신재/분쇄)</h3>
-                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>진행중 작업지시 남은수량 기준</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                            <div className="filter-tabs" style={{ display: 'flex', background: 'var(--bg-subtle)', borderRadius: 8, padding: 3 }}>
+                                <button onClick={() => setReqMode('total')}
+                                    style={{ padding: '0.3rem 0.7rem', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, background: reqMode === 'total' ? 'var(--bg-card)' : 'transparent', color: reqMode === 'total' ? 'var(--primary)' : 'var(--text-muted)' }}>
+                                    작업 전체
+                                </button>
+                                <button onClick={() => setReqMode('daily')}
+                                    style={{ padding: '0.3rem 0.7rem', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, background: reqMode === 'daily' ? 'var(--bg-card)' : 'transparent', color: reqMode === 'daily' ? 'var(--primary)' : 'var(--text-muted)' }}>
+                                    일일
+                                </button>
+                            </div>
+                            {reqMode === 'daily' && (
+                                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    가동
+                                    <input type="number" min="1" max="24" value={dailyHours}
+                                        onChange={(e) => setDailyHours(Math.max(1, Math.min(24, parseInt(e.target.value) || 1)))}
+                                        onFocus={(e) => e.target.select()}
+                                        style={{ width: 52, padding: '0.25rem 0.4rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', background: 'var(--bg-elevated)', color: 'var(--text-main)' }} />
+                                    시간/일
+                                </label>
+                            )}
+                        </div>
                     </div>
                     <div className="widget-content">
                         {materialRequirement.rows.length === 0 ? (
@@ -1784,7 +1818,7 @@ const Dashboard = () => {
                                             <tr style={{ background: 'var(--bg-subtle)', borderBottom: '2px solid var(--border)' }}>
                                                 <th style={{ padding: '0.5rem 0.6rem', textAlign: 'left' }}>제품</th>
                                                 <th style={{ padding: '0.5rem 0.6rem', textAlign: 'left' }}>원재료</th>
-                                                <th style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>남은수량</th>
+                                                <th style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>{reqMode === 'daily' ? '일일생산량' : '남은수량'}</th>
                                                 <th style={{ padding: '0.5rem 0.6rem', textAlign: 'center' }}>신재:분쇄</th>
                                                 <th style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>필요(kg)</th>
                                                 <th style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: '#1e40af' }}>신재(kg)</th>
@@ -1796,7 +1830,7 @@ const Dashboard = () => {
                                                 <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
                                                     <td style={{ padding: '0.5rem 0.6rem', fontWeight: 600 }}>{r.product}</td>
                                                     <td style={{ padding: '0.5rem 0.6rem', color: 'var(--text-muted)' }}>{r.material}</td>
-                                                    <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>{r.remaining.toLocaleString()}</td>
+                                                    <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>{Math.round(r.qty).toLocaleString()}</td>
                                                     <td style={{ padding: '0.5rem 0.6rem', textAlign: 'center', color: 'var(--text-muted)' }}>{r.virginOnly ? '신재100%' : `${100 - r.regPct}:${r.regPct}`}</td>
                                                     <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', fontWeight: 600 }}>{r.neededKg.toFixed(1)}</td>
                                                     <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: '#1e40af', fontWeight: 700 }}>{r.virginKg.toFixed(1)}</td>

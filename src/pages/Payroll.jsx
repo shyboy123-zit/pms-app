@@ -757,7 +757,7 @@ const Payroll = () => {
                                         <strong>기본급은 직접 고정</strong>하고, 월급 총액에서 기본급·약정연장·비과세를 뺀 <strong>나머지를 상여(변동)</strong>로 배정합니다.
                                         상여는 경영성과에 따라 조정 가능해 인건비 유연성을 확보합니다.
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.8fr', gap: '8px' }}>
                                         <div>
                                             <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>기본급 (고정)</label>
                                             <input type="number" placeholder="예: 2200000" value={payData.baseSalary}
@@ -768,6 +768,12 @@ const Payroll = () => {
                                             <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>월급 총액 (목표)</label>
                                             <input type="number" placeholder="예: 4400000" value={payData.targetTotal}
                                                 onChange={(e) => setPayData({ ...payData, targetTotal: e.target.value })}
+                                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #fdba74', background: 'white', color: '#1e293b', fontSize: '0.85rem', fontWeight: 700 }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>약정 연장(h/월)</label>
+                                            <input type="number" placeholder="예: 20" value={payData.overtimeHours}
+                                                onChange={(e) => setPayData({ ...payData, overtimeHours: e.target.value })}
                                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #fdba74', background: 'white', color: '#1e293b', fontSize: '0.85rem', fontWeight: 700 }} />
                                         </div>
                                     </div>
@@ -835,7 +841,7 @@ const Payroll = () => {
                                         월급 총액과 <strong>주간 소정근로 + 약정 연장시간</strong>(매월 고정)을 기준으로 통상시급을 역산해
                                         기본급·연장수당으로 자동 분해합니다. <strong>주말 특근비·야간수당은 역산에 포함하지 않고</strong> 실제 근무한 만큼 별도로 가산됩니다.
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '8px' }}>
                                         <div>
                                             <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>월급 총액 (목표)</label>
                                             <input type="number" placeholder="예: 4400000" value={payData.targetTotal}
@@ -846,6 +852,12 @@ const Payroll = () => {
                                             <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>주간 소정근로 (h)</label>
                                             <input type="number" placeholder="40" value={payData.weeklyHours}
                                                 onChange={(e) => setPayData({ ...payData, weeklyHours: e.target.value })}
+                                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #c7d2fe', background: 'white', color: '#1e293b', fontSize: '0.85rem' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>약정 연장(h/월)</label>
+                                            <input type="number" placeholder="예: 20" value={payData.overtimeHours}
+                                                onChange={(e) => setPayData({ ...payData, overtimeHours: e.target.value })}
                                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #c7d2fe', background: 'white', color: '#1e293b', fontSize: '0.85rem' }} />
                                         </div>
                                     </div>

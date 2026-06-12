@@ -94,17 +94,21 @@ const Products = () => {
             }
         },
         {
-            header: '신재:분쇄', accessor: 'virgin_ratio', render: (row) => {
-                const v = row.virgin_ratio ?? 50;
-                const r = 100 - v;
-                const isVirginOnly = v >= 100;
+            header: '신재:분쇄 (자체분쇄율)', accessor: 'virgin_ratio', render: (row) => {
+                const isVirginOnly = (row.virgin_ratio ?? 50) >= 100;
+                if (isVirginOnly) {
+                    return <span style={{ padding: '2px 8px', borderRadius: '10px', fontSize: '0.78rem', fontWeight: 700, background: '#dbeafe', color: '#1e40af' }}>신재 100%</span>;
+                }
+                const pw = row.product_weight || 0, rw = row.runner_weight || 0, cv = row.cavity_count || 1;
+                const shot = pw * cv + rw;
+                const reg = shot > 0 ? Math.round(rw / shot * 100) : 0;
+                const ok = reg >= 50;
                 return (
                     <span style={{
                         padding: '2px 8px', borderRadius: '10px', fontSize: '0.78rem', fontWeight: 700,
-                        background: isVirginOnly ? '#dbeafe' : '#f1f5f9',
-                        color: isVirginOnly ? '#1e40af' : '#475569'
-                    }}>
-                        {isVirginOnly ? '신재 100%' : `${v}:${r}`}
+                        background: ok ? '#dcfce7' : '#fef3c7', color: ok ? '#166534' : '#d97706'
+                    }} title={ok ? '런너로 1:1 이상 충당 가능' : '런너 부족 — 1:1 불가, 신재 더 필요'}>
+                        신재 {100 - reg} : 분쇄 {reg}{ok ? '' : ' ⚠'}
                     </span>
                 );
             }
@@ -474,25 +478,32 @@ const Products = () => {
                     <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>현재고가 이 수량을 넘으면 대시보드에 초과재고 경고가 표시됩니다</span>
                 </div>
                 <div className="form-group">
-                    <label className="form-label">신재 비율 (%)</label>
-                    <input
-                        type="number"
+                    <label className="form-label">원재료 구성</label>
+                    <select
                         className="form-input"
-                        value={formData.virgin_ratio}
-                        onChange={(e) => {
-                            let v = parseInt(e.target.value);
-                            if (isNaN(v)) v = 0;
-                            v = Math.max(0, Math.min(100, v));
-                            setFormData({ ...formData, virgin_ratio: v });
-                        }}
-                        onFocus={(e) => e.target.select()}
-                        min="0" max="100"
-                        placeholder="50"
-                    />
-                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
-                        신재 {formData.virgin_ratio ?? 50}% : 분쇄 {100 - (formData.virgin_ratio ?? 50)}%
-                        {' '}— 1:1 혼합이면 50, 신재만 쓰면 100
-                    </span>
+                        value={(formData.virgin_ratio ?? 50) >= 100 ? 'virgin' : 'mixed'}
+                        onChange={(e) => setFormData({ ...formData, virgin_ratio: e.target.value === 'virgin' ? 100 : 50 })}
+                    >
+                        <option value="mixed">신재 + 분쇄 (런너 100% 재사용)</option>
+                        <option value="virgin">신재만</option>
+                    </select>
+                    {(() => {
+                        const pw = parseFloat(formData.product_weight) || 0;
+                        const rw = parseFloat(formData.runner_weight) || 0;
+                        const cv = parseFloat(formData.cavity_count) || 1;
+                        const shot = pw * cv + rw;
+                        const regPct = shot > 0 ? (rw / shot * 100) : 0;
+                        const isVirgin = (formData.virgin_ratio ?? 50) >= 100;
+                        if (isVirgin) {
+                            return <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>분쇄 미사용 — 신재 100% 투입 (런너는 스크랩)</span>;
+                        }
+                        return (
+                            <span style={{ fontSize: '0.75rem', color: regPct >= 50 ? '#16a34a' : '#d97706', marginTop: '4px', display: 'block' }}>
+                                런너/샷 기준 자체 분쇄율 ≈ <b>{regPct.toFixed(0)}%</b> (신재 {(100 - regPct).toFixed(0)}%)
+                                {' '}— {regPct >= 50 ? '1:1 이상 가능 ✓' : '1:1 불가 (런너 부족)'}
+                            </span>
+                        );
+                    })()}
                 </div>
                 <div className="form-group">
                     <label className="form-label">상태</label>

@@ -180,7 +180,8 @@ const Dashboard = () => {
         return Object.values(consumptionMap).sort((a, b) => b.totalConsumedKg - a.totalConsumedKg);
     })();
 
-    // 진행중 작업지시 남은수량 기준 필요 원재료 (신재/분쇄 비율 반영)
+    // 진행중 작업지시 남은수량 기준 필요 원재료
+    // 모델: 런너 100% 재사용 → 신재=제품중량분, 분쇄=런너발생분. 신재만 제품은 전량 신재.
     const materialRequirement = (() => {
         const byMaterial = {};
         const rows = [];
@@ -189,15 +190,26 @@ const Dashboard = () => {
             if (!product) return;
             const remaining = Math.max(0, (wo.target_quantity || 0) - (wo.produced_quantity || 0));
             if (remaining <= 0) return;
-            const shotWeight = (product.product_weight || 0) + (product.runner_weight || 0);
-            const neededKg = (shotWeight * remaining) / 1000;
+            const pw = product.product_weight || 0;
+            const rw = product.runner_weight || 0;
+            const cv = product.cavity_count || 1;
+            const shots = remaining / cv;
+            const virginOnly = (product.virgin_ratio ?? 50) >= 100;
+            let virginKg, regrindKg;
+            if (virginOnly) {
+                virginKg = (pw * cv + rw) * shots / 1000; // 전량 신재 (런너도 신재로)
+                regrindKg = 0;
+            } else {
+                virginKg = pw * remaining / 1000;          // 제품 출하분만 신재 보충
+                regrindKg = rw * shots / 1000;             // 런너 발생분 = 자체 분쇄
+            }
+            const neededKg = virginKg + regrindKg;
             if (neededKg <= 0) return;
-            const vr = (product.virgin_ratio ?? 50);
-            const virginKg = neededKg * vr / 100;
-            const regrindKg = neededKg * (100 - vr) / 100;
+            const shot = pw * cv + rw;
+            const regPct = shot > 0 ? Math.round(rw / shot * 100) : 0;
             const material = materials.find(m => m.id === product.material_id);
             const matName = material?.name || '(원재료 미지정)';
-            rows.push({ product: product.name, material: matName, remaining, neededKg, virginKg, regrindKg, vr });
+            rows.push({ product: product.name, material: matName, remaining, neededKg, virginKg, regrindKg, virginOnly, regPct });
             if (!byMaterial[matName]) byMaterial[matName] = { material: matName, needed: 0, virgin: 0, regrind: 0, stock: material ? parseFloat(material.stock) || 0 : null };
             byMaterial[matName].needed += neededKg;
             byMaterial[matName].virgin += virginKg;
@@ -1785,7 +1797,7 @@ const Dashboard = () => {
                                                     <td style={{ padding: '0.5rem 0.6rem', fontWeight: 600 }}>{r.product}</td>
                                                     <td style={{ padding: '0.5rem 0.6rem', color: 'var(--text-muted)' }}>{r.material}</td>
                                                     <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>{r.remaining.toLocaleString()}</td>
-                                                    <td style={{ padding: '0.5rem 0.6rem', textAlign: 'center', color: 'var(--text-muted)' }}>{r.vr >= 100 ? '신재100%' : `${r.vr}:${100 - r.vr}`}</td>
+                                                    <td style={{ padding: '0.5rem 0.6rem', textAlign: 'center', color: 'var(--text-muted)' }}>{r.virginOnly ? '신재100%' : `${100 - r.regPct}:${r.regPct}`}</td>
                                                     <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', fontWeight: 600 }}>{r.neededKg.toFixed(1)}</td>
                                                     <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: '#1e40af', fontWeight: 700 }}>{r.virginKg.toFixed(1)}</td>
                                                     <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: '#166534', fontWeight: 700 }}>{r.regrindKg.toFixed(1)}</td>

@@ -82,6 +82,50 @@ const getIncomeTax = (monthlySalary, dependents = 1) => {
     return Math.round(1881400 + (adjustedIncome - 10000000) * 0.38);
 };
 
+// ===== 연차 발생일수 (근속연수 기준, 근로기준법 제60조) =====
+//
+// [법적 근거] 근로기준법 제60조 (연차 유급휴가)
+// - 입사 1년 미만: 1개월 개근 시 1일씩 발생 (최대 11일)
+// - 1년 이상(만 1~2년): 15일
+// - 3년 이상: 최초 1년을 초과하는 매 2년마다 1일씩 가산 (가산 한도 10일 → 최대 25일)
+//   예) 1년 15일 · 3년 16일 · 5년 17일 · … · 21년 25일
+//
+// 월급제에서 연차를 사용하기 어려운 직원에게 미사용 연차를 수당으로 보상할 때,
+// 근속연수에 따라 발생 연차일수가 다르므로 이를 자동으로 산정한다.
+const getServiceInfo = (joinDate, refDate = new Date()) => {
+    if (!joinDate) return null;
+    const join = new Date(joinDate);
+    if (isNaN(join.getTime())) return null;
+    const ms = refDate - join;
+    if (ms < 0) return { years: 0, months: 0, grantedLeave: 0 };
+
+    const dayMs = 1000 * 60 * 60 * 24;
+    const totalDays = ms / dayMs;
+    const totalYears = totalDays / 365.25;
+    const fullYears = Math.floor(totalYears);
+    const remMonths = Math.floor((totalDays - fullYears * 365.25) / 30.4375);
+
+    let grantedLeave;
+    if (totalYears < 1) {
+        // 1개월 개근당 1일, 최대 11일
+        grantedLeave = Math.min(Math.floor(totalDays / 30.4375), 11);
+    } else {
+        // 15일 + (근속 3년차부터 2년마다 1일), 최대 25일
+        grantedLeave = Math.min(15 + Math.floor((fullYears - 1) / 2), 25);
+    }
+    return { years: fullYears, months: remMonths, grantedLeave };
+};
+
+// ===== 월 소정근로시간 (주휴 포함) =====
+// 월급제의 통상시급 = 기본급 ÷ 월 소정근로시간.
+// 1주 = 소정근로시간 + 주휴 1일분(min(주,40)/5), 월 환산 × 4.345(=52주/12개월).
+// 주 40시간 → (40 + 8) × 4.345 ≒ 209시간 (법정 기준).
+const getMonthlyContractHours = (weeklyHours = 40) => {
+    const w = parseFloat(weeklyHours) || 40;
+    const weeklyPaid = w + Math.min(w, 40) / 5;
+    return Math.round(weeklyPaid * 4.345);
+};
+
 const Payroll = () => {
     const { employees, payrollRecords, addPayrollRecord, deletePayrollRecord } = useData();
     const [selectedEmpId, setSelectedEmpId] = useState('');
@@ -94,6 +138,7 @@ const Payroll = () => {
     });
     const [payData, setPayData] = useState({
         baseSalary: '',       // 기본급 (월급제)
+        targetTotal: '',      // 월급 총액 목표 (역산 모드)
         hourlyWage: '',       // 시급 (시급제)
         workedHours: '',      // 근무시간 (시급제 - 직접입력 모드)
         weeklyWorkedHours: ['', '', '', '', ''],  // 주별 근무시간 (시급제 - 주별입력 모드)
@@ -115,6 +160,8 @@ const Payroll = () => {
     });
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [showPaystub, setShowPaystub] = useState(false);
+    // 월급제 입력 방식: manual(기본급 직접) | reverse(총액→기본급 역산) | bonusFlex(기본급 고정+나머지 상여)
+    const [monthlyMode, setMonthlyMode] = useState('manual');
     const paystubRef = useRef(null);
 
     const activeEmployees = useMemo(() =>
@@ -130,6 +177,19 @@ const Payroll = () => {
     const rates = INSURANCE_RATES[year] || INSURANCE_RATES[2026];
     const minWage = MINIMUM_WAGE[year] || MINIMUM_WAGE[2026];
 
+    // 선택 직원의 근속연수 → 발생 연차 / 미사용 연차 산정 (급여 월 말일 기준)
+    const serviceInfo = useMemo(() => {
+        if (!selectedEmp?.join_date) return null;
+        const ref = new Date(year, month, 0); // 해당 급여월 말일
+        return getServiceInfo(selectedEmp.join_date, ref);
+    }, [selectedEmp, year, month]);
+
+    const remainingLeave = useMemo(() => {
+        if (!serviceInfo) return null;
+        const used = parseInt(selectedEmp?.used_leave) || 0;
+        return Math.max(0, serviceInfo.grantedLeave - used);
+    }, [serviceInfo, selectedEmp]);
+
     // 최저임금 검증
     const minWageWarning = useMemo(() => {
         if (payType === 'hourly') {
@@ -137,14 +197,15 @@ const Payroll = () => {
             if (hw > 0 && hw < minWage) return `시급 ${hw.toLocaleString()}원은 ${year}년 최저임금 ${minWage.toLocaleString()}원 미만입니다!`;
         } else {
             const bs = parseFloat(payData.baseSalary) || 0;
-            // 월급제: 기본급 / 209시간 으로 환산 시급 계산
+            // 월급제: 기본급 / 월 소정근로시간 으로 환산 시급 계산
+            const mch = getMonthlyContractHours(payData.weeklyHours);
             if (bs > 0) {
-                const converted = Math.round(bs / 209);
-                if (converted < minWage) return `기본급 환산 시급 ${converted.toLocaleString()}원은 ${year}년 최저임금 ${minWage.toLocaleString()}원 미만입니다! (기본급 ÷ 209시간)`;
+                const converted = Math.round(bs / mch);
+                if (converted < minWage) return `기본급 환산 시급 ${converted.toLocaleString()}원은 ${year}년 최저임금 ${minWage.toLocaleString()}원 미만입니다! (기본급 ÷ ${mch}시간)`;
             }
         }
         return null;
-    }, [payData.hourlyWage, payData.baseSalary, payType, minWage, year]);
+    }, [payData.hourlyWage, payData.baseSalary, payData.weeklyHours, payType, minWage, year]);
 
     // === 급여 계산 ===
     const calculation = useMemo(() => {
@@ -175,8 +236,9 @@ const Payroll = () => {
             grossBase = hourlyWage * totalHours;
         }
 
-        // 연장/야간/휴일 수당
-        const effectiveHourly = payType === 'monthly' ? (baseSalary / 209) : hourlyWage;
+        // 연장/야간/휴일 수당 — 통상시급 = 기본급 ÷ 월 소정근로시간(주휴 포함)
+        const monthlyContractHours = getMonthlyContractHours(weeklyHours);
+        const effectiveHourly = payType === 'monthly' ? (baseSalary / monthlyContractHours) : hourlyWage;
         const overtimePay = Math.round(effectiveHourly * 1.5 * overtimeHours);
         const nightPay = Math.round(effectiveHourly * 0.5 * nightHours); // 야간수당 가산분
         const holidayPay = Math.round(effectiveHourly * 1.5 * holidayHours);
@@ -257,15 +319,139 @@ const Payroll = () => {
             taxableTotal, nonTaxMeal, nonTaxTransport, nonTaxTotal, totalPay,
             nationalPension, healthInsurance, longTermCare, employmentInsurance, totalInsurance,
             incomeTax, localIncomeTax, totalDeduction, netPay,
-            effectiveHourly, is209Pattern, weeklyBreakdown
+            effectiveHourly, monthlyContractHours, is209Pattern, weeklyBreakdown
         };
     }, [payData, payType, rates]);
 
     const fmt = (n) => Math.round(n).toLocaleString();
 
+    // === 월급 총액 → 기본급 역산 (포괄임금 분해) ===
+    // 총액과 법정 근로시간(소정 + 약정 연장/야간/휴일)을 고정하고 통상시급을 역산하여
+    // 기본급·연장수당 등을 자동 분해한다. 시간을 임의로 끼워맞추는 왜곡을 방지.
+    const reverseCalc = useMemo(() => {
+        if (payType !== 'monthly' || monthlyMode !== 'reverse') return null;
+        const target = parseFloat(payData.targetTotal) || 0;
+        if (target <= 0) return null;
+
+        const ot = parseFloat(payData.overtimeHours) || 0; // 약정 연장시간 (매월 고정)
+        const meal = Math.min(parseFloat(payData.mealAllowance) || 0, 200000);
+        const transport = Math.min(parseFloat(payData.transportAllowance) || 0, 200000);
+
+        const monthlyContractHours = getMonthlyContractHours(payData.weeklyHours);
+        // 고정 월급 = 기본급(소정) + 약정 연장수당. 주말 특근·야간은 역산에 포함하지 않고 별도 가산.
+        const divisor = monthlyContractHours + 1.5 * ot;
+        if (divisor <= 0) return null;
+
+        // 비과세(식대·교통비)는 통상임금 분해 대상에서 제외 후 역산
+        const wageForSplit = Math.max(0, target - meal - transport);
+        const hourly = wageForSplit / divisor; // 통상시급
+
+        const baseSalary = Math.round(hourly * monthlyContractHours);
+        const overtimePay = Math.round(hourly * 1.5 * ot);
+        const sum = baseSalary + overtimePay + meal + transport;
+
+        // 연장근로 법정 한도(주 12h ≒ 월 52h) 초과 여부
+        const weeklyOt = ot / 4.345;
+        const otOverLimit = weeklyOt > 12;
+
+        return {
+            target, hourly, monthlyContractHours, baseSalary, overtimePay,
+            meal, transport, sum, ot, weeklyOt,
+            belowMinWage: hourly > 0 && hourly < minWage,
+            otOverLimit
+        };
+    }, [payData.targetTotal, payData.weeklyHours, payData.overtimeHours,
+        payData.mealAllowance, payData.transportAllowance, payType, monthlyMode, minWage]);
+
+    // 역산 결과를 실제 급여 항목(기본급)에 적용
+    const applyReverse = () => {
+        if (!reverseCalc) return;
+        setPayData(prev => ({ ...prev, baseSalary: String(reverseCalc.baseSalary), annualLeavePay: '' }));
+    };
+
+    // === 기본급 고정 + 나머지 상여 (bonusFlex) ===
+    // 기본급은 직접 입력(고정), 월급 총액 목표에서 기본급·약정연장·비과세를 뺀 잔액을 상여로 배정.
+    // 상여는 경영성과·회사사정에 따라 조정 가능하여 인건비 유연성을 확보.
+    const bonusCalc = useMemo(() => {
+        if (payType !== 'monthly' || monthlyMode !== 'bonusFlex') return null;
+        const target = parseFloat(payData.targetTotal) || 0;
+        const base = parseFloat(payData.baseSalary) || 0;
+        if (target <= 0 || base <= 0) return null;
+
+        const ot = parseFloat(payData.overtimeHours) || 0;
+        const meal = Math.min(parseFloat(payData.mealAllowance) || 0, 200000);
+        const transport = Math.min(parseFloat(payData.transportAllowance) || 0, 200000);
+
+        const monthlyContractHours = getMonthlyContractHours(payData.weeklyHours);
+        const hourly = base / monthlyContractHours; // 통상시급 (기본급 기준)
+        const overtimePay = Math.round(hourly * 1.5 * ot);
+        const bonus = Math.round(target - base - overtimePay - meal - transport);
+
+        return {
+            target, base, hourly, monthlyContractHours, ot, overtimePay, meal, transport, bonus,
+            belowMinWage: hourly > 0 && hourly < minWage,
+            negativeBonus: bonus < 0
+        };
+    }, [payData.targetTotal, payData.baseSalary, payData.weeklyHours, payData.overtimeHours,
+        payData.mealAllowance, payData.transportAllowance, payType, monthlyMode, minWage]);
+
+    // 잔액 상여를 상여금 항목에 적용
+    const applyBonus = () => {
+        if (!bonusCalc) return;
+        setPayData(prev => ({ ...prev, bonus: String(Math.max(0, bonusCalc.bonus)), annualLeavePay: '' }));
+    };
+
     const handleEmpSelect = (empId) => {
         setSelectedEmpId(empId);
         setShowPaystub(false);
+
+        const emp = activeEmployees.find(e => e.id === empId);
+        if (!emp) return;
+
+        // ① 직전 급여 기록에서 고정 항목(기본급·시급·수당·부양가족 등)을 자동 승계
+        //    → 매월 동일 직원의 급여를 백지에서 재입력하던 불편 해소
+        const prev = (payrollRecords || [])
+            .filter(r => r.employee_id === empId && r.year_month !== yearMonth)
+            .sort((a, b) => (b.year_month || '').localeCompare(a.year_month || ''))[0];
+
+        let carried = {};
+        if (prev) {
+            try {
+                const p = JSON.parse(prev.pay_data) || {};
+                setPayType(prev.pay_type || 'monthly');
+                // 직전에 쓰던 입력 방식 복원
+                setMonthlyMode(p.monthlyMode || (p.targetTotal ? 'reverse' : 'manual'));
+                carried = {
+                    baseSalary: p.baseSalary || '',
+                    targetTotal: p.targetTotal || '',     // 월급 총액 (고정)
+                    overtimeHours: p.overtimeHours || '', // 약정 연장시간 (매월 고정)
+                    hourlyWage: p.hourlyWage || '',
+                    weeklyHours: p.weeklyHours || '40',
+                    scheduledDays: p.scheduledDays || '5',
+                    mealAllowance: p.mealAllowance || '',
+                    transportAllowance: p.transportAllowance || '',
+                    dependents: p.dependents || '1',
+                    childDependents: p.childDependents || '0'
+                };
+            } catch { /* 손상된 기록은 무시하고 빈 폼 */ }
+        }
+
+        // ② 근속연수 기준 미사용 연차를 연차수당 일수에 자동 반영
+        const ref = new Date(year, month, 0);
+        const svc = getServiceInfo(emp.join_date, ref);
+        const remaining = svc ? Math.max(0, svc.grantedLeave - (parseInt(emp.used_leave) || 0)) : 0;
+
+        setPayData(prevData => ({
+            ...prevData,
+            // 월별 변동 항목만 초기화 (약정 연장·월급총액 등 고정값은 위에서 승계)
+            workedHours: '',
+            weeklyWorkedHours: ['', '', '', '', ''],
+            weeklyWorkedDays: ['', '', '', '', ''],
+            nightHours: '', holidayHours: '', // 주말 특근·야간은 실제 근무분만 매월 입력
+            bonus: '', performanceBonus: '', holidayBonus: '', annualLeavePay: '',
+            ...carried,
+            annualLeaveDays: remaining ? String(remaining) : ''
+        }));
     };
 
     const generatePdf = async () => {
@@ -316,7 +502,7 @@ const Payroll = () => {
                 employee_name: selectedEmp?.name || '',
                 year_month: yearMonth,
                 pay_type: payType,
-                pay_data: JSON.stringify(payData),
+                pay_data: JSON.stringify({ ...payData, monthlyMode }),
                 calculation: JSON.stringify(calculation),
                 total_pay: calculation.totalPay,
                 net_pay: calculation.netPay,
@@ -339,6 +525,7 @@ const Payroll = () => {
             const savedData = JSON.parse(record.pay_data);
             setSelectedEmpId(record.employee_id);
             setPayType(record.pay_type || 'monthly');
+            setMonthlyMode(savedData.monthlyMode || (savedData.targetTotal ? 'reverse' : 'manual'));
             setYearMonth(record.year_month);
             // Ensure weeklyWorkedHours/Days arrays exist
             setPayData({
@@ -524,11 +711,180 @@ const Payroll = () => {
                     </div>
 
                     {payType === 'monthly' ? (
-                        <div className="form-group" style={{ marginBottom: '10px' }}>
-                            <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>기본급 (월)</label>
-                            <input type="number" placeholder="0" value={payData.baseSalary}
-                                onChange={(e) => setPayData({ ...payData, baseSalary: e.target.value })}
-                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
+                        <div style={{ marginBottom: '10px' }}>
+                            {/* 입력 방식 토글: 직접입력 / 총액 역산 / 기본급 고정+상여 */}
+                            <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                                {[
+                                    { key: 'manual', label: '기본급 직접' },
+                                    { key: 'reverse', label: '💡 총액 역산' },
+                                    { key: 'bonusFlex', label: '🔧 기본급+상여' }
+                                ].map(t => (
+                                    <button key={t.key} type="button" onClick={() => setMonthlyMode(t.key)}
+                                        style={{
+                                            flex: 1, padding: '8px 4px', borderRadius: '8px', cursor: 'pointer',
+                                            fontWeight: 700, fontSize: '0.73rem',
+                                            background: monthlyMode === t.key ? '#4f46e5' : 'var(--card)',
+                                            color: monthlyMode === t.key ? 'white' : 'var(--text-muted)',
+                                            border: `1px solid ${monthlyMode === t.key ? '#4f46e5' : 'var(--border)'}`
+                                        }}>
+                                        {t.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {monthlyMode === 'manual' && (
+                                <div className="form-group">
+                                    <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>기본급 (월)</label>
+                                    <input type="number" placeholder="0" value={payData.baseSalary}
+                                        onChange={(e) => setPayData({ ...payData, baseSalary: e.target.value })}
+                                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.85rem' }} />
+                                </div>
+                            )}
+
+                            {/* 🔧 기본급 고정 + 나머지 상여 (인건비 유연성) */}
+                            {monthlyMode === 'bonusFlex' && (
+                                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px' }}>
+                                    <div style={{ fontSize: '0.72rem', color: '#9a3412', lineHeight: 1.5, marginBottom: '10px' }}>
+                                        <strong>기본급은 직접 고정</strong>하고, 월급 총액에서 기본급·약정연장·비과세를 뺀 <strong>나머지를 상여(변동)</strong>로 배정합니다.
+                                        상여는 경영성과에 따라 조정 가능해 인건비 유연성을 확보합니다.
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>기본급 (고정)</label>
+                                            <input type="number" placeholder="예: 2200000" value={payData.baseSalary}
+                                                onChange={(e) => setPayData({ ...payData, baseSalary: e.target.value })}
+                                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #fdba74', background: 'white', color: '#1e293b', fontSize: '0.85rem', fontWeight: 700 }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>월급 총액 (목표)</label>
+                                            <input type="number" placeholder="예: 4400000" value={payData.targetTotal}
+                                                onChange={(e) => setPayData({ ...payData, targetTotal: e.target.value })}
+                                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #fdba74', background: 'white', color: '#1e293b', fontSize: '0.85rem', fontWeight: 700 }} />
+                                        </div>
+                                    </div>
+
+                                    {/* 입력이 덜 됐을 때 안내 */}
+                                    {!bonusCalc && (
+                                        <div style={{ marginTop: '10px', padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', fontSize: '0.7rem', color: '#92400e', lineHeight: 1.5 }}>
+                                            {!(parseFloat(payData.baseSalary) > 0)
+                                                ? '👉 기본급을 입력하세요.'
+                                                : !(parseFloat(payData.targetTotal) > 0)
+                                                    ? '👉 월급 총액(목표)도 입력하면 상여 잔액이 자동 계산됩니다. (상여 = 총액 − 기본급 − 약정연장 − 비과세)'
+                                                    : '👉 입력값을 확인하세요.'}
+                                            {' '}약정 연장시간은 아래 <strong>연장근로(시간)</strong> 칸에 입력합니다.
+                                        </div>
+                                    )}
+
+                                    {bonusCalc && (
+                                        <div style={{ marginTop: '10px', background: 'white', borderRadius: '8px', padding: '10px 12px', fontSize: '0.74rem', color: '#1e293b' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#9a3412', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '5px' }}>
+                                                <span>통상시급</span>
+                                                <span>{fmt(bonusCalc.hourly)}원 <span style={{ fontWeight: 500, color: '#94a3b8' }}>(기본급÷{bonusCalc.monthlyContractHours}h)</span></span>
+                                            </div>
+                                            {[
+                                                { label: `기본급 (고정)`, value: bonusCalc.base },
+                                                { label: `약정 연장수당 (${bonusCalc.ot || 0}h ×1.5)`, value: bonusCalc.overtimePay },
+                                                { label: '식대 (비과세)', value: bonusCalc.meal },
+                                                { label: '교통비 (비과세)', value: bonusCalc.transport }
+                                            ].filter(r => r.value > 0).map(r => (
+                                                <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                    <span style={{ color: 'var(--text-muted)' }}>{r.label}</span>
+                                                    <span style={{ fontWeight: 600 }}>{fmt(r.value)}원</span>
+                                                </div>
+                                            ))}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', marginTop: '4px', paddingTop: '4px', fontWeight: 700 }}>
+                                                <span>→ 상여(잔액)</span>
+                                                <span style={{ color: bonusCalc.negativeBonus ? '#dc2626' : '#d97706' }}>{fmt(bonusCalc.bonus)}원</span>
+                                            </div>
+
+                                            {bonusCalc.negativeBonus && (
+                                                <div style={{ marginTop: '6px', padding: '6px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', color: '#dc2626', fontWeight: 600, fontSize: '0.68rem' }}>
+                                                    ⚠️ 기본급+연장수당이 목표 총액을 초과합니다. 기본급을 낮추거나 총액을 높이세요.
+                                                </div>
+                                            )}
+                                            {bonusCalc.belowMinWage && (
+                                                <div style={{ marginTop: '6px', padding: '6px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', color: '#dc2626', fontWeight: 600, fontSize: '0.68rem' }}>
+                                                    ⚠️ 기본급 환산 통상시급이 {year}년 최저임금({minWage.toLocaleString()}원) 미만입니다. 상여는 최저임금 보전에 한계가 있으니 기본급을 높이세요.
+                                                </div>
+                                            )}
+
+                                            <button type="button" onClick={applyBonus} disabled={bonusCalc.negativeBonus}
+                                                style={{ width: '100%', marginTop: '8px', padding: '8px', borderRadius: '7px', border: 'none', cursor: bonusCalc.negativeBonus ? 'not-allowed' : 'pointer', background: bonusCalc.negativeBonus ? '#cbd5e1' : '#ea580c', color: 'white', fontWeight: 700, fontSize: '0.76rem' }}>
+                                                ↓ 상여금 {fmt(Math.max(0, bonusCalc.bonus))}원 자동 입력
+                                            </button>
+                                            <div style={{ marginTop: '8px', padding: '6px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', color: '#92400e', fontSize: '0.66rem', lineHeight: 1.5 }}>
+                                                ⚖️ 상여를 줄이거나 늘리려면 근로계약서·취업규칙에 상여가 <strong>“경영성과·회사사정에 따른 변동 상여”</strong>로 규정돼야 합니다. 매월 정기·고정 지급 시 통상임금에 포함되어 조정이 어려워집니다.
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {monthlyMode === 'reverse' && (
+                                <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: '10px', padding: '12px' }}>
+                                    <div style={{ fontSize: '0.72rem', color: '#4338ca', lineHeight: 1.5, marginBottom: '10px' }}>
+                                        월급 총액과 <strong>주간 소정근로 + 약정 연장시간</strong>(매월 고정)을 기준으로 통상시급을 역산해
+                                        기본급·연장수당으로 자동 분해합니다. <strong>주말 특근비·야간수당은 역산에 포함하지 않고</strong> 실제 근무한 만큼 별도로 가산됩니다.
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>월급 총액 (목표)</label>
+                                            <input type="number" placeholder="예: 4400000" value={payData.targetTotal}
+                                                onChange={(e) => setPayData({ ...payData, targetTotal: e.target.value })}
+                                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #c7d2fe', background: 'white', color: '#1e293b', fontSize: '0.85rem', fontWeight: 700 }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>주간 소정근로 (h)</label>
+                                            <input type="number" placeholder="40" value={payData.weeklyHours}
+                                                onChange={(e) => setPayData({ ...payData, weeklyHours: e.target.value })}
+                                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #c7d2fe', background: 'white', color: '#1e293b', fontSize: '0.85rem' }} />
+                                        </div>
+                                    </div>
+
+                                    {/* 역산 결과 미리보기 */}
+                                    {reverseCalc && (
+                                        <div style={{ marginTop: '10px', background: 'white', borderRadius: '8px', padding: '10px 12px', fontSize: '0.74rem', color: '#1e293b' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#4338ca', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '5px' }}>
+                                                <span>통상시급</span>
+                                                <span>{fmt(reverseCalc.hourly)}원 <span style={{ fontWeight: 500, color: '#94a3b8' }}>(÷{reverseCalc.monthlyContractHours}h)</span></span>
+                                            </div>
+                                            {[
+                                                { label: `기본급 (${reverseCalc.monthlyContractHours}h)`, value: reverseCalc.baseSalary },
+                                                { label: `약정 연장수당 (${reverseCalc.ot || 0}h ×1.5)`, value: reverseCalc.overtimePay },
+                                                { label: '식대 (비과세)', value: reverseCalc.meal },
+                                                { label: '교통비 (비과세)', value: reverseCalc.transport }
+                                            ].filter(r => r.value > 0).map(r => (
+                                                <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                    <span style={{ color: 'var(--text-muted)' }}>{r.label}</span>
+                                                    <span style={{ fontWeight: 600 }}>{fmt(r.value)}원</span>
+                                                </div>
+                                            ))}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', marginTop: '4px', paddingTop: '4px', fontWeight: 700 }}>
+                                                <span>합계</span>
+                                                <span style={{ color: reverseCalc.sum === reverseCalc.target ? '#059669' : '#d97706' }}>
+                                                    {fmt(reverseCalc.sum)}원 / 목표 {fmt(reverseCalc.target)}원
+                                                </span>
+                                            </div>
+
+                                            {reverseCalc.belowMinWage && (
+                                                <div style={{ marginTop: '6px', padding: '6px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', color: '#dc2626', fontWeight: 600, fontSize: '0.68rem' }}>
+                                                    ⚠️ 통상시급이 {year}년 최저임금({minWage.toLocaleString()}원) 미만입니다.
+                                                </div>
+                                            )}
+                                            {reverseCalc.otOverLimit && (
+                                                <div style={{ marginTop: '6px', padding: '6px 8px', background: '#fffbeb', border: '1px solid #fbbf24', borderRadius: '6px', color: '#92400e', fontWeight: 600, fontSize: '0.68rem' }}>
+                                                    ⚠️ 연장근로 약 주 {reverseCalc.weeklyOt.toFixed(1)}h — 법정 한도(주 12h)를 초과합니다.
+                                                </div>
+                                            )}
+
+                                            <button type="button" onClick={applyReverse}
+                                                style={{ width: '100%', marginTop: '8px', padding: '8px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: '#4f46e5', color: 'white', fontWeight: 700, fontSize: '0.76rem' }}>
+                                                ↓ 급여 항목에 기본급 {fmt(reverseCalc.baseSalary)}원 자동 입력
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <>
@@ -659,10 +1015,12 @@ const Payroll = () => {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                         <div>
-                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>연장근로 (시간)</label>
+                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                                {payType === 'monthly' && monthlyMode !== 'manual' ? '약정 연장근로 (시간/월·고정)' : '연장근로 (시간)'}
+                            </label>
                             <input type="number" placeholder="0" value={payData.overtimeHours}
                                 onChange={(e) => setPayData({ ...payData, overtimeHours: e.target.value })}
-                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: `1px solid ${payType === 'monthly' && monthlyMode !== 'manual' ? '#c7d2fe' : 'var(--border)'}`, background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
                         </div>
                         <div>
                             <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>야간근로 (시간)</label>
@@ -671,10 +1029,15 @@ const Payroll = () => {
                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
                         </div>
                         <div>
-                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>휴일근로 (시간)</label>
+                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>주말특근·휴일근로 (시간)</label>
                             <input type="number" placeholder="0" value={payData.holidayHours}
                                 onChange={(e) => setPayData({ ...payData, holidayHours: e.target.value })}
                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
+                            {calculation.holidayPay > 0 && (
+                                <div style={{ fontSize: '0.62rem', color: '#059669', marginTop: '3px', fontWeight: 600 }}>
+                                    특근비 +{fmt(calculation.holidayPay)}원 (통상시급×1.5, 별도 가산)
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -690,6 +1053,30 @@ const Payroll = () => {
                             <input type="number" placeholder="0" min="0" value={payData.annualLeaveDays}
                                 onChange={(e) => setPayData({ ...payData, annualLeaveDays: e.target.value, annualLeavePay: '' })}
                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '0.82rem' }} />
+                            {/* 근속연수 기준 발생/미사용 연차 안내 + 자동입력 */}
+                            {serviceInfo && (
+                                <div style={{
+                                    fontSize: '0.65rem', marginTop: '4px', padding: '5px 7px', borderRadius: '6px',
+                                    background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca', lineHeight: 1.5
+                                }}>
+                                    <div style={{ fontWeight: 700 }}>
+                                        🗓️ 근속 {serviceInfo.years}년 {serviceInfo.months}개월
+                                        <span style={{ fontWeight: 500, color: '#6366f1' }}>
+                                            {' '}· 발생연차 {serviceInfo.grantedLeave}일 · 사용 {parseInt(selectedEmp?.used_leave) || 0}일
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
+                                        <span>→ 미사용 <strong style={{ color: '#dc2626' }}>{remainingLeave}일</strong></span>
+                                        {remainingLeave > 0 && String(remainingLeave) !== String(payData.annualLeaveDays) && (
+                                            <button type="button"
+                                                onClick={() => setPayData({ ...payData, annualLeaveDays: String(remainingLeave), annualLeavePay: '' })}
+                                                style={{ padding: '2px 8px', borderRadius: '5px', border: '1px solid #4f46e5', background: '#4f46e5', color: 'white', fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
+                                                {remainingLeave}일 자동입력
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             {calculation.dailyWage > 0 && (
                                 <div style={{ fontSize: '0.65rem', color: '#4f46e5', marginTop: '3px', fontWeight: 600 }}>
                                     1일급: {fmt(calculation.dailyWage)}원
@@ -970,82 +1357,113 @@ const Payroll = () => {
                                     <td style={{ padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 600 }}>급여형태</td>
                                     <td style={{ padding: '8px 12px', border: '1px solid #e2e8f0' }}>{payType === 'monthly' ? '월급제' : '시급제'}</td>
                                 </tr>
+                                <tr>
+                                    <td style={{ padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 600 }}>임금계산기간</td>
+                                    <td style={{ padding: '8px 12px', border: '1px solid #e2e8f0' }}>{year}.{String(month).padStart(2, '0')}.01 ~ {year}.{String(month).padStart(2, '0')}.{new Date(year, month, 0).getDate()}</td>
+                                    <td style={{ padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 600 }}>임금지급일</td>
+                                    <td style={{ padding: '8px 12px', border: '1px solid #e2e8f0' }}>{(() => { const d = new Date(year, month, 15); return `${d.getFullYear()}년 ${d.getMonth() + 1}월 15일`; })()} (익월 15일)</td>
+                                </tr>
                             </tbody>
                         </table>
                     )}
 
-                    {/* 지급/공제 테이블 */}
-                    <div style={{ display: 'flex', gap: '0px', marginBottom: '20px' }}>
-                        {/* 지급 항목 */}
-                        <table style={{ flex: 1, borderCollapse: 'collapse', fontSize: '12px' }}>
-                            <thead>
-                                <tr>
-                                    <th colSpan="2" style={{ padding: '10px', background: '#059669', color: 'white', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '13px' }}>지급 항목</th>
-                                </tr>
-                                <tr>
-                                    <th style={{ padding: '8px 10px', background: '#ecfdf5', border: '1px solid #e2e8f0', textAlign: 'left', fontWeight: 600, width: '60%' }}>항목</th>
-                                    <th style={{ padding: '8px 10px', background: '#ecfdf5', border: '1px solid #e2e8f0', textAlign: 'right', fontWeight: 600 }}>금액</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {[
-                                    { label: '기본급', value: calculation.grossBase },
-                                    { label: '연장근로수당', value: calculation.overtimePay },
-                                    { label: '야간근로수당', value: calculation.nightPay },
-                                    { label: '휴일근로수당', value: calculation.holidayPay },
-                                    { label: '주휴수당', value: calculation.weeklyHolidayPay },
-                                    { label: '상여금', value: calculation.bonus },
-                                    { label: '연차수당', value: calculation.annualLeavePay },
-                                    { label: '명절수당', value: calculation.holidayBonus },
-                                    { label: '성과금', value: calculation.performanceBonus },
-                                    { label: '식대 (비과세)', value: calculation.nonTaxMeal },
-                                    { label: '교통비 (비과세)', value: calculation.nonTaxTransport }
-                                ].map(row => (
-                                    <tr key={row.label}>
-                                        <td style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{row.label}</td>
-                                        <td style={{ padding: '6px 10px', border: '1px solid #e2e8f0', textAlign: 'right' }}>{fmt(row.value)}</td>
-                                    </tr>
-                                ))}
-                                <tr style={{ fontWeight: 700 }}>
-                                    <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', background: '#f0fdf4' }}>지급 합계</td>
-                                    <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', background: '#f0fdf4', textAlign: 'right', color: '#059669' }}>{fmt(calculation.totalPay)}</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    {/* 지급/공제 테이블 — 근로기준법 제48조 제2항: 시간 수·계산방법 명시 */}
+                    {(() => {
+                        const eh = calculation.effectiveHourly || 0;
+                        const otH = parseFloat(payData.overtimeHours) || 0;
+                        const ntH = parseFloat(payData.nightHours) || 0;
+                        const hdH = parseFloat(payData.holidayHours) || 0;
+                        const leaveD = calculation.annualLeaveDays || 0;
+                        const hourlyW = parseFloat(payData.hourlyWage) || 0;
+                        const payRows = [
+                            {
+                                label: '기본급',
+                                calc: payType === 'monthly'
+                                    ? `통상시급 ${fmt(eh)}원 × ${calculation.monthlyContractHours}h`
+                                    : `시급 ${fmt(hourlyW)}원 기준`,
+                                value: calculation.grossBase, always: true
+                            },
+                            { label: '연장근로수당', calc: `${otH}시간 × ${fmt(eh)}원 × 1.5`, value: calculation.overtimePay },
+                            { label: '야간근로수당', calc: `${ntH}시간 × ${fmt(eh)}원 × 0.5`, value: calculation.nightPay },
+                            { label: '휴일·주말특근수당', calc: `${hdH}시간 × ${fmt(eh)}원 × 1.5`, value: calculation.holidayPay },
+                            { label: '주휴수당', calc: '유급주휴 (주 15h 이상)', value: calculation.weeklyHolidayPay },
+                            { label: '상여금', calc: '정액', value: calculation.bonus },
+                            { label: '연차수당', calc: `1일급 ${fmt(calculation.dailyWage)}원 × ${leaveD}일`, value: calculation.annualLeavePay },
+                            { label: '명절수당', calc: '정액', value: calculation.holidayBonus },
+                            { label: '성과금', calc: '정액', value: calculation.performanceBonus },
+                            { label: '식대 (비과세)', calc: '월정액 (비과세)', value: calculation.nonTaxMeal },
+                            { label: '교통비 (비과세)', calc: '월정액 (비과세)', value: calculation.nonTaxTransport }
+                        ].filter(r => r.always || r.value > 0);
 
-                        {/* 공제 항목 */}
-                        <table style={{ flex: 1, borderCollapse: 'collapse', fontSize: '12px' }}>
-                            <thead>
-                                <tr>
-                                    <th colSpan="2" style={{ padding: '10px', background: '#dc2626', color: 'white', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '13px' }}>공제 항목</th>
-                                </tr>
-                                <tr>
-                                    <th style={{ padding: '8px 10px', background: '#fef2f2', border: '1px solid #e2e8f0', textAlign: 'left', fontWeight: 600, width: '60%' }}>항목</th>
-                                    <th style={{ padding: '8px 10px', background: '#fef2f2', border: '1px solid #e2e8f0', textAlign: 'right', fontWeight: 600 }}>금액</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {[
-                                    { label: '국민연금', value: calculation.nationalPension },
-                                    { label: '건강보험', value: calculation.healthInsurance },
-                                    { label: '장기요양보험', value: calculation.longTermCare },
-                                    { label: '고용보험', value: calculation.employmentInsurance },
-                                    { label: '소득세 (갑근세)', value: calculation.incomeTax },
-                                    { label: '지방소득세', value: calculation.localIncomeTax },
-                                    { label: '', value: 0 }
-                                ].map((row, i) => (
-                                    <tr key={row.label || i}>
-                                        <td style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{row.label}</td>
-                                        <td style={{ padding: '6px 10px', border: '1px solid #e2e8f0', textAlign: 'right' }}>{row.value ? fmt(row.value) : ''}</td>
-                                    </tr>
-                                ))}
-                                <tr style={{ fontWeight: 700 }}>
-                                    <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', background: '#fef2f2' }}>공제 합계</td>
-                                    <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', background: '#fef2f2', textAlign: 'right', color: '#dc2626' }}>{fmt(calculation.totalDeduction)}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                        const dedRows = [
+                            { label: '국민연금', calc: `${(rates.nationalPension * 100).toFixed(2)}%`, value: calculation.nationalPension },
+                            { label: '건강보험', calc: `${(rates.healthInsurance * 100).toFixed(3)}%`, value: calculation.healthInsurance },
+                            { label: '장기요양보험', calc: `건강보험료 × ${(rates.longTermCare * 100).toFixed(2)}%`, value: calculation.longTermCare },
+                            { label: '고용보험', calc: `${(rates.employmentInsurance * 100).toFixed(1)}%`, value: calculation.employmentInsurance },
+                            { label: '소득세 (갑근세)', calc: '간이세액표', value: calculation.incomeTax },
+                            { label: '지방소득세', calc: '소득세 × 10%', value: calculation.localIncomeTax }
+                        ];
+
+                        const th = { padding: '7px 8px', background: '#ecfdf5', border: '1px solid #e2e8f0', fontWeight: 600 };
+                        const td = { padding: '6px 8px', border: '1px solid #e2e8f0' };
+                        return (
+                            <div style={{ marginBottom: '20px' }}>
+                                {/* 지급 항목 */}
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', marginBottom: '14px' }}>
+                                    <thead>
+                                        <tr>
+                                            <th colSpan="3" style={{ padding: '9px', background: '#059669', color: 'white', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '13px' }}>지급 항목</th>
+                                        </tr>
+                                        <tr>
+                                            <th style={{ ...th, textAlign: 'left', width: '26%' }}>항목</th>
+                                            <th style={{ ...th, textAlign: 'left', width: '48%' }}>산출내역 (시간 수 · 계산방법)</th>
+                                            <th style={{ ...th, textAlign: 'right', width: '26%' }}>금액</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {payRows.map(row => (
+                                            <tr key={row.label}>
+                                                <td style={td}>{row.label}</td>
+                                                <td style={{ ...td, color: '#64748b' }}>{row.calc}</td>
+                                                <td style={{ ...td, textAlign: 'right' }}>{fmt(row.value)}</td>
+                                            </tr>
+                                        ))}
+                                        <tr style={{ fontWeight: 700 }}>
+                                            <td style={{ ...td, background: '#f0fdf4' }} colSpan="2">지급 합계</td>
+                                            <td style={{ ...td, background: '#f0fdf4', textAlign: 'right', color: '#059669' }}>{fmt(calculation.totalPay)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                {/* 공제 항목 */}
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                                    <thead>
+                                        <tr>
+                                            <th colSpan="3" style={{ padding: '9px', background: '#dc2626', color: 'white', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '13px' }}>공제 항목</th>
+                                        </tr>
+                                        <tr>
+                                            <th style={{ ...th, background: '#fef2f2', textAlign: 'left', width: '26%' }}>항목</th>
+                                            <th style={{ ...th, background: '#fef2f2', textAlign: 'left', width: '48%' }}>계산방법</th>
+                                            <th style={{ ...th, background: '#fef2f2', textAlign: 'right', width: '26%' }}>금액</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {dedRows.map(row => (
+                                            <tr key={row.label}>
+                                                <td style={td}>{row.label}</td>
+                                                <td style={{ ...td, color: '#64748b' }}>{row.calc}</td>
+                                                <td style={{ ...td, textAlign: 'right' }}>{fmt(row.value)}</td>
+                                            </tr>
+                                        ))}
+                                        <tr style={{ fontWeight: 700 }}>
+                                            <td style={{ ...td, background: '#fef2f2' }} colSpan="2">공제 합계</td>
+                                            <td style={{ ...td, background: '#fef2f2', textAlign: 'right', color: '#dc2626' }}>{fmt(calculation.totalDeduction)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        );
+                    })()}
 
                     {/* 실수령액 */}
                     <div style={{
@@ -1070,7 +1488,7 @@ const Payroll = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px', fontSize: '11px' }}>
                         <div style={{ textAlign: 'center' }}>
                             <div style={{ marginBottom: '6px', color: '#64748b' }}>위 내용을 확인합니다.</div>
-                            <div style={{ fontSize: '12px', color: '#94a3b8' }}>{year}년 {month}월 {new Date(year, month, 0).getDate()}일</div>
+                            <div style={{ fontSize: '12px', color: '#94a3b8' }}>{(() => { const d = new Date(year, month, 15); return `${d.getFullYear()}년 ${d.getMonth() + 1}월 15일`; })()}</div>
                         </div>
                         <div style={{ display: 'flex', gap: '40px' }}>
                             <div style={{ textAlign: 'center' }}>

@@ -75,10 +75,27 @@ const Employees = () => {
     const [contractData, setContractData] = useState({
         payType: 'monthly', baseSalary: '', hourlyWage: '',
         workStart: '09:00', workEnd: '18:00', breakStart: '12:00', breakEnd: '13:00',
-        weeklyDays: '5', weeklyHours: '40', restDay: '일', payDay: '10',
+        weeklyDays: '5', weeklyHours: '40', restDay: '일', payDay: '15',
         contractStart: new Date().toISOString().split('T')[0], contractEnd: '',
-        workplace: ''
+        workplace: '',
+        // 포괄임금(고정OT) 관련
+        comprehensive: true,   // 포괄임금제(고정 연장수당 포함) 여부
+        fixedOtHours: '20',    // 월 약정 연장근로시간
+        mealAllowance: '',     // 식대(비과세)
+        bonusFlexible: true    // 상여를 경영성과 변동 상여로 규정
     });
+
+    // 포괄임금 구성 산출: 기본급 → 통상시급 → 고정 연장수당
+    const contractWageBreakdown = (() => {
+        const base = parseFloat(contractData.baseSalary) || 0;
+        const wh = parseFloat(contractData.weeklyHours) || 40;
+        const otH = parseFloat(contractData.fixedOtHours) || 0;
+        const mch = Math.round((wh + Math.min(wh, 40) / 5) * 4.345); // 월 소정근로시간(주휴 포함)
+        const hourly = base > 0 ? base / mch : 0;
+        const fixedOtPay = Math.round(hourly * 1.5 * otH);
+        const meal = parseFloat(contractData.mealAllowance) || 0;
+        return { base, mch, hourly: Math.round(hourly), otH, fixedOtPay, meal, total: base + fixedOtPay + meal };
+    })();
 
     const filteredEmployees = employees.filter(e => {
         if (viewMode === '전체') return true;
@@ -120,15 +137,16 @@ const Employees = () => {
         const today = new Date();
         const yearsOfService = (today - join) / (1000 * 60 * 60 * 24 * 365.25);
 
-        // Korean labor law: 15 days for first year, +1 day per year after 1 year (max 25 days)
+        // 근로기준법 제60조
+        // - 1년 미만: 1개월 개근당 1일 (최대 11일)
+        // - 1년 이상: 15일
+        // - 3년 이상: 최초 1년 초과 매 2년마다 1일 가산 (최대 25일) → 3년 16일, 5년 17일 …
         if (yearsOfService < 1) {
-            // For employees with less than 1 year, calculate proportionally
             const monthsWorked = Math.floor(yearsOfService * 12);
-            return Math.floor(monthsWorked * 1.25); // 15 days / 12 months
+            return Math.min(monthsWorked, 11);
         } else {
-            const additionalYears = Math.floor(yearsOfService - 1);
-            const totalLeave = 15 + additionalYears;
-            return Math.min(totalLeave, 25); // Max 25 days
+            const fullYears = Math.floor(yearsOfService);
+            return Math.min(15 + Math.floor((fullYears - 1) / 2), 25);
         }
     };
 
@@ -1322,12 +1340,53 @@ const Employees = () => {
                                             </select>
                                         </div>
                                         <div className="form-group" style={{ marginBottom: 0 }}>
-                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>급여일</label>
+                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>급여일(익월)</label>
                                             <input type="number" className="form-input" value={contractData.payDay}
                                                 onChange={(e) => setContractData({ ...contractData, payDay: e.target.value })}
                                                 min="1" max="31" />
                                         </div>
                                     </div>
+
+                                    {/* 포괄임금(고정 연장수당) 설정 */}
+                                    {contractData.payType === 'monthly' && (
+                                        <div style={{ marginTop: '10px', padding: '10px', background: 'white', borderRadius: '8px', border: '1px solid #fde68a' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 700, color: '#92400e', marginBottom: '8px', cursor: 'pointer' }}>
+                                                <input type="checkbox" checked={contractData.comprehensive}
+                                                    onChange={(e) => setContractData({ ...contractData, comprehensive: e.target.checked })} />
+                                                포괄임금제 (기본급 + 고정 연장근로수당) 적용
+                                            </label>
+                                            {contractData.comprehensive && (
+                                                <>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>월 약정 연장시간 (h)</label>
+                                                            <input type="number" className="form-input" value={contractData.fixedOtHours}
+                                                                onChange={(e) => setContractData({ ...contractData, fixedOtHours: e.target.value })}
+                                                                placeholder="예: 20" />
+                                                        </div>
+                                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                                            <label className="form-label" style={{ fontSize: '0.7rem' }}>식대(비과세, 원)</label>
+                                                            <input type="number" className="form-input" value={contractData.mealAllowance}
+                                                                onChange={(e) => setContractData({ ...contractData, mealAllowance: e.target.value })}
+                                                                placeholder="예: 200000" />
+                                                        </div>
+                                                    </div>
+                                                    {contractWageBreakdown.base > 0 && (
+                                                        <div style={{ marginTop: '8px', fontSize: '0.7rem', color: '#475569', lineHeight: 1.6 }}>
+                                                            통상시급 <b>{contractWageBreakdown.hourly.toLocaleString()}원</b> (기본급÷{contractWageBreakdown.mch}h) ·
+                                                            고정연장수당 <b>{contractWageBreakdown.fixedOtPay.toLocaleString()}원</b> ({contractWageBreakdown.otH}h×1.5) ·
+                                                            월 고정급 합계 <b style={{ color: '#92400e' }}>{contractWageBreakdown.total.toLocaleString()}원</b>
+                                                        </div>
+                                                    )}
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#475569', marginTop: '8px', cursor: 'pointer' }}>
+                                                        <input type="checkbox" checked={contractData.bonusFlexible}
+                                                            onChange={(e) => setContractData({ ...contractData, bonusFlexible: e.target.checked })} />
+                                                        상여금을 경영성과·회사사정에 따른 <b>변동 상여</b>로 규정 (통상임금 불산입)
+                                                    </label>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -1860,23 +1919,61 @@ const Employees = () => {
                                     </table>
 
                                     <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>제2조 (임금)</div>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '12px', fontSize: '13px' }}>
                                         <tbody>
                                             <tr>
-                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, width: '20%', textAlign: 'center' }}>임금형태</td>
+                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, width: '25%', textAlign: 'center' }}>임금형태</td>
                                                 <td style={cellStyle}>
                                                     {contractData.payType === 'monthly'
-                                                        ? `월급 ${fmtWon(contractData.baseSalary)}원`
-                                                        : `시급 ${fmtWon(contractData.hourlyWage)}원`}
+                                                        ? (contractData.comprehensive ? '월급제 (포괄임금제)' : '월급제')
+                                                        : '시급제'}
+                                                    {contractData.payType === 'hourly' && ` · 시급 ${fmtWon(contractData.hourlyWage)}원`}
                                                 </td>
                                             </tr>
-                                            <tr>
-                                                <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>임금구성</td>
-                                                <td style={cellStyle}>기본급 + 제수당 (연장·야간·휴일근로수당 등 별도 지급)</td>
-                                            </tr>
+                                            {contractData.payType === 'monthly' && contractData.comprehensive ? (
+                                                <>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>① 기본급</td>
+                                                        <td style={cellStyle}>{fmtWon(contractWageBreakdown.base)}원 (월 소정근로 {contractWageBreakdown.mch}시간, 통상시급 {fmtWon(contractWageBreakdown.hourly)}원)</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>② 고정 연장근로수당</td>
+                                                        <td style={cellStyle}>{fmtWon(contractWageBreakdown.fixedOtPay)}원 (월 {contractWageBreakdown.otH}시간분, 통상시급 × 1.5)</td>
+                                                    </tr>
+                                                    {contractWageBreakdown.meal > 0 && (
+                                                        <tr>
+                                                            <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>③ 식대(비과세)</td>
+                                                            <td style={cellStyle}>{fmtWon(contractWageBreakdown.meal)}원</td>
+                                                        </tr>
+                                                    )}
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#eef2ff', fontWeight: 700, textAlign: 'center' }}>월 고정급 합계</td>
+                                                        <td style={{ ...cellStyle, background: '#eef2ff', fontWeight: 700 }}>{fmtWon(contractWageBreakdown.total)}원</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>④ 상여금</td>
+                                                        <td style={cellStyle}>
+                                                            {contractData.bonusFlexible
+                                                                ? '회사의 경영성과 및 경영사정에 따라 변동 지급하며, 정기적·일률적으로 지급되지 아니하므로 통상임금에 산입하지 아니한다.'
+                                                                : '별도 정하는 바에 따라 지급한다.'}
+                                                        </td>
+                                                    </tr>
+                                                </>
+                                            ) : contractData.payType === 'monthly' && (
+                                                <>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>기본급</td>
+                                                        <td style={cellStyle}>월 {fmtWon(contractData.baseSalary)}원</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>임금구성</td>
+                                                        <td style={cellStyle}>기본급 + 제수당 (연장·야간·휴일근로수당 등 별도 지급)</td>
+                                                    </tr>
+                                                </>
+                                            )}
                                             <tr>
                                                 <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>임금지급일</td>
-                                                <td style={cellStyle}>매월 {contractData.payDay || '____'}일 (해당일이 휴일인 경우 전일 지급)</td>
+                                                <td style={cellStyle}>익월 {contractData.payDay || '15'}일 (해당일이 휴일인 경우 전일 지급)</td>
                                             </tr>
                                             <tr>
                                                 <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 700, textAlign: 'center' }}>지급방법</td>
@@ -1884,6 +1981,13 @@ const Employees = () => {
                                             </tr>
                                         </tbody>
                                     </table>
+                                    {contractData.payType === 'monthly' && contractData.comprehensive && (
+                                        <div style={{ marginBottom: '20px', paddingLeft: '10px', fontSize: '12px', color: '#475569', lineHeight: 1.7 }}>
+                                            ※ 본 임금은 <strong>월 {contractWageBreakdown.otH}시간의 연장근로</strong>를 예정하여 그에 대한 고정 연장근로수당을 포함한 포괄임금이다.
+                                            <strong> 약정 연장근로시간을 초과하는 연장·야간·휴일근로</strong>에 대하여는 근로기준법 제56조에 따라 그 초과분을 별도 가산하여 지급한다.
+                                            본 포괄임금 약정에 대하여 근로자는 충분히 설명을 듣고 동의한다.
+                                        </div>
+                                    )}
 
                                     <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px', color: '#1e293b', borderBottom: '2px solid #4f46e5', paddingBottom: '4px' }}>제3조 (연차유급휴가)</div>
                                     <div style={{ marginBottom: '20px', paddingLeft: '10px', fontSize: '13px' }}>근로기준법에서 정하는 바에 따라 연차유급휴가를 부여한다.</div>

@@ -5,6 +5,7 @@ import Modal from '../components/Modal';
 import AnalyticsSection from '../components/AnalyticsSection';
 import FactoryFloorMap from '../components/FactoryFloorMap';
 import WorkStandardSheet from '../components/WorkStandardSheet';
+import EquipmentMaterialSheet from '../components/EquipmentMaterialSheet';
 import {
     Activity,
     AlertTriangle,
@@ -1853,6 +1854,11 @@ const Dashboard = () => {
                         )}
                     </div>
                 </div>
+            </div>
+
+            {/* ──────────────── 호기별 원재료 투입량 (작업지시 첨부 인쇄/PDF) ──────────────── */}
+            <div className="widgets-grid" style={{ marginTop: '1.5rem' }}>
+                <EquipmentMaterialSheet />
             </div>
 
             {/* ──────────────── 작업표준서 다운로드 (사출조건 + 불량이력 연동) ──────────────── */}

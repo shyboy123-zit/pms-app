@@ -14,6 +14,25 @@ export default async function handler(req, res) {
   const clientLike = req.query.client || '금호정공';
   const supa = createClient(SUPA_URL, SUPA_SERVICE);
 
+  // ── 보정 작업 (2026-05 금호정공 마감 일치) ──
+  if (req.query.action === 'fix' && req.query.confirm === 'yes') {
+    const log = [];
+    // 1) Y7T PIVOT 단가 34 → 35
+    let r = await supa.from('vouchers').update({ unit_price: 35 }).eq('id', '7b42af8f-70aa-4ebd-88ff-219981d1ca40');
+    log.push({ op: 'update Y7T PIVOT unit_price=35', error: r.error?.message || null });
+    // 2) 120-6020 5/18 6000개 중복 삭제
+    r = await supa.from('vouchers').delete().eq('id', '327108ed-6953-4c42-9a59-873cec6e8624');
+    log.push({ op: 'delete dup 120-6020 6000', error: r.error?.message || null });
+    // 3) D100P NC 5/4 1000x4000 매입 누락분 추가
+    r = await supa.from('vouchers').insert([{
+      voucher_date: '2026-05-04', voucher_type: '매입', item_name: 'D100P NC', item_code: '',
+      quantity: 1000, unit: 'kg', unit_price: 4000, client: '금호정공(주)',
+      notes: '[자동-원재료] D100P NC 1000kg 입고 (5월 마감 누락분 보정)'
+    }]);
+    log.push({ op: 'insert D100P NC 5/4 4,000,000', error: r.error?.message || null });
+    return res.status(200).json({ fixed: true, log });
+  }
+
   const { data: vouchers = [], error } = await supa
     .from('vouchers')
     .select('id, voucher_date, voucher_type, item_name, item_code, quantity, unit, unit_price, total_amount, client, notes')

@@ -26,11 +26,13 @@ export default async function handler(req, res) {
   }
 
   // 조회: 해당 월 전표 전체 (금호정공 + 품목/단가 점검)
+  const [yy, mm] = month.split('-').map(Number);
+  const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, '0')}-01`;
   const { data: vouchers = [], error } = await supa
     .from('vouchers')
     .select('id, voucher_date, voucher_type, item_name, quantity, unit_price, total_amount, client')
     .gte('voucher_date', `${month}-01`)
-    .lte('voucher_date', `${month}-31`)
+    .lt('voucher_date', nextMonth)
     .order('voucher_date', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
 

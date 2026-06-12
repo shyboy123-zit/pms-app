@@ -147,12 +147,54 @@ const Sales = () => {
         return { totalSales, totalPurchases, count: yearVouchers.length };
     }, [vouchers, selectedYear, clientFilter]);
 
+    // ── 입력 오류 방어 가드레일 (①0원 ②표준단가 이탈 ③중복 ④신규거래처) ──
+    const knownClients = useMemo(() => new Set([
+        ...(vouchers || []).map(v => v.client).filter(Boolean),
+        ...(suppliers || []).map(s => s.name).filter(Boolean),
+    ]), [vouchers, suppliers]);
+
+    const passGuardrails = (items, client, date, type, skipId = null) => {
+        for (const it of items) {
+            const qty = parseFloat(it.quantity) || 0;
+            const price = parseFloat(it.unit_price) || 0;
+            // ① 단가 0원 차단
+            if (price <= 0) {
+                if (!window.confirm(`⚠️ '${it.item_name}' 단가가 0원입니다.\n무상(샘플/서비스) 출고가 맞습니까?\n\n확인=0원으로 진행 / 취소=단가 다시 입력`)) return false;
+            }
+            // ② 표준단가 이탈 경고
+            const prod = (products || []).find(p =>
+                (it.productId && p.id === it.productId) ||
+                (it.item_code && p.product_code === it.item_code) ||
+                p.name === it.item_name);
+            const std = prod ? parseFloat(prod.unit_price) || 0 : 0;
+            if (std > 0 && price > 0 && price !== std) {
+                if (!window.confirm(`⚠️ '${it.item_name}' 단가 ₩${price.toLocaleString()} 가 표준단가 ₩${std.toLocaleString()} 와 다릅니다.\n\n이대로 진행할까요?`)) return false;
+            }
+            // ③ 중복 전표 경고
+            const dup = (vouchers || []).find(v =>
+                v.id !== skipId &&
+                v.voucher_date === date && v.voucher_type === type &&
+                (v.client || '') === (client || '') &&
+                (v.item_name || '') === (it.item_name || '') &&
+                parseFloat(v.quantity) === qty);
+            if (dup) {
+                if (!window.confirm(`⚠️ 이미 같은 전표가 있습니다.\n${date} / ${client || '미지정'} / ${it.item_name} / ${qty.toLocaleString()}개\n\n중복 등록할까요?`)) return false;
+            }
+        }
+        // ④ 신규(미등록) 거래처 경고
+        if (client && !knownClients.has(client)) {
+            if (!window.confirm(`⚠️ '${client}'는 기존에 없던 거래처입니다.\n거래처명 오타가 아닌지 확인하세요. (예: 금호정공 ↔ 금호정공(주))\n\n이 이름으로 등록할까요?`)) return false;
+        }
+        return true;
+    };
+
     const handleVoucherSave = async () => {
         if (isEditMode && editingId) {
             // 단일 수정 모드
             if (!newVoucher.item_name || newVoucher.quantity <= 0) {
                 return alert('품목명과 수량을 입력해주세요.');
             }
+            if (!passGuardrails([newVoucher], newVoucher.client, newVoucher.voucher_date, newVoucher.voucher_type, editingId)) return;
             const payload = {
                 voucher_date: newVoucher.voucher_date,
                 voucher_type: newVoucher.voucher_type,
@@ -174,6 +216,7 @@ const Sales = () => {
         if (validItems.length === 0) {
             return alert('최소 1개 이상의 품목을 입력해주세요.');
         }
+        if (!passGuardrails(validItems, voucherCommon.client, voucherCommon.voucher_date, voucherCommon.voucher_type)) return;
         for (const item of validItems) {
             const payload = {
                 voucher_date: voucherCommon.voucher_date,
@@ -1113,8 +1156,8 @@ const Sales = () => {
                         <div className="form-group">
                             <label className="form-label">거래처</label>
                             <div className="autocomplete-wrapper">
-                                <input className="form-input" value={clientSearch} placeholder="거래처명 검색..."
-                                    onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
+                                <input className="form-input" value={clientSearch} placeholder="거래처명 검색/선택..."
+                                    onChange={(e) => { setClientSearch(e.target.value); setVoucherCommon({ ...voucherCommon, client: e.target.value }); setShowClientDropdown(true); }}
                                     onFocus={() => setShowClientDropdown(true)} />
                                 {showClientDropdown && (
                                     <div className="autocomplete-dropdown">

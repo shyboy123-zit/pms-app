@@ -96,6 +96,24 @@ export default async function handler(req, res) {
       return days >= 90;
     });
 
+    // 7-1) 어제 매출 전표 이상치 점검 (0원 / 표준단가 이탈 / 중복)
+    const yVouchers = vouchers.filter(v => v.voucher_date === yesterday && v.voucher_type === '매출');
+    const prodByKey = {};
+    products.forEach(p => { if (p.product_code) prodByKey[p.product_code] = p; prodByKey[p.name] = p; });
+    const anomalies = [];
+    const seen = {};
+    for (const v of yVouchers) {
+        const price = parseFloat(v.unit_price || 0);
+        const qty = parseFloat(v.quantity || 0);
+        const prod = prodByKey[v.item_code] || prodByKey[v.item_name];
+        const std = prod ? parseFloat(prod.unit_price || 0) : 0;
+        if (price <= 0) anomalies.push(`0원: ${v.item_name} (${v.client || '-'})`);
+        else if (std > 0 && price !== std) anomalies.push(`단가이탈: ${v.item_name} ₩${price.toLocaleString()}≠표준₩${std.toLocaleString()}`);
+        const key = `${v.client}|${v.item_name}|${qty}`;
+        seen[key] = (seen[key] || 0) + 1;
+        if (seen[key] === 2) anomalies.push(`중복의심: ${v.item_name} ${qty}개 (${v.client || '-'})`);
+    }
+
     // 7) 미수금 (매출 전표 미수 합계)
     const receivable = vouchers
       .filter((v) => v.voucher_type === '매출')
@@ -151,9 +169,16 @@ export default async function handler(req, res) {
       lines.push('');
     }
 
+    if (anomalies.length) {
+        lines.push('');
+        lines.push(`🧾 어제 매출 입력 점검 ${anomalies.length}건 (확인 요망)`);
+        anomalies.slice(0, 8).forEach(a => lines.push(`  · ${a}`));
+        if (anomalies.length > 8) lines.push(`  … 외 ${anomalies.length - 8}건`);
+    }
+    lines.push('');
     lines.push(`💰 미수금 합계: ${won(receivable)}`);
 
-    const hasAlert = lowMaterials.length || lowProducts.length || delayed.length || moldDue.length || overProducts.length;
+    const hasAlert = lowMaterials.length || lowProducts.length || delayed.length || moldDue.length || overProducts.length || anomalies.length;
 
     return res.status(200).json({
       ok: true,

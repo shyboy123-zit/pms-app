@@ -25,6 +25,18 @@ export default async function handler(req, res) {
     return res.status(200).json({ fixed: true, newPrice, log });
   }
 
+  // 전체 매출 전표 (금호정공, 모든 월) — 단가 대조용
+  if (req.query.action === 'allsales') {
+    const { data = [], error } = await supa
+      .from('vouchers')
+      .select('id, voucher_date, item_name, quantity, unit_price, client')
+      .eq('voucher_type', '매출')
+      .ilike('client', '%금호정공%')
+      .order('item_name', { ascending: true });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ count: data.length, sales: data });
+  }
+
   // 조회: 해당 월 전표 전체 (금호정공 + 품목/단가 점검)
   const [yy, mm] = month.split('-').map(Number);
   const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, '0')}-01`;

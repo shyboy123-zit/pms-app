@@ -145,7 +145,9 @@ const Payroll = () => {
         weeklyWorkedDays: ['', '', '', '', ''],    // 주별 출근일수
         weeklyHours: '40',    // 주간 소정근로시간 (주휴수당 계산용)
         scheduledDays: '5',   // 주간 소정근로일수 (개근 판단용, 기본 5일)
-        overtimeHours: '',    // 연장근로시간
+        overtimeHours: '',    // 연장근로시간 (월, 약정)
+        dailyWorkHours: '',   // 1일 근무시간(휴게 제외) — 약정 연장 자동환산용
+        workDays: '5',        // 주 근무일수
         nightHours: '',       // 야간근로시간
         holidayHours: '',     // 휴일근로시간
         bonus: '',            // 상여금
@@ -409,6 +411,46 @@ const Payroll = () => {
         setPayData(prev => ({ ...prev, bonus: String(Math.max(0, bonusCalc.bonus)), annualLeavePay: '' }));
     };
 
+    // 1일 근무시간 → 월 약정 연장시간 자동환산: (1일근무 − 8) × 주근무일 × 4.345
+    const setDailyWork = (field, val) => {
+        setPayData(prev => {
+            const next = { ...prev, [field]: val };
+            const d = parseFloat(next.dailyWorkHours) || 0;
+            const wd = parseFloat(next.workDays) || 5;
+            if (d > 0) {
+                const monthlyOt = Math.round(Math.max(0, d - 8) * wd * 4.345 * 10) / 10;
+                next.overtimeHours = String(monthlyOt);
+            }
+            return next;
+        });
+    };
+
+    // 1일근무→약정연장 자동환산 입력 행 (역산·기본급+상여 패널 공용)
+    const dailyOtRow = (accent) => {
+        const lbl = { fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' };
+        const inp = { width: '100%', padding: '7px 9px', borderRadius: '8px', border: `1px solid ${accent}`, background: 'white', color: '#1e293b', fontSize: '0.82rem' };
+        return (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '8px' }}>
+                <div>
+                    <label style={lbl}>1일 근무(휴게제외)</label>
+                    <input type="number" placeholder="예: 9" value={payData.dailyWorkHours}
+                        onChange={(e) => setDailyWork('dailyWorkHours', e.target.value)} style={inp} />
+                </div>
+                <div>
+                    <label style={lbl}>주 근무일수</label>
+                    <input type="number" placeholder="5" min="1" max="7" value={payData.workDays}
+                        onChange={(e) => setDailyWork('workDays', e.target.value)} style={inp} />
+                </div>
+                <div>
+                    <label style={lbl}>월 약정연장(h)</label>
+                    <input type="number" placeholder="자동" value={payData.overtimeHours}
+                        onChange={(e) => setPayData({ ...payData, overtimeHours: e.target.value })}
+                        style={{ ...inp, fontWeight: 700 }} />
+                </div>
+            </div>
+        );
+    };
+
     const handleEmpSelect = (empId) => {
         setSelectedEmpId(empId);
         setShowPaystub(false);
@@ -433,6 +475,8 @@ const Payroll = () => {
                     baseSalary: p.baseSalary || '',
                     targetTotal: p.targetTotal || '',     // 월급 총액 (고정)
                     overtimeHours: p.overtimeHours || '', // 약정 연장시간 (매월 고정)
+                    dailyWorkHours: p.dailyWorkHours || '', // 1일 근무시간 (고정)
+                    workDays: p.workDays || '5',          // 주 근무일수 (고정)
                     hourlyWage: p.hourlyWage || '',
                     weeklyHours: p.weeklyHours || '40',
                     scheduledDays: p.scheduledDays || '5',
@@ -757,7 +801,7 @@ const Payroll = () => {
                                         <strong>기본급은 직접 고정</strong>하고, 월급 총액에서 기본급·약정연장·비과세를 뺀 <strong>나머지를 상여(변동)</strong>로 배정합니다.
                                         상여는 경영성과에 따라 조정 가능해 인건비 유연성을 확보합니다.
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.8fr', gap: '8px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                         <div>
                                             <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>기본급 (고정)</label>
                                             <input type="number" placeholder="예: 2200000" value={payData.baseSalary}
@@ -770,13 +814,9 @@ const Payroll = () => {
                                                 onChange={(e) => setPayData({ ...payData, targetTotal: e.target.value })}
                                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #fdba74', background: 'white', color: '#1e293b', fontSize: '0.85rem', fontWeight: 700 }} />
                                         </div>
-                                        <div>
-                                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>약정 연장(h/월)</label>
-                                            <input type="number" placeholder="예: 20" value={payData.overtimeHours}
-                                                onChange={(e) => setPayData({ ...payData, overtimeHours: e.target.value })}
-                                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #fdba74', background: 'white', color: '#1e293b', fontSize: '0.85rem', fontWeight: 700 }} />
-                                        </div>
                                     </div>
+                                    {/* 1일 근무시간 → 월 약정연장 자동환산 */}
+                                    {dailyOtRow('#fdba74')}
 
                                     {/* 입력이 덜 됐을 때 안내 */}
                                     {!bonusCalc && (
@@ -841,7 +881,7 @@ const Payroll = () => {
                                         월급 총액과 <strong>주간 소정근로 + 약정 연장시간</strong>(매월 고정)을 기준으로 통상시급을 역산해
                                         기본급·연장수당으로 자동 분해합니다. <strong>주말 특근비·야간수당은 역산에 포함하지 않고</strong> 실제 근무한 만큼 별도로 가산됩니다.
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '8px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                         <div>
                                             <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>월급 총액 (목표)</label>
                                             <input type="number" placeholder="예: 4400000" value={payData.targetTotal}
@@ -854,13 +894,9 @@ const Payroll = () => {
                                                 onChange={(e) => setPayData({ ...payData, weeklyHours: e.target.value })}
                                                 style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #c7d2fe', background: 'white', color: '#1e293b', fontSize: '0.85rem' }} />
                                         </div>
-                                        <div>
-                                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>약정 연장(h/월)</label>
-                                            <input type="number" placeholder="예: 20" value={payData.overtimeHours}
-                                                onChange={(e) => setPayData({ ...payData, overtimeHours: e.target.value })}
-                                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #c7d2fe', background: 'white', color: '#1e293b', fontSize: '0.85rem' }} />
-                                        </div>
                                     </div>
+                                    {/* 1일 근무시간 → 월 약정연장 자동환산 */}
+                                    {dailyOtRow('#c7d2fe')}
 
                                     {/* 역산 결과 미리보기 */}
                                     {reverseCalc && (

@@ -159,7 +159,9 @@ const Employees = () => {
                 name: newItem.name,
                 department: newItem.department,
                 position: newItem.position,
-                join_date: newItem.joinDate
+                join_date: newItem.joinDate,
+                used_leave: parseFloat(newItem.usedLeave) || 0,
+                total_leave: parseFloat(newItem.totalLeave) || 0
             };
             try {
                 await updateEmployee(editingId, itemToUpdate);
@@ -260,7 +262,9 @@ const Employees = () => {
             ssn: emp.ssn || '',
             department: emp.department,
             position: emp.position,
-            joinDate: emp.join_date
+            joinDate: emp.join_date,
+            usedLeave: emp.used_leave ?? 0,
+            totalLeave: emp.total_leave ?? 15
         });
         setIsModalOpen(true);
     };
@@ -602,18 +606,23 @@ const Employees = () => {
                         workHours = parseFloat(hStr) || 0;
                     }
 
+                    let saveErr;
                     if (existing) {
-                        await updateAttendance(existing.id, { status: newStatus, work_hours: workHours });
+                        ({ error: saveErr } = await updateAttendance(existing.id, { status: newStatus, work_hours: workHours }));
                     } else {
-                        await addAttendance({
+                        ({ error: saveErr } = await addAttendance({
                             employee_id: attEmpId,
                             employee_name: attEmp?.name,
                             date: dateStr,
                             status: newStatus,
                             work_hours: workHours
-                        });
+                        }));
                     }
-                    // 연차/반차 등록·변경 시 연차 일수 자동 가감
+                    if (saveErr) {
+                        alert('❌ 근태 저장에 실패했습니다.\n' + (saveErr.message || '') + '\n\n연차 차감도 하지 않았습니다. 잠시 후 다시 시도해주세요.');
+                        return;
+                    }
+                    // 저장 성공 시에만 연차/반차 일수 자동 가감 (저장-차감 불일치 방지)
                     await syncLeave(existing?.status || null, newStatus);
                 };
 
@@ -835,6 +844,27 @@ const Employees = () => {
                         </p>
                     )}
                 </div>
+
+                {/* 연차 직접 수정 (수정 모드에서만) */}
+                {isEditing && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div className="form-group">
+                            <label className="form-label">부여 연차 (총)</label>
+                            <input type="number" step="0.5" min="0" className="form-input"
+                                value={newItem.totalLeave ?? ''}
+                                onChange={(e) => setNewItem({ ...newItem, totalLeave: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">사용 연차</label>
+                            <input type="number" step="0.5" min="0" className="form-input"
+                                value={newItem.usedLeave ?? ''}
+                                onChange={(e) => setNewItem({ ...newItem, usedLeave: e.target.value })} />
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+                                잔여: {(parseFloat(newItem.totalLeave) || 0) - (parseFloat(newItem.usedLeave) || 0)}일 · 값이 어긋났을 때 직접 보정하세요.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={() => {

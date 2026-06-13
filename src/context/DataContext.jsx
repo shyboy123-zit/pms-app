@@ -1113,14 +1113,27 @@ export const DataProvider = ({ children }) => {
     };
 
     // Attendance
+    // work_hours 컬럼이 아직 없으면(마이그레이션 전) 그 컬럼만 빼고 재시도 → 근태 자체는 항상 저장
+    const isMissingColumn = (error) => error && /column|work_hours|schema|does not exist|find the/i.test(error.message || '');
     const addAttendance = async (item) => {
-        const { data, error } = await supabase.from('attendance').insert([item]).select();
+        let { data, error } = await supabase.from('attendance').insert([item]).select();
+        if (error && isMissingColumn(error) && 'work_hours' in item) {
+            const { work_hours, ...rest } = item;
+            ({ data, error } = await supabase.from('attendance').insert([rest]).select());
+        }
         if (!error && data) setAttendance(prev => [data[0], ...prev]);
+        if (error) console.error('addAttendance 실패:', error.message);
         return { data, error };
     };
     const updateAttendance = async (id, fields) => {
-        const { error } = await supabase.from('attendance').update(fields).eq('id', id);
+        let { error } = await supabase.from('attendance').update(fields).eq('id', id);
+        if (error && isMissingColumn(error) && 'work_hours' in fields) {
+            const { work_hours, ...rest } = fields;
+            ({ error } = await supabase.from('attendance').update(rest).eq('id', id));
+            if (!error) { setAttendance(prev => prev.map(a => a.id === id ? { ...a, ...rest } : a)); return { error }; }
+        }
         if (!error) setAttendance(prev => prev.map(a => a.id === id ? { ...a, ...fields } : a));
+        if (error) console.error('updateAttendance 실패:', error.message);
         return { error };
     };
     const deleteAttendance = async (id) => {

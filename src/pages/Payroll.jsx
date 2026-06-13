@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useData } from '../context/DataContext';
-import { Calculator, Download, Users, ChevronDown, ChevronUp, DollarSign, Clock, Save, History, Trash2 } from 'lucide-react';
+import { Calculator, Download, Users, ChevronDown, ChevronUp, DollarSign, Clock, Save, History, Trash2, FileSpreadsheet } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { exportToExcel } from '../lib/excel';
 import DonutKpi from '../components/viz/DonutKpi';
 import MiniBar from '../components/viz/MiniBar';
 
@@ -126,11 +127,42 @@ const getMonthlyContractHours = (weeklyHours = 40) => {
     return Math.round(weeklyPaid * 4.345);
 };
 
+// ===== 급여대장 컬럼 (회계사무소 제출용 — 지급/공제 전 항목) =====
+const LEDGER_COLUMNS = [
+    { key: 'emp_id', label: '사번' },
+    { key: 'name', label: '성명' },
+    { key: 'department', label: '부서' },
+    { key: 'position', label: '직급' },
+    { key: 'payTypeLabel', label: '급여형태' },
+    { key: 'baseSalary', label: '기본급', num: true },
+    { key: 'overtimePay', label: '연장수당', num: true },
+    { key: 'nightPay', label: '야간수당', num: true },
+    { key: 'holidayPay', label: '휴일·특근수당', num: true },
+    { key: 'weeklyHolidayPay', label: '주휴수당', num: true },
+    { key: 'bonus', label: '상여금', num: true },
+    { key: 'annualLeavePay', label: '연차수당', num: true },
+    { key: 'holidayBonus', label: '명절수당', num: true },
+    { key: 'performanceBonus', label: '성과금', num: true },
+    { key: 'mealAllowance', label: '식대(비과세)', num: true },
+    { key: 'transportAllowance', label: '교통비(비과세)', num: true },
+    { key: 'totalPay', label: '지급총액', num: true },
+    { key: 'nationalPension', label: '국민연금', num: true },
+    { key: 'healthInsurance', label: '건강보험', num: true },
+    { key: 'longTermCare', label: '장기요양', num: true },
+    { key: 'employmentInsurance', label: '고용보험', num: true },
+    { key: 'incomeTax', label: '소득세', num: true },
+    { key: 'localIncomeTax', label: '지방소득세', num: true },
+    { key: 'yearEndAdjust', label: '연말정산', num: true },
+    { key: 'totalDeduction', label: '공제총액', num: true },
+    { key: 'netPay', label: '실수령액', num: true },
+];
+
 const Payroll = () => {
     const { employees, payrollRecords, addPayrollRecord, deletePayrollRecord, attendance } = useData();
     const [selectedEmpId, setSelectedEmpId] = useState('');
     const [payType, setPayType] = useState('monthly'); // monthly | hourly
     const [showHistory, setShowHistory] = useState(false);
+    const [showLedger, setShowLedger] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [yearMonth, setYearMonth] = useState(() => {
         const now = new Date();
@@ -442,6 +474,61 @@ const Payroll = () => {
             weeklyWorkedDays: attendanceWeekly.days.map(d => d > 0 ? String(d) : ''),
             workedHours: ''
         }));
+    };
+
+    // === 급여대장: 선택월 전체 직원 급여 일람 ===
+    const ledgerRows = useMemo(() => {
+        const recs = (payrollRecords || []).filter(r => r.year_month === yearMonth);
+        return recs.map(r => {
+            let c = {};
+            try { c = JSON.parse(r.calculation) || {}; } catch { c = {}; }
+            const emp = (employees || []).find(e => e.id === r.employee_id) || {};
+            return {
+                emp_id: emp.emp_id || '',
+                name: r.employee_name || emp.name || '',
+                department: emp.department || '',
+                position: emp.position || '',
+                payTypeLabel: r.pay_type === 'hourly' ? '시급제' : '월급제',
+                baseSalary: c.grossBase || 0,
+                overtimePay: c.overtimePay || 0,
+                nightPay: c.nightPay || 0,
+                holidayPay: c.holidayPay || 0,
+                weeklyHolidayPay: c.weeklyHolidayPay || 0,
+                bonus: c.bonus || 0,
+                annualLeavePay: c.annualLeavePay || 0,
+                holidayBonus: c.holidayBonus || 0,
+                performanceBonus: c.performanceBonus || 0,
+                mealAllowance: c.nonTaxMeal || 0,
+                transportAllowance: c.nonTaxTransport || 0,
+                totalPay: c.totalPay ?? r.total_pay ?? 0,
+                nationalPension: c.nationalPension || 0,
+                healthInsurance: c.healthInsurance || 0,
+                longTermCare: c.longTermCare || 0,
+                employmentInsurance: c.employmentInsurance || 0,
+                incomeTax: c.incomeTax || 0,
+                localIncomeTax: c.localIncomeTax || 0,
+                yearEndAdjust: c.yearEndAdjust || 0,
+                totalDeduction: c.totalDeduction ?? r.total_deduction ?? 0,
+                netPay: c.netPay ?? r.net_pay ?? 0,
+            };
+        }).sort((a, b) => (a.department || '').localeCompare(b.department || '') || (a.name || '').localeCompare(b.name || ''));
+    }, [payrollRecords, yearMonth, employees]);
+
+    const ledgerTotals = useMemo(() => {
+        const t = {};
+        LEDGER_COLUMNS.forEach(col => { if (col.num) t[col.key] = ledgerRows.reduce((s, r) => s + (r[col.key] || 0), 0); });
+        return t;
+    }, [ledgerRows]);
+
+    const exportLedger = () => {
+        if (ledgerRows.length === 0) { alert('해당 월에 저장된 급여 기록이 없습니다.'); return; }
+        const totalRow = { emp_id: '', name: '합계', department: '', position: '', payTypeLabel: `${ledgerRows.length}명`, ...ledgerTotals };
+        const data = [...ledgerRows, totalRow];
+        const columns = LEDGER_COLUMNS.map(c => ({
+            key: c.key, label: c.label,
+            format: c.num ? (v) => (typeof v === 'number' ? Math.round(v) : (v || '')) : undefined
+        }));
+        exportToExcel(data, columns, `급여대장_${yearMonth}`, `${yearMonth} 급여대장`);
     };
 
     // 1일 근무시간 → 월 약정 연장시간 자동환산: (1일근무 − 8) × 주근무일 × 4.345
@@ -1672,6 +1759,77 @@ const Payroll = () => {
             </div>
 
 
+
+            {/* ===== 급여대장 (회계사무소 제출용) ===== */}
+            <div style={{
+                background: 'var(--card)', borderRadius: '14px', padding: '18px 20px',
+                border: '1px solid var(--border)', marginBottom: '1.5rem'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                    <div onClick={() => setShowLedger(!showLedger)} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
+                        <FileSpreadsheet size={18} /> 📒 급여대장 <span style={{ color: '#4f46e5' }}>({yearMonth})</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>{ledgerRows.length}명</span>
+                        {showLedger ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </div>
+                    <button onClick={exportLedger} disabled={ledgerRows.length === 0}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 14px', borderRadius: '9px', border: 'none', cursor: ledgerRows.length === 0 ? 'not-allowed' : 'pointer', background: ledgerRows.length === 0 ? '#cbd5e1' : '#059669', color: 'white', fontWeight: 700, fontSize: '0.82rem' }}>
+                        <Download size={15} /> 엑셀 다운로드 (전 항목)
+                    </button>
+                </div>
+
+                {showLedger && (
+                    <div style={{ marginTop: '12px' }}>
+                        {ledgerRows.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                {yearMonth}에 저장된 급여가 없습니다. 직원별로 급여 계산 후 <strong>"DB에 저장"</strong>하면 여기에 모입니다.
+                            </div>
+                        ) : (
+                            <>
+                                <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '10px' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                        <thead>
+                                            <tr style={{ background: '#f8fafc' }}>
+                                                {['성명', '부서', '형태', '지급총액', '4대보험', '소득세계', '공제총액', '실수령액'].map((h, i) => (
+                                                    <th key={h} style={{ padding: '8px 10px', borderBottom: '2px solid var(--border)', textAlign: i < 3 ? 'left' : 'right', fontWeight: 700, color: 'var(--text-muted)' }}>{h}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {ledgerRows.map((r, idx) => {
+                                                const ins4 = r.nationalPension + r.healthInsurance + r.longTermCare + r.employmentInsurance;
+                                                const taxSum = r.incomeTax + r.localIncomeTax + (r.yearEndAdjust || 0);
+                                                return (
+                                                    <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={{ padding: '7px 10px', fontWeight: 600 }}>{r.name}</td>
+                                                        <td style={{ padding: '7px 10px', color: 'var(--text-muted)' }}>{r.department}</td>
+                                                        <td style={{ padding: '7px 10px', color: 'var(--text-muted)' }}>{r.payTypeLabel}</td>
+                                                        <td style={{ padding: '7px 10px', textAlign: 'right', color: '#059669', fontWeight: 600 }}>{fmt(r.totalPay)}</td>
+                                                        <td style={{ padding: '7px 10px', textAlign: 'right', color: '#dc2626' }}>{fmt(ins4)}</td>
+                                                        <td style={{ padding: '7px 10px', textAlign: 'right', color: '#dc2626' }}>{fmt(taxSum)}</td>
+                                                        <td style={{ padding: '7px 10px', textAlign: 'right', color: '#dc2626' }}>{fmt(r.totalDeduction)}</td>
+                                                        <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: '#4f46e5' }}>{fmt(r.netPay)}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            <tr style={{ background: '#eef2ff', fontWeight: 700 }}>
+                                                <td style={{ padding: '8px 10px' }} colSpan={3}>합계 ({ledgerRows.length}명)</td>
+                                                <td style={{ padding: '8px 10px', textAlign: 'right', color: '#059669' }}>{fmt(ledgerTotals.totalPay)}</td>
+                                                <td style={{ padding: '8px 10px', textAlign: 'right', color: '#dc2626' }}>{fmt(ledgerTotals.nationalPension + ledgerTotals.healthInsurance + ledgerTotals.longTermCare + ledgerTotals.employmentInsurance)}</td>
+                                                <td style={{ padding: '8px 10px', textAlign: 'right', color: '#dc2626' }}>{fmt(ledgerTotals.incomeTax + ledgerTotals.localIncomeTax + ledgerTotals.yearEndAdjust)}</td>
+                                                <td style={{ padding: '8px 10px', textAlign: 'right', color: '#dc2626' }}>{fmt(ledgerTotals.totalDeduction)}</td>
+                                                <td style={{ padding: '8px 10px', textAlign: 'right', color: '#4f46e5' }}>{fmt(ledgerTotals.netPay)}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div style={{ marginTop: '8px', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                    💡 화면은 요약입니다. <strong>엑셀 다운로드</strong>에는 기본급·연장·야간·주휴·상여·연차·명절·식대·교통·4대보험 항목별·소득세·연말정산까지 <strong>전 항목</strong>이 직원별로 포함됩니다 (맨 아래 합계행 포함).
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* ===== 급여 이력 조회 ===== */}
             <div style={{

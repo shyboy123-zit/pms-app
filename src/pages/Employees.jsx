@@ -534,8 +534,9 @@ const Employees = () => {
                     '지각': { color: '#d97706', bg: '#fef3c7', icon: '⏰' },
                     '조퇴': { color: '#ea580c', bg: '#ffedd5', icon: '🚪' },
                     '결근': { color: '#dc2626', bg: '#fee2e2', icon: '❌' },
-                    '휴가': { color: '#7c3aed', bg: '#ede9fe', icon: '🌴' },
+                    '연차': { color: '#7c3aed', bg: '#ede9fe', icon: '🌴' },
                     '반차': { color: '#2563eb', bg: '#dbeafe', icon: '🌗' },
+                    '휴가': { color: '#0891b2', bg: '#cffafe', icon: '🏝️' },
                     '공휴일': { color: '#6b7280', bg: '#f3f4f6', icon: '🏖️' }
                 };
 
@@ -567,8 +568,23 @@ const Employees = () => {
                     if (choice === null) return;
                     const num = parseInt(choice);
 
+                    // 연차 차감 일수: 연차=1일, 반차=0.5일
+                    const leaveDays = (s) => (s === '연차' ? 1 : s === '반차' ? 0.5 : 0);
+                    // 연차 일수 동기화: oldStatus→newStatus 변화분만큼 used_leave 가감
+                    const syncLeave = async (oldStatus, newStatusVal) => {
+                        const delta = leaveDays(newStatusVal) - leaveDays(oldStatus);
+                        if (delta === 0) return;
+                        const cur = parseFloat(attEmp?.used_leave) || 0;
+                        const next = Math.max(0, Math.round((cur + delta) * 2) / 2);
+                        await updateEmployee(attEmpId, { used_leave: next });
+                        const remain = (parseFloat(attEmp?.total_leave) || 0) - next;
+                        if (delta > 0) alert(`연차 ${delta}일 차감되었습니다. (사용 ${next}일 / 잔여 ${remain}일)`);
+                        else alert(`연차 ${-delta}일 복원되었습니다. (사용 ${next}일 / 잔여 ${remain}일)`);
+                    };
+
                     if (num === 0 && existing) {
                         await deleteAttendance(existing.id);
+                        await syncLeave(existing.status, null); // 삭제 → 연차였으면 복원
                         return;
                     }
                     if (num < 1 || num > statusList.length) return;
@@ -597,6 +613,8 @@ const Employees = () => {
                             work_hours: workHours
                         });
                     }
+                    // 연차/반차 등록·변경 시 연차 일수 자동 가감
+                    await syncLeave(existing?.status || null, newStatus);
                 };
 
                 // Summary stats

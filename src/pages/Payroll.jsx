@@ -127,7 +127,7 @@ const getMonthlyContractHours = (weeklyHours = 40) => {
 };
 
 const Payroll = () => {
-    const { employees, payrollRecords, addPayrollRecord, deletePayrollRecord } = useData();
+    const { employees, payrollRecords, addPayrollRecord, deletePayrollRecord, attendance } = useData();
     const [selectedEmpId, setSelectedEmpId] = useState('');
     const [payType, setPayType] = useState('monthly'); // monthly | hourly
     const [showHistory, setShowHistory] = useState(false);
@@ -410,6 +410,38 @@ const Payroll = () => {
     const applyBonus = () => {
         if (!bonusCalc) return;
         setPayData(prev => ({ ...prev, bonus: String(Math.max(0, bonusCalc.bonus)), annualLeavePay: '' }));
+    };
+
+    // === 근태기록 → 주별 근무시간 자동집계 (시급제) ===
+    // 월을 7일 단위로 구간화: 1~7일=1주, 8~14일=2주, … 29일~=5주.
+    // work_hours(실 근무시간) 합계 + 근무인정 상태(출근/지각/조퇴/반차) 일수.
+    const attendanceWeekly = useMemo(() => {
+        if (!selectedEmpId) return null;
+        const recs = (attendance || []).filter(a => a.employee_id === selectedEmpId && a.date?.startsWith(yearMonth));
+        if (recs.length === 0) return null;
+        const WORKED = ['출근', '지각', '조퇴', '반차'];
+        const hours = [0, 0, 0, 0, 0];
+        const days = [0, 0, 0, 0, 0];
+        let total = 0, hasHours = false;
+        recs.forEach(a => {
+            const day = parseInt((a.date || '').split('-')[2]) || 0;
+            if (day < 1) return;
+            const wk = Math.min(4, Math.floor((day - 1) / 7));
+            const wh = parseFloat(a.work_hours) || 0;
+            if (wh > 0) { hours[wk] += wh; total += wh; hasHours = true; }
+            if (WORKED.includes(a.status)) days[wk] += 1;
+        });
+        return { hours, days, total, count: recs.length, hasHours };
+    }, [attendance, selectedEmpId, yearMonth]);
+
+    const applyAttendance = () => {
+        if (!attendanceWeekly) return;
+        setPayData(prev => ({
+            ...prev,
+            weeklyWorkedHours: attendanceWeekly.hours.map(h => h > 0 ? String(Math.round(h * 10) / 10) : ''),
+            weeklyWorkedDays: attendanceWeekly.days.map(d => d > 0 ? String(d) : ''),
+            workedHours: ''
+        }));
     };
 
     // 1일 근무시간 → 월 약정 연장시간 자동환산: (1일근무 − 8) × 주근무일 × 4.345
@@ -983,6 +1015,23 @@ const Payroll = () => {
                                         ∑ {payData.weeklyWorkedHours.reduce((s, h) => s + (parseFloat(h) || 0), 0)}h
                                     </span>
                                 </div>
+                                {/* 근태기록에서 자동 불러오기 */}
+                                {selectedEmpId && (
+                                    <div style={{ marginBottom: '8px' }}>
+                                        {attendanceWeekly?.hasHours ? (
+                                            <button type="button" onClick={applyAttendance}
+                                                style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #0ea5e9', background: '#e0f2fe', color: '#0369a1', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>
+                                                📥 근태기록에서 자동 불러오기 ({yearMonth} · 총 {Math.round(attendanceWeekly.total * 10) / 10}h)
+                                            </button>
+                                        ) : (
+                                            <div style={{ padding: '7px 9px', borderRadius: '8px', background: '#f8fafc', border: '1px dashed var(--border)', fontSize: '0.68rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                                💡 {attendanceWeekly?.count > 0
+                                                    ? '근태기록은 있으나 근무시간이 0입니다. 근태 관리에서 날짜별 실 근무시간을 입력하세요.'
+                                                    : '이 달 근태기록이 없습니다. 직원 페이지 → 근태 관리에서 입력하면 여기로 자동 집계됩니다.'}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
                                     {payData.weeklyWorkedHours.map((wh, idx) => {
                                         const hours = parseFloat(wh) || 0;

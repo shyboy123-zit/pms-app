@@ -574,14 +574,27 @@ const Employees = () => {
                     if (num < 1 || num > statusList.length) return;
 
                     const newStatus = statusList[num - 1];
+
+                    // 실 근무시간(휴게 제외) 입력 — 근무로 인정되는 상태만
+                    const WORKED = ['출근', '지각', '조퇴', '반차'];
+                    const DEFAULT_HOURS = { 출근: 8, 지각: 8, 조퇴: 4, 반차: 4 };
+                    let workHours = 0;
+                    if (WORKED.includes(newStatus)) {
+                        const def = existing?.work_hours != null ? String(existing.work_hours) : String(DEFAULT_HOURS[newStatus] ?? 8);
+                        const hStr = prompt(`${dateStr} · ${newStatus}\n실 근무시간(휴게 제외, 시간)을 입력하세요:`, def);
+                        if (hStr === null) return;
+                        workHours = parseFloat(hStr) || 0;
+                    }
+
                     if (existing) {
-                        await updateAttendance(existing.id, { status: newStatus });
+                        await updateAttendance(existing.id, { status: newStatus, work_hours: workHours });
                     } else {
                         await addAttendance({
                             employee_id: attEmpId,
                             employee_name: attEmp?.name,
                             date: dateStr,
-                            status: newStatus
+                            status: newStatus,
+                            work_hours: workHours
                         });
                     }
                 };
@@ -707,9 +720,12 @@ const Employees = () => {
                                                 {record && (
                                                     <div style={{
                                                         fontSize: '0.65rem', fontWeight: 700,
-                                                        color: statusInfo?.color, lineHeight: 1
+                                                        color: statusInfo?.color, lineHeight: 1.2
                                                     }}>
                                                         {statusInfo?.icon}
+                                                        {record.work_hours > 0 && (
+                                                            <div style={{ fontSize: '0.6rem', marginTop: '1px' }}>{record.work_hours}h</div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>

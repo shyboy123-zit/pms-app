@@ -127,6 +127,30 @@ const getMonthlyContractHours = (weeklyHours = 40) => {
     return Math.round(weeklyPaid * 4.345);
 };
 
+// ===== 해당 월과 겹치는 실제 주(월~일) 목록 =====
+// 주휴수당은 1주 단위 개근으로 판정하므로, 월 경계를 걸친 주는 전/다음 달 날짜까지 포함해야 한다.
+// 주휴 귀속: 그 주의 일요일(주휴일)이 속한 달에 지급 → sundayInMonth로 표시.
+const ymdStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const getMonthWeeks = (year, month /* 1-based */) => {
+    const last = new Date(year, month, 0);
+    const first = new Date(year, month - 1, 1);
+    const dow = first.getDay();                 // 0(일)~6(토)
+    const offMon = (dow === 0) ? -6 : (1 - dow); // 1일이 속한 주의 월요일
+    let mon = new Date(year, month - 1, 1 + offMon);
+    const weeks = [];
+    while (mon <= last) {
+        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const days = [];
+        for (let i = 0; i < 7; i++) { const d = new Date(mon); d.setDate(mon.getDate() + i); days.push(ymdStr(d)); }
+        weeks.push({
+            days, sundayInMonth: (sun.getFullYear() === year && sun.getMonth() === month - 1),
+            label: `${mon.getMonth() + 1}/${mon.getDate()}~${sun.getDate()}`
+        });
+        mon = new Date(mon); mon.setDate(mon.getDate() + 7);
+    }
+    return weeks;
+};
+
 // ===== 급여대장 컬럼 (회계사무소 제출용 — 지급/공제 전 항목) =====
 const LEDGER_COLUMNS = [
     { key: 'emp_id', label: '사번' },
@@ -297,18 +321,25 @@ const Payroll = () => {
             const scheduledDays = parseInt(payData.scheduledDays) || 5;
 
             if (hasWeeklyInput) {
-                // 주별 계산 모드
+                // 주별 계산 모드. 근태 자동(weeklyFullHours 존재) 시: 개근/15h는 '전체주'로 판정,
+                // 주휴는 일요일이 속한 달(weeklyHolidayMonth)에만 지급. 수동입력 시 기존 방식.
                 const dailyScheduledHours = Math.min(weeklyHours, 40) / 5;
+                const fullArr = payData.weeklyFullHours;
+                const auto = Array.isArray(fullArr);
                 payData.weeklyWorkedHours.forEach((wh, idx) => {
-                    const hours = parseFloat(wh) || 0;
-                    if (hours <= 0) return;
-                    const days = parseInt(payData.weeklyWorkedDays[idx]) || 0;
-                    const hoursOk = hours >= 15;      // 조건 1: 주 15시간 이상
-                    const daysOk = days >= scheduledDays; // 조건 2: 소정근로일 개근
-                    const qualifies = hoursOk && daysOk;
+                    const monthHours = parseFloat(wh) || 0;
+                    const judgeHours = auto && fullArr[idx] != null ? (parseFloat(fullArr[idx]) || 0) : monthHours;
+                    const judgeDays = auto && payData.weeklyFullDays?.[idx] != null
+                        ? (parseInt(payData.weeklyFullDays[idx]) || 0)
+                        : (parseInt(payData.weeklyWorkedDays[idx]) || 0);
+                    const holidayHere = auto ? !!payData.weeklyHolidayMonth?.[idx] : true;
+                    if (monthHours <= 0 && judgeHours <= 0) return;
+                    const hoursOk = judgeHours >= 15;      // 조건 1: 주 15시간 이상
+                    const daysOk = judgeDays >= scheduledDays; // 조건 2: 소정근로일 개근
+                    const qualifies = hoursOk && daysOk && holidayHere;
                     const weekPay = qualifies ? Math.round(dailyScheduledHours * hourlyWage) : 0;
-                    const reason = !hoursOk ? '15h미만' : !daysOk ? `${days}/${scheduledDays}일 미개근` : '지급';
-                    weeklyBreakdown.push({ week: idx + 1, hours, days, qualifies, pay: weekPay, reason });
+                    const reason = !holidayHere ? '주휴일 타월귀속' : !hoursOk ? '15h미만' : !daysOk ? `${judgeDays}/${scheduledDays}일 미개근` : '지급';
+                    weeklyBreakdown.push({ week: idx + 1, label: payData.weeklyLabel?.[idx], hours: judgeHours, days: judgeDays, monthHours, qualifies, pay: weekPay, reason });
                     weeklyHolidayPay += weekPay;
                 });
             } else if (workedHours > 0) {
@@ -444,41 +475,58 @@ const Payroll = () => {
         setPayData(prev => ({ ...prev, bonus: String(Math.max(0, bonusCalc.bonus)), annualLeavePay: '' }));
     };
 
-    // === 근태기록 → 주별 근무시간 자동집계 (시급제) ===
-    // 월을 7일 단위로 구간화: 1~7일=1주, 8~14일=2주, … 29일~=5주.
-    // 유급시간 = 실 근무시간(work_hours) + 유급휴가분.
-    //   · 연차 = 8h 유급휴가 (근로기준법 제60조, 사용 시 1일 통상임금 = 8h 지급)
-    //   · 반차 = 실근무(보통 4h) + 4h 유급휴가
-    // 개근 일수에는 출근·지각·조퇴·반차 + 연차(유급휴가는 소정근로일 개근 간주) 포함.
+    // === 근태기록 → 주별(월~일 실제 주) 자동집계 (시급제) ===
+    // 유급시간 = 실 근무시간(work_hours) + 유급휴가분(연차 8h, 반차 +4h, 공휴일 8h).
+    // 개근 일수: 출근·지각·조퇴·반차·연차·공휴일.
+    // 월 경계 주는 전/다음 달까지 포함해 '전체주'로 개근·15h 판정하고, 주휴는 일요일이 속한 달에 귀속.
+    // 기본급(시간)은 각 날짜가 속한 달에만 귀속(이중지급 방지) → monthHours.
     const attendanceWeekly = useMemo(() => {
         if (!selectedEmpId) return null;
-        const recs = (attendance || []).filter(a => a.employee_id === selectedEmpId && a.date?.startsWith(yearMonth));
-        if (recs.length === 0) return null;
-        // 유급시간: 연차 8h, 반차 +4h, 공휴일/대체공휴일 8h(5인↑ 유급휴일·근기법 제55조②)
-        const PAID_LEAVE = { '연차': 8, '반차': 4, '공휴일': 8 };
-        const ATTEND_DAY = ['출근', '지각', '조퇴', '반차', '연차', '공휴일']; // 개근(소정근로일 출근 간주)
-        const hours = [0, 0, 0, 0, 0];
-        const days = [0, 0, 0, 0, 0];
-        let total = 0, hasHours = false, leaveTotal = 0;
-        recs.forEach(a => {
-            const day = parseInt((a.date || '').split('-')[2]) || 0;
-            if (day < 1) return;
-            const wk = Math.min(4, Math.floor((day - 1) / 7));
-            const leave = PAID_LEAVE[a.status] || 0;
-            const paid = (parseFloat(a.work_hours) || 0) + leave; // 유급시간 = 근무 + 유급휴가
-            if (paid > 0) { hours[wk] += paid; total += paid; hasHours = true; }
-            if (leave > 0) leaveTotal += leave;
-            if (ATTEND_DAY.includes(a.status)) days[wk] += 1;
+        const [Y, M] = yearMonth.split('-').map(s => parseInt(s));
+        const byDate = {};
+        let monthCount = 0;
+        (attendance || []).forEach(a => {
+            if (a.employee_id === selectedEmpId && a.date) {
+                byDate[a.date] = a;
+                if (a.date.startsWith(yearMonth)) monthCount += 1;
+            }
         });
-        return { hours, days, total, leaveTotal, count: recs.length, hasHours };
+        if (monthCount === 0) return { weeks: [], total: 0, leaveTotal: 0, hasHours: false, count: 0 };
+
+        const PAID_LEAVE = { '연차': 8, '반차': 4, '공휴일': 8 };
+        const ATTEND_DAY = ['출근', '지각', '조퇴', '반차', '연차', '공휴일'];
+        let total = 0, leaveTotal = 0, hasHours = false;
+        const weeks = getMonthWeeks(Y, M).map(w => {
+            let monthHours = 0, monthDays = 0, fullHours = 0, fullDays = 0;
+            w.days.forEach(ds => {
+                const r = byDate[ds]; if (!r) return;
+                const lv = PAID_LEAVE[r.status] || 0;
+                const paid = (parseFloat(r.work_hours) || 0) + lv;
+                const isAtt = ATTEND_DAY.includes(r.status);
+                fullHours += paid; if (isAtt) fullDays += 1;
+                if (ds.startsWith(yearMonth)) {
+                    monthHours += paid; if (isAtt) monthDays += 1;
+                    if (lv > 0) leaveTotal += lv;
+                    if (paid > 0) hasHours = true;
+                }
+            });
+            total += monthHours;
+            return { label: w.label, sundayInMonth: w.sundayInMonth, monthHours, monthDays, fullHours, fullDays };
+        }).filter(w => w.fullHours > 0 || w.monthHours > 0); // 데이터 있는 주만
+        return { weeks, total, leaveTotal, hasHours, count: monthCount };
     }, [attendance, selectedEmpId, yearMonth]);
 
     const applyAttendance = () => {
-        if (!attendanceWeekly) return;
+        if (!attendanceWeekly || attendanceWeekly.weeks.length === 0) return;
+        const w = attendanceWeekly.weeks;
         setPayData(prev => ({
             ...prev,
-            weeklyWorkedHours: attendanceWeekly.hours.map(h => h > 0 ? String(Math.round(h * 10) / 10) : ''),
-            weeklyWorkedDays: attendanceWeekly.days.map(d => d > 0 ? String(d) : ''),
+            weeklyWorkedHours: w.map(x => x.monthHours > 0 ? String(Math.round(x.monthHours * 10) / 10) : ''),
+            weeklyWorkedDays: w.map(x => x.monthDays > 0 ? String(x.monthDays) : ''),
+            weeklyFullHours: w.map(x => Math.round(x.fullHours * 10) / 10),
+            weeklyFullDays: w.map(x => x.fullDays),
+            weeklyHolidayMonth: w.map(x => x.sundayInMonth),
+            weeklyLabel: w.map(x => x.label),
             workedHours: ''
         }));
     };
@@ -629,6 +677,7 @@ const Payroll = () => {
             workedHours: '',
             weeklyWorkedHours: ['', '', '', '', ''],
             weeklyWorkedDays: ['', '', '', '', ''],
+            weeklyFullHours: undefined, weeklyFullDays: undefined, weeklyHolidayMonth: undefined, weeklyLabel: undefined,
             nightHours: '', holidayHours: '', // 주말 특근·야간은 실제 근무분만 매월 입력
             bonus: '', performanceBonus: '', holidayBonus: '', annualLeavePay: '',
             yearEndTax: '', // 연말정산은 2월에만 직접 입력
@@ -1126,19 +1175,24 @@ const Payroll = () => {
                                         )}
                                     </div>
                                 )}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(payData.weeklyWorkedHours.length, 1)}, 1fr)`, gap: '6px' }}>
                                     {payData.weeklyWorkedHours.map((wh, idx) => {
-                                        const hours = parseFloat(wh) || 0;
+                                        const auto = Array.isArray(payData.weeklyFullHours);
+                                        const monthHours = parseFloat(wh) || 0;
                                         const days = parseInt(payData.weeklyWorkedDays[idx]) || 0;
+                                        // 주휴 판정은 전체주(월경계 포함) 기준, 자동집계 시 weeklyFull* 사용
+                                        const jHours = auto && payData.weeklyFullHours[idx] != null ? (parseFloat(payData.weeklyFullHours[idx]) || 0) : monthHours;
+                                        const jDays = auto && payData.weeklyFullDays?.[idx] != null ? (parseInt(payData.weeklyFullDays[idx]) || 0) : days;
+                                        const holidayHere = auto ? !!payData.weeklyHolidayMonth?.[idx] : true;
                                         const scheduled = parseInt(payData.scheduledDays) || 5;
-                                        const hoursOk = hours >= 15;
-                                        const daysOk = days >= scheduled;
-                                        const qualifies = hoursOk && daysOk;
-                                        const hasInput = hours > 0;
+                                        const hoursOk = jHours >= 15;
+                                        const daysOk = jDays >= scheduled;
+                                        const qualifies = hoursOk && daysOk && holidayHere;
+                                        const hasInput = monthHours > 0 || jHours > 0;
                                         return (
                                             <div key={idx} style={{ textAlign: 'center' }}>
-                                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '3px', fontWeight: 600 }}>
-                                                    {idx + 1}주상
+                                                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', marginBottom: '3px', fontWeight: 600 }}>
+                                                    {payData.weeklyLabel?.[idx] || `${idx + 1}주상`}
                                                 </div>
                                                 <input
                                                     type="number"
@@ -1147,7 +1201,8 @@ const Payroll = () => {
                                                     onChange={(e) => {
                                                         const arr = [...payData.weeklyWorkedHours];
                                                         arr[idx] = e.target.value;
-                                                        setPayData({ ...payData, weeklyWorkedHours: arr, workedHours: '' });
+                                                        // 수동 편집 시 근태 자동집계 데이터 해제 → 입력값 그대로 판정
+                                                        setPayData({ ...payData, weeklyWorkedHours: arr, workedHours: '', weeklyFullHours: undefined, weeklyFullDays: undefined, weeklyHolidayMonth: undefined, weeklyLabel: undefined });
                                                     }}
                                                     style={{
                                                         width: '100%', padding: '5px 3px', borderRadius: '6px',
@@ -1164,7 +1219,7 @@ const Payroll = () => {
                                                     onChange={(e) => {
                                                         const arr = [...payData.weeklyWorkedDays];
                                                         arr[idx] = e.target.value;
-                                                        setPayData({ ...payData, weeklyWorkedDays: arr });
+                                                        setPayData({ ...payData, weeklyWorkedDays: arr, weeklyFullHours: undefined, weeklyFullDays: undefined, weeklyHolidayMonth: undefined, weeklyLabel: undefined });
                                                     }}
                                                     style={{
                                                         width: '100%', padding: '4px 3px', borderRadius: '6px',
@@ -1178,7 +1233,7 @@ const Payroll = () => {
                                                         fontSize: '0.55rem', marginTop: '2px', fontWeight: 700,
                                                         color: qualifies ? '#059669' : '#dc2626', lineHeight: 1.2
                                                     }}>
-                                                        {!hoursOk ? '15h미만' : !daysOk ? `미개근` : '✅주휴O'}
+                                                        {!holidayHere ? '타월귀속' : !hoursOk ? '15h미만' : !daysOk ? `미개근` : '✅주휴O'}
                                                     </div>
                                                 )}
                                             </div>
@@ -1429,7 +1484,7 @@ const Payroll = () => {
                                 <div style={{ fontWeight: 700, color: '#059669', marginBottom: '4px' }}>📊 주별 주휴수당 상세</div>
                                 {calculation.weeklyBreakdown.map(w => (
                                     <div key={w.week} style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0', color: w.qualifies ? '#065f46' : '#92400e' }}>
-                                        <span>{w.week}주차: {w.hours}h / {w.days || 0}일 {w.qualifies ? '✅' : `❌(${w.reason})`}</span>
+                                        <span>{w.label || `${w.week}주차`}: {w.hours}h / {w.days || 0}일{w.label ? ' (전체주)' : ''} {w.qualifies ? '✅' : `❌(${w.reason})`}</span>
                                         <span style={{ fontWeight: 600 }}>{w.qualifies ? `${fmt(w.pay)}원` : '미지급'}</span>
                                     </div>
                                 ))}

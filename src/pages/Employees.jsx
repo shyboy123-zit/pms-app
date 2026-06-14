@@ -248,14 +248,18 @@ const Employees = () => {
         if (!emp) return;
         const year = String(new Date().getFullYear());
         const recs = (attendance || []).filter(a => a.employee_id === emp.id && a.date && a.date.startsWith(year));
-        const used = recs.reduce((s, a) => s + (a.status === '연차' ? 1 : a.status === '반차' ? 0.5 : 0), 0);
+        const used = recs.reduce((s, a) => s + ((a.status === '연차' || a.status === '여름휴가') ? 1 : a.status === '반차' ? 0.5 : 0), 0);
         const rounded = Math.round(used * 2) / 2;
         const cur = parseFloat(emp.used_leave) || 0;
+        const nYeoncha = recs.filter(a => a.status === '연차').length;
+        const nSummer = recs.filter(a => a.status === '여름휴가').length;
+        const nBancha = recs.filter(a => a.status === '반차').length;
+        const detail = `연차 ${nYeoncha}일 + 여름휴가 ${nSummer}일 + 반차 ${nBancha}개×0.5`;
         if (rounded === cur) {
-            alert(`이미 일치합니다.\n${year}년 근태기준 사용연차 = ${rounded}일 (연차 ${recs.filter(a => a.status === '연차').length}일 + 반차 ${recs.filter(a => a.status === '반차').length}개)`);
+            alert(`이미 일치합니다.\n${year}년 근태기준 사용연차 = ${rounded}일 (${detail})`);
             return;
         }
-        if (!window.confirm(`${emp.name} 사용연차를 근태기준으로 보정합니다.\n${cur}일 → ${rounded}일\n(${year}년: 연차 ${recs.filter(a => a.status === '연차').length}일 + 반차 ${recs.filter(a => a.status === '반차').length}개×0.5)\n\n진행할까요?`)) return;
+        if (!window.confirm(`${emp.name} 사용연차를 근태기준으로 보정합니다.\n${cur}일 → ${rounded}일\n(${year}년: ${detail})\n\n진행할까요?`)) return;
         await updateEmployee(emp.id, { used_leave: rounded });
         alert(`✅ 보정 완료: 사용연차 ${cur}일 → ${rounded}일`);
     };
@@ -558,6 +562,7 @@ const Employees = () => {
                     '결근': { color: '#dc2626', bg: '#fee2e2', icon: '❌' },
                     '연차': { color: '#7c3aed', bg: '#ede9fe', icon: '🌴' },
                     '반차': { color: '#2563eb', bg: '#dbeafe', icon: '🌗' },
+                    '여름휴가': { color: '#0d9488', bg: '#ccfbf1', icon: '⛱️' },
                     '휴가': { color: '#0891b2', bg: '#cffafe', icon: '🏝️' },
                     '공휴일': { color: '#6b7280', bg: '#f3f4f6', icon: '🏖️' }
                 };
@@ -590,8 +595,8 @@ const Employees = () => {
                     if (choice === null) return;
                     const num = parseInt(choice);
 
-                    // 연차 차감 일수: 연차=1일, 반차=0.5일
-                    const leaveDays = (s) => (s === '연차' ? 1 : s === '반차' ? 0.5 : 0);
+                    // 연차 차감 일수: 연차·여름휴가=1일, 반차=0.5일 (여름휴가는 연차로 사용)
+                    const leaveDays = (s) => ((s === '연차' || s === '여름휴가') ? 1 : s === '반차' ? 0.5 : 0);
                     // 연차 일수 동기화: oldStatus→newStatus 변화분만큼 used_leave 가감
                     const syncLeave = async (oldStatus, newStatusVal) => {
                         const delta = leaveDays(newStatusVal) - leaveDays(oldStatus);

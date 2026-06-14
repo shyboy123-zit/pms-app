@@ -493,8 +493,8 @@ const Payroll = () => {
         });
         if (monthCount === 0) return { weeks: [], total: 0, leaveTotal: 0, hasHours: false, count: 0 };
 
-        const PAID_LEAVE = { '연차': 8, '반차': 4, '공휴일': 8 };
-        const ATTEND_DAY = ['출근', '지각', '조퇴', '반차', '연차', '공휴일'];
+        const PAID_LEAVE = { '연차': 8, '여름휴가': 8, '반차': 4, '공휴일': 8 };
+        const ATTEND_DAY = ['출근', '지각', '조퇴', '반차', '연차', '여름휴가', '공휴일'];
         let total = 0, leaveTotal = 0, hasHours = false;
         const weeks = getMonthWeeks(Y, M).map(w => {
             let monthHours = 0, monthDays = 0, fullHours = 0, fullDays = 0;

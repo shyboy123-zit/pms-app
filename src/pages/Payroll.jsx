@@ -446,24 +446,30 @@ const Payroll = () => {
 
     // === 근태기록 → 주별 근무시간 자동집계 (시급제) ===
     // 월을 7일 단위로 구간화: 1~7일=1주, 8~14일=2주, … 29일~=5주.
-    // work_hours(실 근무시간) 합계 + 근무인정 상태(출근/지각/조퇴/반차) 일수.
+    // 유급시간 = 실 근무시간(work_hours) + 유급휴가분.
+    //   · 연차 = 8h 유급휴가 (근로기준법 제60조, 사용 시 1일 통상임금 = 8h 지급)
+    //   · 반차 = 실근무(보통 4h) + 4h 유급휴가
+    // 개근 일수에는 출근·지각·조퇴·반차 + 연차(유급휴가는 소정근로일 개근 간주) 포함.
     const attendanceWeekly = useMemo(() => {
         if (!selectedEmpId) return null;
         const recs = (attendance || []).filter(a => a.employee_id === selectedEmpId && a.date?.startsWith(yearMonth));
         if (recs.length === 0) return null;
-        const WORKED = ['출근', '지각', '조퇴', '반차'];
+        const PAID_LEAVE = { '연차': 8, '반차': 4 }; // 유급휴가 시간(반차는 work_hours에 더해 4h)
+        const ATTEND_DAY = ['출근', '지각', '조퇴', '반차', '연차']; // 개근(소정근로일 출근 간주)
         const hours = [0, 0, 0, 0, 0];
         const days = [0, 0, 0, 0, 0];
-        let total = 0, hasHours = false;
+        let total = 0, hasHours = false, leaveTotal = 0;
         recs.forEach(a => {
             const day = parseInt((a.date || '').split('-')[2]) || 0;
             if (day < 1) return;
             const wk = Math.min(4, Math.floor((day - 1) / 7));
-            const wh = parseFloat(a.work_hours) || 0;
-            if (wh > 0) { hours[wk] += wh; total += wh; hasHours = true; }
-            if (WORKED.includes(a.status)) days[wk] += 1;
+            const leave = PAID_LEAVE[a.status] || 0;
+            const paid = (parseFloat(a.work_hours) || 0) + leave; // 유급시간 = 근무 + 유급휴가
+            if (paid > 0) { hours[wk] += paid; total += paid; hasHours = true; }
+            if (leave > 0) leaveTotal += leave;
+            if (ATTEND_DAY.includes(a.status)) days[wk] += 1;
         });
-        return { hours, days, total, count: recs.length, hasHours };
+        return { hours, days, total, leaveTotal, count: recs.length, hasHours };
     }, [attendance, selectedEmpId, yearMonth]);
 
     const applyAttendance = () => {
@@ -1108,7 +1114,7 @@ const Payroll = () => {
                                         {attendanceWeekly?.hasHours ? (
                                             <button type="button" onClick={applyAttendance}
                                                 style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #0ea5e9', background: '#e0f2fe', color: '#0369a1', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>
-                                                📥 근태기록에서 자동 불러오기 ({yearMonth} · 총 {Math.round(attendanceWeekly.total * 10) / 10}h)
+                                                📥 근태기록에서 자동 불러오기 ({yearMonth} · 총 {Math.round(attendanceWeekly.total * 10) / 10}h{attendanceWeekly.leaveTotal > 0 ? ` · 연차/반차 유급 ${attendanceWeekly.leaveTotal}h 포함` : ''})
                                             </button>
                                         ) : (
                                             <div style={{ padding: '7px 9px', borderRadius: '8px', background: '#f8fafc', border: '1px dashed var(--border)', fontSize: '0.68rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>

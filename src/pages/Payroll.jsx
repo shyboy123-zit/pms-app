@@ -454,8 +454,9 @@ const Payroll = () => {
         if (!selectedEmpId) return null;
         const recs = (attendance || []).filter(a => a.employee_id === selectedEmpId && a.date?.startsWith(yearMonth));
         if (recs.length === 0) return null;
-        const PAID_LEAVE = { '연차': 8, '반차': 4 }; // 유급휴가 시간(반차는 work_hours에 더해 4h)
-        const ATTEND_DAY = ['출근', '지각', '조퇴', '반차', '연차']; // 개근(소정근로일 출근 간주)
+        // 유급시간: 연차 8h, 반차 +4h, 공휴일/대체공휴일 8h(5인↑ 유급휴일·근기법 제55조②)
+        const PAID_LEAVE = { '연차': 8, '반차': 4, '공휴일': 8 };
+        const ATTEND_DAY = ['출근', '지각', '조퇴', '반차', '연차', '공휴일']; // 개근(소정근로일 출근 간주)
         const hours = [0, 0, 0, 0, 0];
         const days = [0, 0, 0, 0, 0];
         let total = 0, hasHours = false, leaveTotal = 0;
@@ -1114,7 +1115,7 @@ const Payroll = () => {
                                         {attendanceWeekly?.hasHours ? (
                                             <button type="button" onClick={applyAttendance}
                                                 style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #0ea5e9', background: '#e0f2fe', color: '#0369a1', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>
-                                                📥 근태기록에서 자동 불러오기 ({yearMonth} · 총 {Math.round(attendanceWeekly.total * 10) / 10}h{attendanceWeekly.leaveTotal > 0 ? ` · 연차/반차 유급 ${attendanceWeekly.leaveTotal}h 포함` : ''})
+                                                📥 근태기록에서 자동 불러오기 ({yearMonth} · 총 {Math.round(attendanceWeekly.total * 10) / 10}h{attendanceWeekly.leaveTotal > 0 ? ` · 연차/반차/공휴일 유급 ${attendanceWeekly.leaveTotal}h 포함` : ''})
                                             </button>
                                         ) : (
                                             <div style={{ padding: '7px 9px', borderRadius: '8px', background: '#f8fafc', border: '1px dashed var(--border)', fontSize: '0.68rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>

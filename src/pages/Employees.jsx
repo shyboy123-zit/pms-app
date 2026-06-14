@@ -242,6 +242,24 @@ const Employees = () => {
         setLeaveUsage({ employeeId: null, employeeName: '', days: 1, startDate: '', reason: '' });
     };
 
+    // 근태 기록을 진짜 기준으로 사용연차 재계산 (연차 1일 + 반차 0.5일, 올해 기록 합산)
+    // 자동차감 누락/표류(예: 기능 배포 전 입력분)를 한 번에 보정.
+    const recomputeLeaveFromAttendance = async (emp) => {
+        if (!emp) return;
+        const year = String(new Date().getFullYear());
+        const recs = (attendance || []).filter(a => a.employee_id === emp.id && a.date && a.date.startsWith(year));
+        const used = recs.reduce((s, a) => s + (a.status === '연차' ? 1 : a.status === '반차' ? 0.5 : 0), 0);
+        const rounded = Math.round(used * 2) / 2;
+        const cur = parseFloat(emp.used_leave) || 0;
+        if (rounded === cur) {
+            alert(`이미 일치합니다.\n${year}년 근태기준 사용연차 = ${rounded}일 (연차 ${recs.filter(a => a.status === '연차').length}일 + 반차 ${recs.filter(a => a.status === '반차').length}개)`);
+            return;
+        }
+        if (!window.confirm(`${emp.name} 사용연차를 근태기준으로 보정합니다.\n${cur}일 → ${rounded}일\n(${year}년: 연차 ${recs.filter(a => a.status === '연차').length}일 + 반차 ${recs.filter(a => a.status === '반차').length}개×0.5)\n\n진행할까요?`)) return;
+        await updateEmployee(emp.id, { used_leave: rounded });
+        alert(`✅ 보정 완료: 사용연차 ${cur}일 → ${rounded}일`);
+    };
+
     const handleResign = (id) => {
         if (!window.confirm('해당 직원을 퇴사 처리하시겠습니까?')) return;
         const today = new Date().toISOString().split('T')[0];
@@ -931,6 +949,10 @@ const Employees = () => {
                                     <span style={{ fontWeight: '600' }}>잔여 연차</span>
                                     <span style={{ fontWeight: 'bold', color: 'var(--primary)', fontSize: '1.1rem' }}>{remaining}일</span>
                                 </div>
+                                <button type="button" onClick={() => recomputeLeaveFromAttendance(emp)}
+                                    style={{ width: '100%', marginTop: '0.75rem', padding: '8px', borderRadius: '8px', border: '1px solid #0ea5e9', background: '#e0f2fe', color: '#0369a1', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                                    🔄 근태 기록 기준으로 사용연차 재계산 (연차1·반차0.5)
+                                </button>
                             </div>
 
                             <div className="form-group">

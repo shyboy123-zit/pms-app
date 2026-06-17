@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { Plus, UserPlus, UserMinus, Shield, Trash2, Calendar, Edit, Download, FileText, KeyRound } from 'lucide-react';
@@ -38,6 +38,8 @@ const Employees = () => {
     const [leaveAppData, setLeaveAppData] = useState({
         startDate: '', endDate: '', days: 1, reason: ''
     });
+    // 연차신청서(사용 내역 확인서) 조회 연도
+    const [leaveAppYear, setLeaveAppYear] = useState(String(new Date().getFullYear()));
     const [retireData, setRetireData] = useState({
         resignDate: new Date().toISOString().split('T')[0],
         monthlyWage: '', // 월 기본급
@@ -363,9 +365,36 @@ const Employees = () => {
     };
 
     // === PDF 관련 함수 ===
+    // 연차신청서(사용 내역 확인서)용 — 선택 직원의 근태 기록에서 연차/여름휴가/반차 사용 내역 집계
+    // 차감 일수: 연차·여름휴가 = 1일, 반차 = 0.5일 (근태 입력 규칙과 동일)
+    const leaveYears = useMemo(() => {
+        if (!pdfTarget) return [String(new Date().getFullYear())];
+        const ys = new Set();
+        (attendance || []).forEach(a => {
+            if (a.employee_id === pdfTarget.id && a.date && ['연차', '여름휴가', '반차'].includes(a.status)) {
+                ys.add(a.date.slice(0, 4));
+            }
+        });
+        ys.add(String(new Date().getFullYear()));
+        return [...ys].sort((a, b) => b.localeCompare(a));
+    }, [attendance, pdfTarget]);
+
+    const leaveHistory = useMemo(() => {
+        if (!pdfTarget) return { rows: [], total: 0 };
+        const DAYS = { '연차': 1, '여름휴가': 1, '반차': 0.5 };
+        const rows = (attendance || [])
+            .filter(a => a.employee_id === pdfTarget.id && a.date && DAYS[a.status] != null
+                && (!leaveAppYear || a.date.startsWith(leaveAppYear)))
+            .sort((a, b) => (a.date < b.date ? -1 : 1))
+            .map(a => ({ id: a.id, date: a.date, status: a.status, days: DAYS[a.status] }));
+        const total = rows.reduce((s, r) => s + r.days, 0);
+        return { rows, total };
+    }, [attendance, pdfTarget, leaveAppYear]);
+
     const openPdfModal = (emp) => {
         setPdfTarget(emp);
         setPdfType('promotion');
+        setLeaveAppYear(String(new Date().getFullYear()));
         setLeaveAppData({ startDate: '', endDate: '', days: 1, reason: '' });
         setRetireData({
             resignDate: emp.resign_date || new Date().toISOString().split('T')[0],
@@ -430,7 +459,7 @@ const Employees = () => {
 
             const fileNames = {
                 promotion: `연차사용촉진_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
-                application: `연차사용신청서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
+                application: `연차사용내역확인서_${pdfTarget.name}_${leaveAppYear}.pdf`,
                 retirement: `퇴직금계산서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
                 training: `의무교육_${TRAININGS.find(t => t.code === effTraining)?.name || ''}_${new Date().toISOString().split('T')[0]}.pdf`,
                 contract: `근로계약서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`
@@ -444,6 +473,27 @@ const Employees = () => {
             setIsGeneratingPdf(false);
             setIsPdfPreview(false);
         }
+    };
+
+    // 서식 인쇄 — 숨겨진 PDF 미리보기 영역을 새 창에 띄워 브라우저 인쇄 호출
+    const printForm = async () => {
+        setIsPdfPreview(true);
+        // 미리보기가 렌더될 시간을 준 뒤 인쇄
+        await new Promise(r => setTimeout(r, 400));
+        const el = pdfRef.current;
+        if (!el) { setIsPdfPreview(false); return; }
+        const win = window.open('', '_blank', 'width=900,height=1000');
+        if (!win) { alert('팝업이 차단되었습니다. 인쇄하려면 팝업을 허용해주세요.'); setIsPdfPreview(false); return; }
+        win.document.write(
+            `<!DOCTYPE html><html><head><meta charset="utf-8"><title>인쇄</title>` +
+            `<style>@page{size:A4;margin:14mm;}body{margin:0;font-family:'Noto Sans KR','Malgun Gothic',sans-serif;color:#1e293b;line-height:1.8;}` +
+            `table{border-collapse:collapse;}</style></head>` +
+            `<body><div style="width:100%;">${el.innerHTML}</div>` +
+            `<script>window.onload=function(){window.focus();window.print();};window.onafterprint=function(){window.close();};<\/script>` +
+            `</body></html>`
+        );
+        win.document.close();
+        setIsPdfPreview(false);
     };
 
     // 의무교육 항목별 양식 다운로드 — 해당 교육으로 전환 후 PDF 생성
@@ -1032,27 +1082,33 @@ const Employees = () => {
 
                         {pdfType === 'application' && (
                             <div style={{ background: '#faf5ff', padding: '14px', borderRadius: '10px', marginBottom: '1rem' }}>
-                                <div className="form-group" style={{ marginBottom: '8px' }}>
-                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>사용 시작일</label>
-                                    <input type="date" className="form-input" value={leaveAppData.startDate}
-                                        onChange={(e) => setLeaveAppData({ ...leaveAppData, startDate: e.target.value })} />
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                    <label className="form-label" style={{ fontSize: '0.82rem', margin: 0, fontWeight: 700 }}>조회 연도</label>
+                                    <select className="form-input" style={{ width: 'auto', padding: '6px 10px' }}
+                                        value={leaveAppYear} onChange={(e) => setLeaveAppYear(e.target.value)}>
+                                        {leaveYears.map(y => <option key={y} value={y}>{y}년</option>)}
+                                    </select>
                                 </div>
-                                <div className="form-group" style={{ marginBottom: '8px' }}>
-                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>사용 종료일</label>
-                                    <input type="date" className="form-input" value={leaveAppData.endDate}
-                                        onChange={(e) => setLeaveAppData({ ...leaveAppData, endDate: e.target.value })} />
+                                <div style={{ fontSize: '0.76rem', color: '#6b21a8', marginBottom: '10px', lineHeight: 1.5 }}>
+                                    근태에 기록된 <b>연차 · 여름휴가 · 반차</b> 사용 내역입니다.<br />아래 내역으로 신청서를 만들어 직원 서명을 받으세요.
                                 </div>
-                                <div className="form-group" style={{ marginBottom: '8px' }}>
-                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>사용 일수</label>
-                                    <input type="number" className="form-input" min="0.5" step="0.5" value={leaveAppData.days}
-                                        onChange={(e) => setLeaveAppData({ ...leaveAppData, days: parseFloat(e.target.value) || 0 })} />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label" style={{ fontSize: '0.8rem' }}>사유</label>
-                                    <textarea className="form-input" rows="2" value={leaveAppData.reason}
-                                        onChange={(e) => setLeaveAppData({ ...leaveAppData, reason: e.target.value })}
-                                        placeholder="예: 개인 사유, 가족 행사 등" />
-                                </div>
+                                {leaveHistory.rows.length === 0 ? (
+                                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center', padding: '14px' }}>
+                                        {leaveAppYear}년 사용 내역이 없습니다.
+                                    </div>
+                                ) : (
+                                    <div style={{ maxHeight: '170px', overflowY: 'auto', background: 'white', borderRadius: '8px', padding: '4px 6px' }}>
+                                        {leaveHistory.rows.map((r, i) => (
+                                            <div key={r.id || i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '5px 8px', borderBottom: '1px solid #f1f5f9' }}>
+                                                <span style={{ color: '#475569' }}>{i + 1}. {r.date}</span>
+                                                <span style={{ fontWeight: 600 }}>{r.status} ({r.days}일)</span>
+                                            </div>
+                                        ))}
+                                        <div style={{ textAlign: 'right', fontSize: '0.82rem', fontWeight: 700, color: '#4f46e5', padding: '7px 8px' }}>
+                                            합계 {leaveHistory.total}일
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -1484,6 +1540,10 @@ const Employees = () => {
 
                         <div className="modal-actions">
                             <button className="btn-cancel" onClick={() => setIsPdfModalOpen(false)}>취소</button>
+                            <button className="btn-cancel" onClick={printForm} disabled={isGeneratingPdf}
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <FileText size={16} /> 인쇄
+                            </button>
                             <button className="btn-submit" onClick={() => generatePdf()} disabled={isGeneratingPdf}
                                 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <Download size={16} /> {isGeneratingPdf ? 'PDF 생성 중...' : 'PDF 다운로드'}
@@ -1570,14 +1630,15 @@ const Employees = () => {
                                 </table>
                             </div>
                         ) : pdfType === 'application' ? (
-                            /* === 연차사용 신청서 === */
+                            /* === 연차 사용 내역 확인서 (근태 기록 기준, 직원 서명용) === */
                             <div>
-                                <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-                                    <h1 style={{ fontSize: '26px', fontWeight: 800, letterSpacing: '6px', marginBottom: '8px' }}>연 차 사 용 신 청 서</h1>
+                                <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                                    <h1 style={{ fontSize: '24px', fontWeight: 800, letterSpacing: '5px', marginBottom: '8px' }}>연 차 사 용 내 역 확 인 서</h1>
                                     <div style={{ width: '60px', height: '3px', background: '#4f46e5', margin: '0 auto' }}></div>
+                                    <div style={{ fontSize: '13px', color: '#64748b', marginTop: '10px' }}>{leaveAppYear}년도 · 근로기준법 제60조</div>
                                 </div>
 
-                                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
                                     <tbody>
                                         <tr>
                                             <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '20%' }}>성 명</td>
@@ -1594,82 +1655,82 @@ const Employees = () => {
                                         <tr>
                                             <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>입사일</td>
                                             <td style={cellStyle}>{pdfTarget.join_date}</td>
-                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>신청일</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>발급일</td>
                                             <td style={cellStyle}>{formatDate(today)}</td>
                                         </tr>
                                     </tbody>
                                 </table>
 
-                                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
                                     <tbody>
                                         <tr>
-                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '25%' }}>총 연차일수</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '25%' }}>총 발생 연차</td>
                                             <td style={{ ...cellStyle, width: '25%', textAlign: 'center', fontWeight: 700 }}>{pdfTarget.total_leave}일</td>
-                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '25%' }}>기사용 연차</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '25%' }}>총 사용 연차</td>
                                             <td style={{ ...cellStyle, width: '25%', textAlign: 'center' }}>{pdfTarget.used_leave}일</td>
                                         </tr>
                                         <tr>
                                             <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>잔여 연차</td>
                                             <td style={{ ...cellStyle, textAlign: 'center', fontWeight: 700, color: '#4f46e5' }}>{pdfTarget.total_leave - pdfTarget.used_leave}일</td>
-                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>금회 신청</td>
-                                            <td style={{ ...cellStyle, textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>{leaveAppData.days}일</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>{leaveAppYear}년 사용 합계</td>
+                                            <td style={{ ...cellStyle, textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>{leaveHistory.total}일</td>
                                         </tr>
                                     </tbody>
                                 </table>
 
+                                <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '8px', color: '#1e293b' }}>■ {leaveAppYear}년 휴가 사용 내역</div>
                                 <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+                                    <thead>
+                                        <tr>
+                                            <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '12%' }}>번호</th>
+                                            <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '33%' }}>사용일자</th>
+                                            <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '20%' }}>구분</th>
+                                            <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '13%' }}>일수</th>
+                                            <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center', width: '22%' }}>본인 서명</th>
+                                        </tr>
+                                    </thead>
                                     <tbody>
-                                        <tr>
-                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '25%' }}>사용 기간</td>
-                                            <td colSpan="3" style={{ ...cellStyle, textAlign: 'center', fontWeight: 600 }}>
-                                                {leaveAppData.startDate || '____년 __월 __일'} ~ {leaveAppData.endDate || '____년 __월 __일'} ({leaveAppData.days}일간)
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700 }}>사 유</td>
-                                            <td colSpan="3" style={{ ...cellStyle, minHeight: '60px' }}>
-                                                {leaveAppData.reason || '개인 사유'}
-                                            </td>
-                                        </tr>
+                                        {leaveHistory.rows.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="5" style={{ ...cellStyle, textAlign: 'center', color: '#94a3b8', height: '50px' }}>
+                                                    {leaveAppYear}년 사용 내역이 없습니다.
+                                                </td>
+                                            </tr>
+                                        ) : leaveHistory.rows.map((r, i) => (
+                                            <tr key={r.id || i}>
+                                                <td style={{ ...cellStyle, textAlign: 'center' }}>{i + 1}</td>
+                                                <td style={{ ...cellStyle, textAlign: 'center' }}>{r.date}</td>
+                                                <td style={{ ...cellStyle, textAlign: 'center' }}>{r.status}</td>
+                                                <td style={{ ...cellStyle, textAlign: 'center' }}>{r.days}일</td>
+                                                <td style={{ ...cellStyle, textAlign: 'center', height: '34px' }}>(인)</td>
+                                            </tr>
+                                        ))}
+                                        {leaveHistory.rows.length > 0 && (
+                                            <tr>
+                                                <td colSpan="3" style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>합 계</td>
+                                                <td style={{ ...cellStyle, textAlign: 'center', fontWeight: 700, color: '#4f46e5' }}>{leaveHistory.total}일</td>
+                                                <td style={cellStyle}></td>
+                                            </tr>
+                                        )}
                                     </tbody>
                                 </table>
 
                                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '24px', fontSize: '13px', lineHeight: 2, color: '#64748b' }}>
-                                    근로기준법 제60조에 의거하여 위와 같이 연차유급휴가를 신청합니다.
+                                    본인은 위 휴가(연차·여름휴가·반차) 사용 내역이 사실과 같음을 확인하며, 각 사용 건에 대하여 서명합니다.
                                 </div>
 
-                                <div style={{ textAlign: 'center', margin: '40px 0 30px', fontSize: '14px', fontWeight: 600 }}>
+                                <div style={{ textAlign: 'center', margin: '36px 0 24px', fontSize: '14px', fontWeight: 600 }}>
                                     {formatDate(today)}
                                 </div>
 
                                 <table style={{ width: '80%', margin: '0 auto', borderCollapse: 'collapse', fontSize: '13px' }}>
                                     <tbody>
                                         <tr>
-                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '30%', textAlign: 'center' }}>신청인</td>
+                                            <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '30%', textAlign: 'center' }}>확인자 (근로자)</td>
                                             <td style={{ ...cellStyle, textAlign: 'center', height: '50px' }}>{pdfTarget.name} (인)</td>
                                         </tr>
                                     </tbody>
                                 </table>
-
-                                <div style={{ marginTop: '40px', borderTop: '2px solid #e2e8f0', paddingTop: '20px' }}>
-                                    <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '12px', color: '#64748b' }}>결 재</div>
-                                    <table style={{ width: '60%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                                        <thead>
-                                            <tr>
-                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>담당</th>
-                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>팀장</th>
-                                                <th style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>대표</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td style={{ ...cellStyle, textAlign: 'center', height: '60px' }}></td>
-                                                <td style={{ ...cellStyle, textAlign: 'center', height: '60px' }}></td>
-                                                <td style={{ ...cellStyle, textAlign: 'center', height: '60px' }}></td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
                             </div>
                         ) : pdfType === 'retirement' ? (
                             /* === 퇴직금 계산서 === */

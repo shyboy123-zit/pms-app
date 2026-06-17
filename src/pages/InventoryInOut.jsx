@@ -4,6 +4,7 @@ import Modal from '../components/Modal';
 import DateRangePicker from '../components/DateRangePicker';
 import ExcelToolbar from '../components/ExcelToolbar';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
+import InventoryValuation from '../components/InventoryValuation';
 import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X, Camera } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -732,15 +733,23 @@ const InventoryInOut = () => {
                 >
                     재고현황
                 </button>
+                <button
+                    className={`tab ${activeTab === 'valuation' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('valuation')}
+                >
+                    재고 평가
+                </button>
             </div>
 
             {/* Date Range Filter */}
-            {activeTab !== 'status' && (
+            {activeTab !== 'status' && activeTab !== 'valuation' && (
                 <DateRangePicker onApply={handleDateRangeApply} />
             )}
 
-            {/* Transaction Table or Inventory Status */}
-            {activeTab === 'status' ? (
+            {/* Transaction Table / Inventory Status / Valuation */}
+            {activeTab === 'valuation' ? (
+                <InventoryValuation />
+            ) : activeTab === 'status' ? (
                 <div className="inventory-status-table">
                     <h3 className="section-title">현재 재고 현황</h3>
                     <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white' }}>

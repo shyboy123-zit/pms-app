@@ -22,6 +22,9 @@ const LAYOUT = [
   { code: '70-1', row: 10, col: 5 },
 ];
 
+// 금형 연속 작업이 이 일수(3주=21일) 이상이면 청소 요망 경고
+const MOLD_CLEAN_DAYS = 21;
+
 // 설비명을 배치도 코드와 비교하기 위해 정규화 — 공백/'호'/'호기'/톤수 'T' 제거
 // 예: "150T-1호" → "150-1", "100-2" → "100-2"
 const normalize = (s) => String(s || '').toUpperCase().replace(/\s|호기|호/g, '').replace(/T(?=-)/g, '').replace(/T$/g, '');
@@ -60,6 +63,7 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
   // 배치도 각 칸의 상태/작업 계산 + 배치된 설비 id 집합
   const { cells, extras } = useMemo(() => {
     const matchedIds = new Set();
+    const now = Date.now();
     const cells = LAYOUT.map((slot) => {
       const eq = findEquipment(equipments, slot.code);
       if (eq) matchedIds.add(eq.id);
@@ -75,7 +79,10 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
         else if (eq.status === '대기') state = 'idle';
         else state = 'fault';
       }
-      return { ...slot, eq, wo, product, target, produced, progress, state };
+      // 금형청소요망: 가동중인데 현재 작업지시 시작 후 3주(21일) 이상 경과
+      const moldDays = wo?.start_time ? Math.floor((now - new Date(wo.start_time).getTime()) / 86400000) : null;
+      const needsCleaning = state === 'running' && moldDays != null && moldDays >= MOLD_CLEAN_DAYS;
+      return { ...slot, eq, wo, product, target, produced, progress, state, moldDays, needsCleaning };
     });
     // 배치도에 없지만 가동 중인 설비 (숨기지 않고 별도 표시)
     const extras = equipments.filter((e) => e.status === '가동중' && !matchedIds.has(e.id));
@@ -144,6 +151,19 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
       }
     });
 
+    // 금형청소요망 — 가동중인데 현재 작업지시가 3주(21일) 이상 연속된 호기
+    const cleaning = [];
+    equipments.filter((e) => e.status === '가동중' && e.current_work_order_id).forEach((e) => {
+      const wo = workOrders.find((w) => w.id === e.current_work_order_id);
+      if (!wo?.start_time) return;
+      const days = Math.floor((now - new Date(wo.start_time).getTime()) / 86400000);
+      if (days >= MOLD_CLEAN_DAYS) {
+        const product = products.find((p) => p.id === wo.product_id);
+        cleaning.push({ id: e.id, code: e.name, label: product?.name || wo.order_code || '작업', days, weeks: Math.floor(days / 7) });
+      }
+    });
+    cleaning.sort((a, b) => b.days - a.days);
+
     // 가동중 원재료 소진 예상 — 같은 원재료를 쓰는 호기는 소비속도를 합산
     const matAgg = {};
     equipments.filter((e) => e.status === '가동중' && e.current_work_order_id).forEach((e) => {
@@ -173,7 +193,7 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
       return { ...m, kgPerHr, hours, sev };
     }).sort((a, b) => a.hours - b.hours);
 
-    return { total, running, idle, stopped, util, runDeg, idleDeg, eta, todayQty, yQty, todayMax, trendPct, imminent, delayed, materialForecast };
+    return { total, running, idle, stopped, util, runDeg, idleDeg, eta, todayQty, yQty, todayMax, trendPct, imminent, delayed, cleaning, materialForecast };
   }, [equipments, workOrders, products, productionLogs, materials]);
 
   const stateLabel = { running: '가동중', idle: '대기', fault: '점검/정지', missing: '미등록' };
@@ -220,8 +240,15 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
       </div>
     </>
   );
-  const alertContent = (stats.imminent.length > 0 || stats.delayed.length > 0) ? (
+  const alertContent = (stats.cleaning.length > 0 || stats.imminent.length > 0 || stats.delayed.length > 0) ? (
     <div className="ffm-alert-list">
+      {stats.cleaning.map((w) => (
+        <div key={`cl-${w.id}`} className="ffm-alert-row">
+          <span className="ffm-tag cl">🧽 청소</span>
+          <span className="ffm-alert-label" title={`${w.code} · ${w.label}`}>{w.code} · {w.label}</span>
+          <span className="ffm-alert-val">{w.weeks}주+</span>
+        </div>
+      ))}
       {stats.imminent.map((w) => (
         <div key={`im-${w.id}`} className="ffm-alert-row">
           <span className="ffm-tag im">임박</span>
@@ -265,12 +292,15 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
         {cells.map((c) => (
           <div
             key={c.code}
-            className={`ffm-machine ${c.state}`}
+            className={`ffm-machine ${c.state} ${c.needsCleaning ? 'needs-cleaning' : ''}`}
             style={{ gridRow: c.row, gridColumn: c.col }}
             onClick={() => c.eq && onMachineClick && onMachineClick(c.eq, c.wo)}
-            title={c.state === 'running' ? '클릭하여 사출조건 보기' : c.code}
+            title={c.needsCleaning ? `🧽 금형청소요망! 현재 작업 ${c.moldDays}일(약 ${Math.floor(c.moldDays / 7)}주) 연속 가동` : (c.state === 'running' ? '클릭하여 사출조건 보기' : c.code)}
           >
             <div className="ffm-hopper" />
+            {c.needsCleaning && (
+              <div className="ffm-clean-badge">🧽 금형청소요망</div>
+            )}
             <div className="ffm-body">
               <div className="ffm-top">
                 <span className="ffm-code">{c.code}</span>
@@ -371,6 +401,27 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
         .ffm-machine.fault { border-color: #ef4444; }
         .ffm-machine.missing { border-style: dashed; opacity: 0.55; }
 
+        /* 금형청소요망 — 3주 이상 연속 가동 호기 강조 */
+        .ffm-machine.needs-cleaning {
+          border-color: #dc2626 !important;
+          box-shadow: 0 0 0 2px rgba(220,38,38,0.40), 0 0 12px rgba(220,38,38,0.40) !important;
+          animation: ffmCleanGlow 1.2s ease-in-out infinite;
+          overflow: visible;
+        }
+        @keyframes ffmCleanGlow {
+          0%, 100% { box-shadow: 0 0 0 2px rgba(220,38,38,0.40), 0 0 10px rgba(220,38,38,0.35); }
+          50% { box-shadow: 0 0 0 4px rgba(220,38,38,0.18), 0 0 20px rgba(220,38,38,0.60); }
+        }
+        .ffm-clean-badge {
+          position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+          background: #dc2626; color: #fff;
+          font-size: 0.58rem; font-weight: 800; letter-spacing: -0.02em;
+          padding: 2px 7px; border-radius: 7px; white-space: nowrap;
+          box-shadow: 0 2px 6px rgba(220,38,38,0.55); z-index: 5;
+          animation: ffmCleanBadge 1s ease-in-out infinite;
+        }
+        @keyframes ffmCleanBadge { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.09); } }
+
         /* 사출기 호퍼(상단 돌출부) */
         .ffm-hopper {
           position: absolute;
@@ -469,6 +520,7 @@ const FactoryFloorMap = ({ equipments = [], workOrders = [], products = [], prod
         .ffm-tag { font-size: 0.64rem; font-weight: 800; padding: 2px 6px; border-radius: 6px; flex-shrink: 0; }
         .ffm-tag.im { background: #dcfce7; color: #15803d; }
         .ffm-tag.dl { background: #fee2e2; color: #b91c1c; }
+        .ffm-tag.cl { background: #dc2626; color: #fff; }
         .ffm-alert-label { flex: 1; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
         .ffm-alert-val { font-weight: 700; color: var(--text-muted); white-space: nowrap; }
 

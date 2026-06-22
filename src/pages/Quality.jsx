@@ -110,13 +110,13 @@ const Quality = () => {
     // ============================================================
     const todayStr = new Date().toISOString().split('T')[0];
 
-    // 측정 등록 폼
+    // 측정 등록 폼 — cavityWeights: 캐비티별 측정값 배열(문자열)
     const [isWeightModalOpen, setIsWeightModalOpen] = useState(false);
     const [weightForm, setWeightForm] = useState({
         date: todayStr,
         timeSlot: 'AM',
         productId: '',
-        measuredWeight: '',
+        cavityWeights: [],
         inspector: user?.name || '',
         notes: ''
     });
@@ -145,7 +145,9 @@ const Quality = () => {
         return { target, min, max, hasSpec };
     };
 
-    // 측정값 판정 (스펙 이탈 여부)
+    const cavityCountOf = (product) => Math.max(1, parseInt(product?.cavity_count, 10) || 1);
+
+    // 단일 측정값 판정 (스펙 이탈 여부)
     const judgeWeight = (weight, spec) => {
         if (weight == null || weight === '' || isNaN(parseFloat(weight))) return null;
         const w = parseFloat(weight);
@@ -154,10 +156,35 @@ const Quality = () => {
         return 'OK';
     };
 
-    // 측정 폼에서 선택된 제품/스펙/실시간 판정
+    // 캐비티 배열 판정 — 입력된 값만 평가, 하나라도 이탈이면 NG
+    const judgeCavities = (cavityWeights, spec) => {
+        const filled = (cavityWeights || []).map(v => parseFloat(v)).filter(v => !isNaN(v));
+        if (filled.length === 0) return { result: null, filled, okCount: 0, ngCount: 0, avg: null };
+        let okCount = 0, ngCount = 0;
+        filled.forEach(w => { judgeWeight(w, spec) === 'NG' ? ngCount++ : okCount++; });
+        const avg = filled.reduce((a, b) => a + b, 0) / filled.length;
+        return { result: ngCount > 0 ? 'NG' : 'OK', filled, okCount, ngCount, avg };
+    };
+
+    // 측정 폼에서 선택된 제품/스펙/캐비티수/실시간 판정
     const weightFormProduct = useMemo(() => products.find(p => p.id === weightForm.productId), [products, weightForm.productId]);
     const weightFormSpec = useMemo(() => getProductSpec(weightFormProduct), [weightFormProduct]);
-    const weightFormResult = useMemo(() => judgeWeight(weightForm.measuredWeight, weightFormSpec), [weightForm.measuredWeight, weightFormSpec]);
+    const weightFormCavityCount = useMemo(() => cavityCountOf(weightFormProduct), [weightFormProduct]);
+    const weightFormJudge = useMemo(() => judgeCavities(weightForm.cavityWeights, weightFormSpec), [weightForm.cavityWeights, weightFormSpec]);
+
+    // 측정 폼 제품 선택 → 캐비티 수만큼 입력칸 초기화
+    const onWeightProductChange = (productId) => {
+        const prod = products.find(p => p.id === productId);
+        const n = cavityCountOf(prod);
+        setWeightForm(f => ({ ...f, productId, cavityWeights: Array(n).fill('') }));
+    };
+    const setCavityWeight = (idx, value) => {
+        setWeightForm(f => {
+            const arr = [...f.cavityWeights];
+            arr[idx] = value;
+            return { ...f, cavityWeights: arr };
+        });
+    };
 
     // 진행중 작업의 work_order_id 매핑 (제품 → 진행중 작업지시)
     const activeWoByProduct = useMemo(() => {
@@ -217,12 +244,20 @@ const Quality = () => {
     // 측정 등록 저장
     const handleWeightSave = async () => {
         if (!weightForm.productId) return alert('제품을 선택하세요.');
-        if (weightForm.measuredWeight === '' || isNaN(parseFloat(weightForm.measuredWeight))) return alert('측정 중량을 입력하세요.');
-
-        setIsSavingWeight(true);
         const product = products.find(p => p.id === weightForm.productId);
         const spec = getProductSpec(product);
-        const result = judgeWeight(weightForm.measuredWeight, spec) || 'OK';
+        const cavityCount = cavityCountOf(product);
+        const judge = judgeCavities(weightForm.cavityWeights, spec);
+        if (judge.filled.length === 0) return alert('캐비티 중량을 하나 이상 입력하세요.');
+
+        setIsSavingWeight(true);
+        const result = judge.result || 'OK';
+        // 캐비티별 값 (빈칸은 null로 저장하여 캐비티 번호 위치 유지)
+        const cavityWeights = (weightForm.cavityWeights || []).map(v => {
+            const n = parseFloat(v);
+            return isNaN(n) ? null : n;
+        });
+        const avg = Math.round(judge.avg * 100) / 100;
 
         const item = {
             check_date: weightForm.date,
@@ -230,7 +265,9 @@ const Quality = () => {
             product_id: weightForm.productId,
             product_name: product?.name || '',
             work_order_id: activeWoByProduct[weightForm.productId] || null,
-            measured_weight: parseFloat(weightForm.measuredWeight),
+            cavity_count: cavityCount,
+            cavity_weights: cavityWeights,
+            measured_weight: avg,
             spec_target: spec.target,
             spec_min: spec.min,
             spec_max: spec.max,
@@ -243,12 +280,15 @@ const Quality = () => {
 
         // 스펙 이탈 시 관리자 알림
         if (!error && result === 'NG') {
+            const ngList = cavityWeights
+                .map((w, i) => (w != null && judgeWeight(w, spec) === 'NG') ? `C/V${i + 1}:${w}g` : null)
+                .filter(Boolean).join(', ');
             const managers = employees.filter(emp => emp.position === '관리자' || emp.position === '대표');
             for (const manager of managers) {
                 await addNotification(
                     manager.id,
                     '⚠️ 중량 스펙 이탈',
-                    `${product?.name || ''} ${slotLabel(weightForm.timeSlot)}: ${parseFloat(weightForm.measuredWeight)}g (스펙 ${spec.min ?? '-'}~${spec.max ?? '-'}g)`,
+                    `${product?.name || ''} ${slotLabel(weightForm.timeSlot)} — ${ngList} (스펙 ${spec.min ?? '-'}~${spec.max ?? '-'}g)`,
                     'quality',
                     null
                 );
@@ -262,7 +302,7 @@ const Quality = () => {
                 date: weightForm.date,
                 timeSlot: weightForm.timeSlot,
                 productId: '',
-                measuredWeight: '',
+                cavityWeights: [],
                 inspector: weightForm.inspector,
                 notes: ''
             });
@@ -300,16 +340,43 @@ const Quality = () => {
     };
 
     // 측정 수정/삭제
+    // 수정 모달 열기 — 캐비티 배열을 문자열 입력칸으로 정규화
+    const openWeightEdit = (w) => {
+        const cavityCount = w.cavity_count || (Array.isArray(w.cavity_weights) ? w.cavity_weights.length : 1) || 1;
+        let arr;
+        if (Array.isArray(w.cavity_weights) && w.cavity_weights.length > 0) {
+            arr = w.cavity_weights.map(v => (v == null ? '' : String(v)));
+        } else {
+            arr = [w.measured_weight != null ? String(w.measured_weight) : ''];
+        }
+        setEditWeight({ ...w, cavityWeights: arr, cavity_count: cavityCount });
+    };
+    const setEditCavityWeight = (idx, value) => {
+        setEditWeight(prev => {
+            const arr = [...(prev.cavityWeights || [])];
+            arr[idx] = value;
+            return { ...prev, cavityWeights: arr };
+        });
+    };
+    const editWeightJudge = useMemo(
+        () => editWeight ? judgeCavities(editWeight.cavityWeights, { min: editWeight.spec_min, max: editWeight.spec_max }) : null,
+        [editWeight]
+    );
     const handleWeightEditSave = async () => {
         if (!editWeight) return;
-        const product = products.find(p => p.id === editWeight.product_id);
         const spec = { min: editWeight.spec_min, max: editWeight.spec_max };
-        const result = judgeWeight(editWeight.measured_weight, spec) || 'OK';
+        const judge = judgeCavities(editWeight.cavityWeights, spec);
+        if (judge.filled.length === 0) return alert('캐비티 중량을 하나 이상 입력하세요.');
+        const cavityWeights = (editWeight.cavityWeights || []).map(v => {
+            const n = parseFloat(v);
+            return isNaN(n) ? null : n;
+        });
         await updateWeightCheck(editWeight.id, {
             check_date: editWeight.check_date,
             time_slot: editWeight.time_slot,
-            measured_weight: parseFloat(editWeight.measured_weight),
-            result,
+            cavity_weights: cavityWeights,
+            measured_weight: Math.round(judge.avg * 100) / 100,
+            result: judge.result || 'OK',
             inspector: editWeight.inspector || null,
             notes: editWeight.notes || null
         });
@@ -742,7 +809,7 @@ const Quality = () => {
                     slotLabel={slotLabel}
                     productsWithSpec={productsWithSpec}
                     getProductSpec={getProductSpec}
-                    onEdit={(w) => setEditWeight({ ...w })}
+                    onEdit={openWeightEdit}
                     onDelete={handleWeightDelete}
                 />
             )}
@@ -1153,10 +1220,10 @@ const Quality = () => {
                 </div>
                 <div className="form-group">
                     <label className="form-label">제품명 (진행중 작업)</label>
-                    <select className="form-input" value={weightForm.productId} onChange={(e) => setWeightForm({ ...weightForm, productId: e.target.value })}>
+                    <select className="form-input" value={weightForm.productId} onChange={(e) => onWeightProductChange(e.target.value)}>
                         <option value="">제품을 선택하세요</option>
                         {activeProducts.map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
+                            <option key={p.id} value={p.id}>{p.name} ({cavityCountOf(p)}-C/V)</option>
                         ))}
                     </select>
                     {activeProducts.length === 0 && (
@@ -1169,8 +1236,8 @@ const Quality = () => {
                     <div className="spec-hint">
                         {weightFormSpec.hasSpec || weightFormSpec.target != null ? (
                             <>
-                                기준중량 <b>{weightFormSpec.target ?? '-'}g</b> · 스펙 <b>{weightFormSpec.min ?? '-'} ~ {weightFormSpec.max ?? '-'}g</b>
-                                {!weightFormSpec.hasSpec && <span style={{ color: '#f59e0b' }}> (하한/상한 미설정 — '스펙 설정'에서 등록하세요)</span>}
+                                기준중량 <b>{weightFormSpec.target ?? '-'}g</b> · 스펙 <b>{weightFormSpec.min ?? '-'} ~ {weightFormSpec.max ?? '-'}g</b> · <b>{weightFormCavityCount}-C/V</b> (단품 기준)
+                                {!weightFormSpec.hasSpec && <span style={{ color: '#f59e0b' }}> · 하한/상한 미설정 — '스펙 설정'에서 등록하세요</span>}
                             </>
                         ) : (
                             <span style={{ color: '#f59e0b' }}>이 제품은 중량 스펙이 없습니다. '스펙 설정'에서 먼저 등록하세요.</span>
@@ -1178,19 +1245,32 @@ const Quality = () => {
                     </div>
                 )}
 
-                <div className="form-group">
-                    <label className="form-label">측정 중량 (g)</label>
-                    <input type="number" step="0.01" className="form-input" value={weightForm.measuredWeight}
-                        onChange={(e) => setWeightForm({ ...weightForm, measuredWeight: e.target.value })} placeholder="예: 24.85" />
-                    {/* 실시간 판정 */}
-                    {weightFormResult && (
-                        <div className={`live-judge ${weightFormResult === 'OK' ? 'ok' : 'ng'}`}>
-                            {weightFormResult === 'OK'
-                                ? <><CheckCircle size={15} /> 스펙 이내 (정상)</>
-                                : <><AlertTriangle size={15} /> 스펙 이탈 — 확인 필요</>}
+                {/* 캐비티별 측정 입력 */}
+                {weightForm.productId && (
+                    <div className="form-group">
+                        <label className="form-label">캐비티별 측정 중량 (g) — 각 캐비티 단품 무게</label>
+                        <div className="cavity-grid">
+                            {weightForm.cavityWeights.map((val, idx) => {
+                                const j = judgeWeight(val, weightFormSpec);
+                                return (
+                                    <div key={idx} className={`cavity-input ${j === 'NG' ? 'ng' : j === 'OK' ? 'ok' : ''}`}>
+                                        <span className="cavity-label">C/V {idx + 1}</span>
+                                        <input type="number" step="0.01" value={val}
+                                            onChange={(e) => setCavityWeight(idx, e.target.value)} placeholder="g" />
+                                    </div>
+                                );
+                            })}
                         </div>
-                    )}
-                </div>
+                        {/* 종합 판정 */}
+                        {weightFormJudge.result && (
+                            <div className={`live-judge ${weightFormJudge.result === 'OK' ? 'ok' : 'ng'}`}>
+                                {weightFormJudge.result === 'OK'
+                                    ? <><CheckCircle size={15} /> 전체 정상 · 평균 {Math.round(weightFormJudge.avg * 100) / 100}g ({weightFormJudge.okCount}/{weightFormJudge.filled.length})</>
+                                    : <><AlertTriangle size={15} /> 스펙 이탈 {weightFormJudge.ngCount}개 · 평균 {Math.round(weightFormJudge.avg * 100) / 100}g</>}
+                            </div>
+                        )}
+                    </div>
+                )}
                 <div className="form-group">
                     <label className="form-label">측정자</label>
                     <input className="form-input" value={weightForm.inspector} onChange={(e) => setWeightForm({ ...weightForm, inspector: e.target.value })} placeholder="측정한 사람" />
@@ -1273,11 +1353,28 @@ const Quality = () => {
                                 </label>
                             </div>
                         </div>
-                        <div className="spec-hint">스펙 <b>{editWeight.spec_min ?? '-'} ~ {editWeight.spec_max ?? '-'}g</b> (기준 {editWeight.spec_target ?? '-'}g)</div>
+                        <div className="spec-hint">스펙 <b>{editWeight.spec_min ?? '-'} ~ {editWeight.spec_max ?? '-'}g</b> (기준 {editWeight.spec_target ?? '-'}g · {editWeight.cavity_count || 1}-C/V)</div>
                         <div className="form-group">
-                            <label className="form-label">측정 중량 (g)</label>
-                            <input type="number" step="0.01" className="form-input" value={editWeight.measured_weight}
-                                onChange={(e) => setEditWeight({ ...editWeight, measured_weight: e.target.value })} />
+                            <label className="form-label">캐비티별 측정 중량 (g)</label>
+                            <div className="cavity-grid">
+                                {(editWeight.cavityWeights || []).map((val, idx) => {
+                                    const j = judgeWeight(val, { min: editWeight.spec_min, max: editWeight.spec_max });
+                                    return (
+                                        <div key={idx} className={`cavity-input ${j === 'NG' ? 'ng' : j === 'OK' ? 'ok' : ''}`}>
+                                            <span className="cavity-label">C/V {idx + 1}</span>
+                                            <input type="number" step="0.01" value={val}
+                                                onChange={(e) => setEditCavityWeight(idx, e.target.value)} placeholder="g" />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {editWeightJudge?.result && (
+                                <div className={`live-judge ${editWeightJudge.result === 'OK' ? 'ok' : 'ng'}`}>
+                                    {editWeightJudge.result === 'OK'
+                                        ? <><CheckCircle size={15} /> 전체 정상 · 평균 {Math.round(editWeightJudge.avg * 100) / 100}g</>
+                                        : <><AlertTriangle size={15} /> 스펙 이탈 {editWeightJudge.ngCount}개 · 평균 {Math.round(editWeightJudge.avg * 100) / 100}g</>}
+                                </div>
+                            )}
                         </div>
                         <div className="form-group">
                             <label className="form-label">측정자</label>
@@ -1315,6 +1412,16 @@ const Quality = () => {
                 .live-judge { margin-top: 0.5rem; display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 0.88rem; padding: 0.5rem 0.75rem; border-radius: 8px; }
                 .live-judge.ok { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
                 .live-judge.ng { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+
+                /* 캐비티별 입력 그리드 */
+                .cavity-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.5rem; }
+                .cavity-input { display: flex; align-items: center; gap: 6px; border: 2px solid #e2e8f0; border-radius: 8px; padding: 0.3rem 0.5rem; background: var(--bg-elevated, #fff); }
+                .cavity-input.ok { border-color: #86efac; background: #f0fdf4; }
+                .cavity-input.ng { border-color: #fca5a5; background: #fef2f2; }
+                .cavity-input .cavity-label { font-size: 0.72rem; font-weight: 700; color: #64748b; white-space: nowrap; }
+                .cavity-input.ng .cavity-label { color: #dc2626; }
+                .cavity-input input { width: 100%; border: none; background: transparent; font-size: 0.9rem; color: var(--text-main, #1e293b); outline: none; padding: 0.25rem 0; text-align: right; -moz-appearance: textfield; }
+                .cavity-input input::-webkit-outer-spin-button, .cavity-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
                 /* 중량 점검 섹션 */
                 .wc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.25rem; }
@@ -1497,9 +1604,20 @@ const WeightSection = ({
 }) => {
     const fmtWeight = (rec) => {
         if (!rec) return <span className="wc-cell-empty">-</span>;
-        const w = parseFloat(rec.measured_weight);
         const cls = rec.result === 'NG' ? 'wc-cell-ng' : 'wc-cell-ok';
-        return <span className={cls}>{w}g {rec.result === 'NG' ? '⚠' : ''}</span>;
+        const cavs = Array.isArray(rec.cavity_weights) ? rec.cavity_weights.filter(v => v != null) : [];
+        const total = cavs.length || (rec.cavity_count || 1);
+        let okCount = total;
+        if (cavs.length > 0 && (rec.spec_min != null || rec.spec_max != null)) {
+            okCount = cavs.filter(w => !((rec.spec_min != null && w < rec.spec_min) || (rec.spec_max != null && w > rec.spec_max))).length;
+        }
+        const avg = parseFloat(rec.measured_weight);
+        return (
+            <span className={cls} title={cavs.length ? cavs.map((w, i) => `C/V${i + 1}: ${w}g`).join('\n') : ''}>
+                평균 {avg}g {rec.result === 'NG' ? '⚠' : ''}
+                <br /><span style={{ fontSize: '0.72rem', fontWeight: 500 }}>C/V {okCount}/{total} 정상</span>
+            </span>
+        );
     };
 
     const dayBtns = (row) => {

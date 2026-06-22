@@ -64,6 +64,7 @@ export const DataProvider = ({ children }) => {
     const [attendance, setAttendance] = useState([]);
     const [payrollRecords, setPayrollRecords] = useState([]);
     const [vouchers, setVouchers] = useState([]);
+    const [weightChecks, setWeightChecks] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -201,6 +202,13 @@ export const DataProvider = ({ children }) => {
                 if (v) setVouchers(v);
             } catch (e) {
                 console.warn('vouchers table not available:', e.message);
+            }
+
+            try {
+                const { data: wc } = await supabase.from('weight_checks').select('*').order('check_date', { ascending: false }).order('created_at', { ascending: false });
+                if (wc) setWeightChecks(wc);
+            } catch (e) {
+                console.warn('weight_checks table not available:', e.message);
             }
 
         } catch (error) {
@@ -1175,6 +1183,28 @@ export const DataProvider = ({ children }) => {
         return { error };
     };
 
+    // --- Weight Checks (중량 점검) CRUD ---
+    const addWeightCheck = async (item) => {
+        const { data, error } = await supabase.from('weight_checks').insert([item]).select();
+        if (error) {
+            console.error('weight_check insert error:', error);
+            alert('중량 측정 기록 저장에 실패했습니다: ' + error.message);
+            return { error };
+        }
+        if (data) setWeightChecks(prev => [data[0], ...prev]);
+        return { data, error };
+    };
+    const updateWeightCheck = async (id, fields) => {
+        const { error } = await supabase.from('weight_checks').update(fields).eq('id', id);
+        if (!error) setWeightChecks(prev => prev.map(w => w.id === id ? { ...w, ...fields } : w));
+        return { error };
+    };
+    const deleteWeightCheck = async (id) => {
+        const { error } = await supabase.from('weight_checks').delete().eq('id', id);
+        if (!error) setWeightChecks(prev => prev.filter(w => w.id !== id));
+        return { error };
+    };
+
     return (
         <DataContext.Provider value={{
             loading,
@@ -1204,6 +1234,7 @@ export const DataProvider = ({ children }) => {
             attendance, addAttendance, updateAttendance, deleteAttendance,
             payrollRecords, addPayrollRecord, updatePayrollRecord, deletePayrollRecord,
             vouchers, addVoucher, updateVoucher, deleteVoucher,
+            weightChecks, addWeightCheck, updateWeightCheck, deleteWeightCheck,
             logAudit,
             runNotificationChecks
         }}>

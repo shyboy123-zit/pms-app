@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import ExcelToolbar from '../components/ExcelToolbar';
-import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon, FileText, Download, X, Calendar, Filter, Pencil, Trash2 } from 'lucide-react';
+import { ClipboardCheck, AlertTriangle, CheckCircle, XCircle, Image as ImageIcon, FileText, Download, X, Calendar, Filter, Pencil, Trash2, Scale, Settings, Sun, Moon } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import html2canvas from 'html2canvas';
@@ -12,8 +12,10 @@ import DonutKpi from '../components/viz/DonutKpi';
 import MiniBar from '../components/viz/MiniBar';
 
 const Quality = () => {
-    const { inspections, employees, products, workOrders, molds, suppliers, addInspection, updateInspection, deleteInspection, uploadImage, addNotification } = useData();
+    const { inspections, employees, products, workOrders, molds, suppliers, addInspection, updateInspection, deleteInspection, uploadImage, addNotification,
+        weightChecks, addWeightCheck, updateWeightCheck, deleteWeightCheck, updateProduct } = useData();
     const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState('defect'); // 'defect' | 'weight'
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isRepairModalOpen, setIsRepairModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -102,6 +104,227 @@ const Quality = () => {
         });
         return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value }));
     }, [filteredInspections]);
+
+    // ============================================================
+    // 중량 점검 (Weight Checks)
+    // ============================================================
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // 측정 등록 폼
+    const [isWeightModalOpen, setIsWeightModalOpen] = useState(false);
+    const [weightForm, setWeightForm] = useState({
+        date: todayStr,
+        timeSlot: 'AM',
+        productId: '',
+        measuredWeight: '',
+        inspector: user?.name || '',
+        notes: ''
+    });
+    const [isSavingWeight, setIsSavingWeight] = useState(false);
+
+    // 스펙 설정 폼
+    const [isSpecModalOpen, setIsSpecModalOpen] = useState(false);
+    const [specProductId, setSpecProductId] = useState('');
+    const [specForm, setSpecForm] = useState({ target: '', min: '', max: '' });
+    const [isSavingSpec, setIsSavingSpec] = useState(false);
+
+    // 중량 측정 수정 폼
+    const [editWeight, setEditWeight] = useState(null);
+
+    // 중량 점검 날짜 필터
+    const [wcStartDate, setWcStartDate] = useState(todayStr);
+    const [wcEndDate, setWcEndDate] = useState(todayStr);
+
+    // 제품 스펙 헬퍼 — 기준중량은 product_weight, 하한/상한 미설정 시 ±5% 기본
+    const getProductSpec = (product) => {
+        if (!product) return { target: null, min: null, max: null, hasSpec: false };
+        const target = product.product_weight != null && product.product_weight !== 0 ? parseFloat(product.product_weight) : null;
+        let min = product.weight_spec_min != null ? parseFloat(product.weight_spec_min) : null;
+        let max = product.weight_spec_max != null ? parseFloat(product.weight_spec_max) : null;
+        const hasSpec = min != null || max != null;
+        return { target, min, max, hasSpec };
+    };
+
+    // 측정값 판정 (스펙 이탈 여부)
+    const judgeWeight = (weight, spec) => {
+        if (weight == null || weight === '' || isNaN(parseFloat(weight))) return null;
+        const w = parseFloat(weight);
+        if (spec.min != null && w < spec.min) return 'NG';
+        if (spec.max != null && w > spec.max) return 'NG';
+        return 'OK';
+    };
+
+    // 측정 폼에서 선택된 제품/스펙/실시간 판정
+    const weightFormProduct = useMemo(() => products.find(p => p.id === weightForm.productId), [products, weightForm.productId]);
+    const weightFormSpec = useMemo(() => getProductSpec(weightFormProduct), [weightFormProduct]);
+    const weightFormResult = useMemo(() => judgeWeight(weightForm.measuredWeight, weightFormSpec), [weightForm.measuredWeight, weightFormSpec]);
+
+    // 진행중 작업의 work_order_id 매핑 (제품 → 진행중 작업지시)
+    const activeWoByProduct = useMemo(() => {
+        const map = {};
+        workOrders.filter(wo => wo.status === '진행중').forEach(wo => {
+            if (!map[wo.product_id]) map[wo.product_id] = wo.id;
+        });
+        return map;
+    }, [workOrders]);
+
+    // 날짜 필터된 중량 측정 기록
+    const filteredWeightChecks = useMemo(() => {
+        return (weightChecks || []).filter(w => w.check_date >= wcStartDate && w.check_date <= wcEndDate);
+    }, [weightChecks, wcStartDate, wcEndDate]);
+
+    // 날짜+제품별 그룹핑 → 오전/오후 / 일자 문제 여부
+    const weightDailyRows = useMemo(() => {
+        const groups = {};
+        filteredWeightChecks.forEach(w => {
+            const key = `${w.check_date}__${w.product_id || w.product_name || '?'}`;
+            if (!groups[key]) {
+                groups[key] = {
+                    key,
+                    date: w.check_date,
+                    productName: w.product_name || products.find(p => p.id === w.product_id)?.name || '-',
+                    specMin: w.spec_min,
+                    specMax: w.spec_max,
+                    specTarget: w.spec_target,
+                    am: null,
+                    pm: null
+                };
+            }
+            // 같은 슬롯에 여러 기록이면 최신(created_at) 우선
+            const slot = w.time_slot === 'PM' ? 'pm' : 'am';
+            const existing = groups[key][slot];
+            if (!existing || (w.created_at || '') > (existing.created_at || '')) {
+                groups[key][slot] = w;
+            }
+        });
+        return Object.values(groups).sort((a, b) => {
+            if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+            return a.productName < b.productName ? -1 : 1;
+        });
+    }, [filteredWeightChecks, products]);
+
+    // 중량 점검 통계 (오늘 기준 + 필터 기간 이탈)
+    const weightStats = useMemo(() => {
+        const todayChecks = (weightChecks || []).filter(w => w.check_date === todayStr);
+        const amDone = todayChecks.filter(w => w.time_slot === 'AM').length;
+        const pmDone = todayChecks.filter(w => w.time_slot === 'PM').length;
+        const ngInRange = filteredWeightChecks.filter(w => w.result === 'NG').length;
+        return { amDone, pmDone, todayTotal: todayChecks.length, ngInRange, totalInRange: filteredWeightChecks.length };
+    }, [weightChecks, filteredWeightChecks, todayStr]);
+
+    const slotLabel = (slot) => slot === 'PM' ? '오후 (14:00)' : '오전 (10:00)';
+
+    // 측정 등록 저장
+    const handleWeightSave = async () => {
+        if (!weightForm.productId) return alert('제품을 선택하세요.');
+        if (weightForm.measuredWeight === '' || isNaN(parseFloat(weightForm.measuredWeight))) return alert('측정 중량을 입력하세요.');
+
+        setIsSavingWeight(true);
+        const product = products.find(p => p.id === weightForm.productId);
+        const spec = getProductSpec(product);
+        const result = judgeWeight(weightForm.measuredWeight, spec) || 'OK';
+
+        const item = {
+            check_date: weightForm.date,
+            time_slot: weightForm.timeSlot,
+            product_id: weightForm.productId,
+            product_name: product?.name || '',
+            work_order_id: activeWoByProduct[weightForm.productId] || null,
+            measured_weight: parseFloat(weightForm.measuredWeight),
+            spec_target: spec.target,
+            spec_min: spec.min,
+            spec_max: spec.max,
+            result,
+            inspector: weightForm.inspector || (user?.name || ''),
+            notes: weightForm.notes || null
+        };
+
+        const { error } = await addWeightCheck(item);
+
+        // 스펙 이탈 시 관리자 알림
+        if (!error && result === 'NG') {
+            const managers = employees.filter(emp => emp.position === '관리자' || emp.position === '대표');
+            for (const manager of managers) {
+                await addNotification(
+                    manager.id,
+                    '⚠️ 중량 스펙 이탈',
+                    `${product?.name || ''} ${slotLabel(weightForm.timeSlot)}: ${parseFloat(weightForm.measuredWeight)}g (스펙 ${spec.min ?? '-'}~${spec.max ?? '-'}g)`,
+                    'quality',
+                    null
+                );
+            }
+        }
+
+        setIsSavingWeight(false);
+        if (!error) {
+            setIsWeightModalOpen(false);
+            setWeightForm({
+                date: weightForm.date,
+                timeSlot: weightForm.timeSlot,
+                productId: '',
+                measuredWeight: '',
+                inspector: weightForm.inspector,
+                notes: ''
+            });
+        }
+    };
+
+    // 스펙 설정 저장
+    const openSpecModal = () => {
+        setSpecProductId('');
+        setSpecForm({ target: '', min: '', max: '' });
+        setIsSpecModalOpen(true);
+    };
+    const onSpecProductChange = (id) => {
+        setSpecProductId(id);
+        const p = products.find(x => x.id === id);
+        setSpecForm({
+            target: p?.product_weight ?? '',
+            min: p?.weight_spec_min ?? '',
+            max: p?.weight_spec_max ?? ''
+        });
+    };
+    const handleSpecSave = async () => {
+        if (!specProductId) return alert('제품을 선택하세요.');
+        if (specForm.min !== '' && specForm.max !== '' && parseFloat(specForm.min) > parseFloat(specForm.max)) {
+            return alert('하한이 상한보다 클 수 없습니다.');
+        }
+        setIsSavingSpec(true);
+        await updateProduct(specProductId, {
+            product_weight: specForm.target === '' ? 0 : parseFloat(specForm.target),
+            weight_spec_min: specForm.min === '' ? null : parseFloat(specForm.min),
+            weight_spec_max: specForm.max === '' ? null : parseFloat(specForm.max)
+        });
+        setIsSavingSpec(false);
+        setIsSpecModalOpen(false);
+    };
+
+    // 측정 수정/삭제
+    const handleWeightEditSave = async () => {
+        if (!editWeight) return;
+        const product = products.find(p => p.id === editWeight.product_id);
+        const spec = { min: editWeight.spec_min, max: editWeight.spec_max };
+        const result = judgeWeight(editWeight.measured_weight, spec) || 'OK';
+        await updateWeightCheck(editWeight.id, {
+            check_date: editWeight.check_date,
+            time_slot: editWeight.time_slot,
+            measured_weight: parseFloat(editWeight.measured_weight),
+            result,
+            inspector: editWeight.inspector || null,
+            notes: editWeight.notes || null
+        });
+        setEditWeight(null);
+    };
+    const handleWeightDelete = async (id) => {
+        if (!window.confirm('이 중량 측정 기록을 삭제하시겠습니까?')) return;
+        await deleteWeightCheck(id);
+    };
+
+    // 스펙이 등록된 제품 목록 (스펙 현황 표시용)
+    const productsWithSpec = useMemo(
+        () => products.filter(p => p.weight_spec_min != null || p.weight_spec_max != null || (p.product_weight != null && p.product_weight !== 0)),
+        [products]
+    );
 
     // image_url 파싱 (단일 URL 또는 JSON 배열 호환)
     const parseImageUrls = (imageUrl) => {
@@ -373,29 +596,57 @@ const Quality = () => {
         <div className="page-container">
             <div className="page-header-row">
                 <div>
-                    <h2 className="page-subtitle">품질 관리 (일일 검사)</h2>
-                    <p className="page-description">제품 스펙 검사 결과 및 불량 사진을 등록합니다.</p>
+                    <h2 className="page-subtitle">품질 관리</h2>
+                    <p className="page-description">
+                        {activeTab === 'defect'
+                            ? '제품 스펙 검사 결과 및 불량 사진을 등록합니다.'
+                            : '작업중 제품 중량을 오전 10시 / 오후 2시 측정하고 스펙 대비 이상 여부를 점검합니다.'}
+                    </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <ExcelToolbar
-                        data={inspections || []}
-                        columns={[
-                            { key: 'date', label: '검사일' },
-                            { key: 'product_id', label: '제품ID' },
-                            { key: 'result', label: '결과' },
-                            { key: 'defect_count', label: '불량수', format: (v) => parseFloat(v || 0) },
-                            { key: 'sample_size', label: '검사수량', format: (v) => parseFloat(v || 0) },
-                            { key: 'inspector', label: '검사자' },
-                            { key: 'notes', label: '비고' }
-                        ]}
-                        fileName="품질검사내역"
-                    />
-                    <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-                        <ClipboardCheck size={18} /> 검사 결과 등록
-                    </button>
+                    {activeTab === 'defect' ? (
+                        <>
+                            <ExcelToolbar
+                                data={inspections || []}
+                                columns={[
+                                    { key: 'date', label: '검사일' },
+                                    { key: 'product_id', label: '제품ID' },
+                                    { key: 'result', label: '결과' },
+                                    { key: 'defect_count', label: '불량수', format: (v) => parseFloat(v || 0) },
+                                    { key: 'sample_size', label: '검사수량', format: (v) => parseFloat(v || 0) },
+                                    { key: 'inspector', label: '검사자' },
+                                    { key: 'notes', label: '비고' }
+                                ]}
+                                fileName="품질검사내역"
+                            />
+                            <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                                <ClipboardCheck size={18} /> 검사 결과 등록
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button className="btn-secondary" onClick={openSpecModal}>
+                                <Settings size={16} /> 스펙 설정
+                            </button>
+                            <button className="btn-primary" onClick={() => { setWeightForm(f => ({ ...f, inspector: f.inspector || (user?.name || '') })); setIsWeightModalOpen(true); }}>
+                                <Scale size={18} /> 중량 측정 등록
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
+            {/* 탭 전환 */}
+            <div className="qa-tabs">
+                <button className={`qa-tab ${activeTab === 'defect' ? 'active' : ''}`} onClick={() => setActiveTab('defect')}>
+                    <ClipboardCheck size={16} /> 불량 검사
+                </button>
+                <button className={`qa-tab ${activeTab === 'weight' ? 'active' : ''}`} onClick={() => setActiveTab('weight')}>
+                    <Scale size={16} /> 중량 점검
+                </button>
+            </div>
+
+            {activeTab === 'defect' && (<>
             {/* 날짜 필터 */}
             <div className="quality-filter-section">
                 <div className="filter-row">
@@ -480,6 +731,21 @@ const Quality = () => {
             `}</style>
 
             <Table columns={columns} data={filteredInspections} />
+            </>)}
+
+            {activeTab === 'weight' && (
+                <WeightSection
+                    wcStartDate={wcStartDate} setWcStartDate={setWcStartDate}
+                    wcEndDate={wcEndDate} setWcEndDate={setWcEndDate}
+                    weightStats={weightStats}
+                    weightDailyRows={weightDailyRows}
+                    slotLabel={slotLabel}
+                    productsWithSpec={productsWithSpec}
+                    getProductSpec={getProductSpec}
+                    onEdit={(w) => setEditWeight({ ...w })}
+                    onDelete={handleWeightDelete}
+                />
+            )}
 
             {/* 이미지 뷰어 모달 */}
             <Modal title="첨부 사진" isOpen={isViewerOpen} onClose={() => setIsViewerOpen(false)}>
@@ -868,9 +1134,211 @@ const Quality = () => {
                 </div>
             </div>
 
+            {/* 중량 측정 등록 모달 */}
+            <Modal title="중량 측정 등록" isOpen={isWeightModalOpen} onClose={() => setIsWeightModalOpen(false)}>
+                <div className="form-group">
+                    <label className="form-label">측정 일자</label>
+                    <input type="date" className="form-input" value={weightForm.date} onChange={(e) => setWeightForm({ ...weightForm, date: e.target.value })} />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">측정 시간대</label>
+                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                        <label className={`slot-pick ${weightForm.timeSlot === 'AM' ? 'active am' : ''}`} onClick={() => setWeightForm({ ...weightForm, timeSlot: 'AM' })}>
+                            <Sun size={16} /> 오전 (10:00)
+                        </label>
+                        <label className={`slot-pick ${weightForm.timeSlot === 'PM' ? 'active pm' : ''}`} onClick={() => setWeightForm({ ...weightForm, timeSlot: 'PM' })}>
+                            <Moon size={16} /> 오후 (14:00)
+                        </label>
+                    </div>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">제품명 (진행중 작업)</label>
+                    <select className="form-input" value={weightForm.productId} onChange={(e) => setWeightForm({ ...weightForm, productId: e.target.value })}>
+                        <option value="">제품을 선택하세요</option>
+                        {activeProducts.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                    </select>
+                    {activeProducts.length === 0 && (
+                        <p style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: '4px' }}>진행중인 작업지시가 없습니다. 작업지시를 먼저 시작하세요.</p>
+                    )}
+                </div>
+
+                {/* 선택된 제품의 스펙 안내 */}
+                {weightForm.productId && (
+                    <div className="spec-hint">
+                        {weightFormSpec.hasSpec || weightFormSpec.target != null ? (
+                            <>
+                                기준중량 <b>{weightFormSpec.target ?? '-'}g</b> · 스펙 <b>{weightFormSpec.min ?? '-'} ~ {weightFormSpec.max ?? '-'}g</b>
+                                {!weightFormSpec.hasSpec && <span style={{ color: '#f59e0b' }}> (하한/상한 미설정 — '스펙 설정'에서 등록하세요)</span>}
+                            </>
+                        ) : (
+                            <span style={{ color: '#f59e0b' }}>이 제품은 중량 스펙이 없습니다. '스펙 설정'에서 먼저 등록하세요.</span>
+                        )}
+                    </div>
+                )}
+
+                <div className="form-group">
+                    <label className="form-label">측정 중량 (g)</label>
+                    <input type="number" step="0.01" className="form-input" value={weightForm.measuredWeight}
+                        onChange={(e) => setWeightForm({ ...weightForm, measuredWeight: e.target.value })} placeholder="예: 24.85" />
+                    {/* 실시간 판정 */}
+                    {weightFormResult && (
+                        <div className={`live-judge ${weightFormResult === 'OK' ? 'ok' : 'ng'}`}>
+                            {weightFormResult === 'OK'
+                                ? <><CheckCircle size={15} /> 스펙 이내 (정상)</>
+                                : <><AlertTriangle size={15} /> 스펙 이탈 — 확인 필요</>}
+                        </div>
+                    )}
+                </div>
+                <div className="form-group">
+                    <label className="form-label">측정자</label>
+                    <input className="form-input" value={weightForm.inspector} onChange={(e) => setWeightForm({ ...weightForm, inspector: e.target.value })} placeholder="측정한 사람" />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">비고 (선택)</label>
+                    <textarea className="form-input" rows="2" value={weightForm.notes} onChange={(e) => setWeightForm({ ...weightForm, notes: e.target.value })} placeholder="특이사항이 있으면 입력하세요." />
+                </div>
+                <div className="modal-actions">
+                    <button className="btn-cancel" onClick={() => setIsWeightModalOpen(false)}>취소</button>
+                    <button className="btn-submit" onClick={handleWeightSave} disabled={isSavingWeight}>
+                        {isSavingWeight ? '저장 중...' : '측정 등록'}
+                    </button>
+                </div>
+            </Modal>
+
+            {/* 중량 스펙 설정 모달 */}
+            <Modal title="제품 중량 스펙 설정" isOpen={isSpecModalOpen} onClose={() => setIsSpecModalOpen(false)}>
+                <div className="form-group">
+                    <label className="form-label">제품 선택</label>
+                    <select className="form-input" value={specProductId} onChange={(e) => onSpecProductChange(e.target.value)}>
+                        <option value="">제품을 선택하세요</option>
+                        {products.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                    </select>
+                </div>
+                {specProductId && (
+                    <>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+                            <div className="form-group">
+                                <label className="form-label">기준중량 (g)</label>
+                                <input type="number" step="0.01" className="form-input" value={specForm.target}
+                                    onChange={(e) => setSpecForm({ ...specForm, target: e.target.value })} placeholder="예: 25" />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">하한 (g)</label>
+                                <input type="number" step="0.01" className="form-input" value={specForm.min}
+                                    onChange={(e) => setSpecForm({ ...specForm, min: e.target.value })} placeholder="예: 24" />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">상한 (g)</label>
+                                <input type="number" step="0.01" className="form-input" value={specForm.max}
+                                    onChange={(e) => setSpecForm({ ...specForm, max: e.target.value })} placeholder="예: 26" />
+                            </div>
+                        </div>
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                            측정 중량이 하한~상한을 벗어나면 자동으로 "스펙 이탈(NG)"로 판정됩니다.
+                        </p>
+                    </>
+                )}
+                <div className="modal-actions">
+                    <button className="btn-cancel" onClick={() => setIsSpecModalOpen(false)}>취소</button>
+                    <button className="btn-submit" onClick={handleSpecSave} disabled={isSavingSpec || !specProductId}>
+                        {isSavingSpec ? '저장 중...' : '스펙 저장'}
+                    </button>
+                </div>
+            </Modal>
+
+            {/* 중량 측정 수정 모달 */}
+            <Modal title="중량 측정 수정" isOpen={!!editWeight} onClose={() => setEditWeight(null)}>
+                {editWeight && (
+                    <>
+                        <div className="form-group">
+                            <label className="form-label">제품명</label>
+                            <input className="form-input" value={editWeight.product_name || ''} disabled />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">측정 일자</label>
+                            <input type="date" className="form-input" value={editWeight.check_date} onChange={(e) => setEditWeight({ ...editWeight, check_date: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">측정 시간대</label>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <label className={`slot-pick ${editWeight.time_slot === 'AM' ? 'active am' : ''}`} onClick={() => setEditWeight({ ...editWeight, time_slot: 'AM' })}>
+                                    <Sun size={16} /> 오전 (10:00)
+                                </label>
+                                <label className={`slot-pick ${editWeight.time_slot === 'PM' ? 'active pm' : ''}`} onClick={() => setEditWeight({ ...editWeight, time_slot: 'PM' })}>
+                                    <Moon size={16} /> 오후 (14:00)
+                                </label>
+                            </div>
+                        </div>
+                        <div className="spec-hint">스펙 <b>{editWeight.spec_min ?? '-'} ~ {editWeight.spec_max ?? '-'}g</b> (기준 {editWeight.spec_target ?? '-'}g)</div>
+                        <div className="form-group">
+                            <label className="form-label">측정 중량 (g)</label>
+                            <input type="number" step="0.01" className="form-input" value={editWeight.measured_weight}
+                                onChange={(e) => setEditWeight({ ...editWeight, measured_weight: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">측정자</label>
+                            <input className="form-input" value={editWeight.inspector || ''} onChange={(e) => setEditWeight({ ...editWeight, inspector: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">비고</label>
+                            <textarea className="form-input" rows="2" value={editWeight.notes || ''} onChange={(e) => setEditWeight({ ...editWeight, notes: e.target.value })} />
+                        </div>
+                        <div className="modal-actions">
+                            <button className="btn-cancel" onClick={() => setEditWeight(null)}>취소</button>
+                            <button className="btn-submit" onClick={handleWeightEditSave}>수정 저장</button>
+                        </div>
+                    </>
+                )}
+            </Modal>
+
             <style>{`
                 .page-container { padding: 0 1rem; }
                 .page-header-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
+                .btn-secondary { background: var(--bg-subtle, #f1f5f9); color: var(--text-main, #334155); border: 1px solid var(--border, #e2e8f0); padding: 0.6rem 1rem; border-radius: var(--radius-md); display: flex; align-items: center; gap: 0.4rem; font-weight: 600; font-size: 0.85rem; }
+
+                /* 탭 */
+                .qa-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border, #e2e8f0); }
+                .qa-tab { display: flex; align-items: center; gap: 0.4rem; padding: 0.6rem 1.1rem; background: none; border: none; border-bottom: 3px solid transparent; color: var(--text-muted, #64748b); font-weight: 700; font-size: 0.9rem; cursor: pointer; margin-bottom: -1px; }
+                .qa-tab.active { color: var(--primary, #4f46e5); border-bottom-color: var(--primary, #4f46e5); }
+
+                /* 시간대 선택 */
+                .slot-pick { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0.6rem; border-radius: 8px; cursor: pointer; background: #f1f5f9; color: #475569; font-weight: 600; font-size: 0.88rem; border: 2px solid #e2e8f0; }
+                .slot-pick.active.am { background: #fff7ed; color: #c2410c; border-color: #fdba74; }
+                .slot-pick.active.pm { background: #eef2ff; color: #4338ca; border-color: #a5b4fc; }
+
+                /* 스펙 안내 / 실시간 판정 */
+                .spec-hint { font-size: 0.82rem; color: var(--text-muted, #64748b); background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.55rem 0.75rem; margin-bottom: 1rem; }
+                .live-judge { margin-top: 0.5rem; display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 0.88rem; padding: 0.5rem 0.75rem; border-radius: 8px; }
+                .live-judge.ok { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
+                .live-judge.ng { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+
+                /* 중량 점검 섹션 */
+                .wc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.25rem; }
+                .wc-stat { text-align: center; padding: 0.75rem; border-radius: 10px; background: var(--bg-card, #fff); border: 1px solid var(--border, #e2e8f0); }
+                .wc-stat-label { display: block; font-size: 0.72rem; font-weight: 500; color: var(--text-muted, #94a3b8); margin-bottom: 3px; }
+                .wc-stat-value { display: block; font-size: 1.15rem; font-weight: 800; color: var(--text-main, #1e293b); }
+                .wc-stat.warn { background: #fffbeb; border-color: #fcd34d; }
+                .wc-stat.warn .wc-stat-value { color: #d97706; }
+                .wc-stat.danger { background: #fef2f2; border-color: #fca5a5; }
+                .wc-stat.danger .wc-stat-value { color: #dc2626; }
+                .wc-stat.safe { background: #f0fdf4; border-color: #86efac; }
+                .wc-stat.safe .wc-stat-value { color: #16a34a; }
+                .wc-spec-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem; }
+                .wc-spec-chip { font-size: 0.8rem; background: var(--bg-card, #fff); border: 1px solid var(--border, #e2e8f0); border-radius: 20px; padding: 0.35rem 0.8rem; color: var(--text-main, #334155); }
+                .wc-spec-chip b { color: var(--primary, #4f46e5); }
+                .wc-spec-chip.nospec { color: #f59e0b; border-color: #fcd34d; background: #fffbeb; }
+                .wc-cell-ng { color: #dc2626; font-weight: 700; }
+                .wc-cell-ok { color: #16a34a; font-weight: 600; }
+                .wc-cell-empty { color: #cbd5e1; }
+
+                @media (max-width: 600px) {
+                    .wc-stats { grid-template-columns: repeat(2, 1fr); }
+                }
+
                 .page-subtitle { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; }
                 .page-description { color: var(--text-muted); font-size: 0.9rem; }
                 .btn-primary { background: var(--primary); color: white; padding: 0.6rem 1.2rem; border-radius: var(--radius-md); display: flex; align-items: center; gap: 0.5rem; font-weight: 500; }
@@ -1017,6 +1485,118 @@ const sectionTitleStyle = {
     marginBottom: '8px',
     paddingBottom: '6px',
     borderBottom: '2px solid #e2e8f0'
+};
+
+// ============================================================
+// 중량 점검 섹션 (표시 전용)
+// ============================================================
+const WeightSection = ({
+    wcStartDate, setWcStartDate, wcEndDate, setWcEndDate,
+    weightStats, weightDailyRows, slotLabel,
+    productsWithSpec, getProductSpec, onEdit, onDelete
+}) => {
+    const fmtWeight = (rec) => {
+        if (!rec) return <span className="wc-cell-empty">-</span>;
+        const w = parseFloat(rec.measured_weight);
+        const cls = rec.result === 'NG' ? 'wc-cell-ng' : 'wc-cell-ok';
+        return <span className={cls}>{w}g {rec.result === 'NG' ? '⚠' : ''}</span>;
+    };
+
+    const dayBtns = (row) => {
+        const recs = [];
+        if (row.am) recs.push(row.am);
+        if (row.pm) recs.push(row.pm);
+        if (recs.length === 0) return '-';
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {recs.map(rec => (
+                    <div key={rec.id} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#94a3b8', width: '30px' }}>{rec.time_slot === 'PM' ? '오후' : '오전'}</span>
+                        <button onClick={() => onEdit(rec)} style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', padding: '2px 7px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: 600 }}><Pencil size={11} /></button>
+                        <button onClick={() => onDelete(rec.id)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '2px 7px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: 600 }}><Trash2 size={11} /></button>
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    const columns = [
+        { header: '측정일', accessor: 'date' },
+        { header: '제품명', accessor: 'productName' },
+        { header: '오전 (10:00)', accessor: 'am', render: (row) => fmtWeight(row.am) },
+        { header: '오후 (14:00)', accessor: 'pm', render: (row) => fmtWeight(row.pm) },
+        {
+            header: '스펙 (g)', accessor: 'spec', render: (row) =>
+                (row.specMin != null || row.specMax != null)
+                    ? <span style={{ color: '#64748b' }}>{row.specMin ?? '-'} ~ {row.specMax ?? '-'}</span>
+                    : <span style={{ color: '#f59e0b' }}>미설정</span>
+        },
+        {
+            header: '판정', accessor: 'result', render: (row) => {
+                const ngCount = (row.am?.result === 'NG' ? 1 : 0) + (row.pm?.result === 'NG' ? 1 : 0);
+                const measured = (row.am ? 1 : 0) + (row.pm ? 1 : 0);
+                if (ngCount > 0) {
+                    return <span className="status-badge status-danger"><AlertTriangle size={12} style={{ marginRight: 4 }} />이상 {ngCount}건</span>;
+                }
+                if (measured >= 2) {
+                    return <span className="status-badge status-active"><CheckCircle size={12} style={{ marginRight: 4 }} />정상</span>;
+                }
+                return <span className="status-badge status-warning">측정 {measured}/2</span>;
+            }
+        },
+        { header: '관리', accessor: 'actions', render: (row) => dayBtns(row) }
+    ];
+
+    return (
+        <>
+            {/* 날짜 필터 + 통계 */}
+            <div className="quality-filter-section">
+                <div className="filter-row">
+                    <div className="filter-dates">
+                        <Calendar size={16} color="#64748b" />
+                        <input type="date" className="form-input filter-date-input" value={wcStartDate} onChange={e => setWcStartDate(e.target.value)} />
+                        <span className="filter-separator">~</span>
+                        <input type="date" className="form-input filter-date-input" value={wcEndDate} onChange={e => setWcEndDate(e.target.value)} />
+                    </div>
+                </div>
+                <div className="wc-stats">
+                    <div className={`wc-stat ${weightStats.amDone > 0 ? 'safe' : 'warn'}`}>
+                        <span className="wc-stat-label">오늘 오전(10시) 측정</span>
+                        <span className="wc-stat-value">{weightStats.amDone}건</span>
+                    </div>
+                    <div className={`wc-stat ${weightStats.pmDone > 0 ? 'safe' : 'warn'}`}>
+                        <span className="wc-stat-label">오늘 오후(2시) 측정</span>
+                        <span className="wc-stat-value">{weightStats.pmDone}건</span>
+                    </div>
+                    <div className="wc-stat">
+                        <span className="wc-stat-label">기간 내 측정</span>
+                        <span className="wc-stat-value">{weightStats.totalInRange}건</span>
+                    </div>
+                    <div className={`wc-stat ${weightStats.ngInRange > 0 ? 'danger' : 'safe'}`}>
+                        <span className="wc-stat-label">스펙 이탈</span>
+                        <span className="wc-stat-value">{weightStats.ngInRange}건</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* 등록된 제품 스펙 현황 */}
+            {productsWithSpec.length > 0 && (
+                <div className="wc-spec-list">
+                    {productsWithSpec.map(p => {
+                        const s = getProductSpec(p);
+                        return (
+                            <span key={p.id} className={`wc-spec-chip ${s.hasSpec ? '' : 'nospec'}`}>
+                                {p.name} · 기준 <b>{s.target ?? '-'}g</b>
+                                {s.hasSpec ? <> · {s.min ?? '-'}~{s.max ?? '-'}g</> : <> · 하한/상한 미설정</>}
+                            </span>
+                        );
+                    })}
+                </div>
+            )}
+
+            <Table columns={columns} data={weightDailyRows} />
+        </>
+    );
 };
 
 export default Quality;

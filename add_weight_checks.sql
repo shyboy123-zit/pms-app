@@ -37,3 +37,22 @@ COMMENT ON TABLE weight_checks IS '작업중 제품 중량 측정 기록 (오전
 -- 조회 성능용 인덱스 (날짜·제품)
 CREATE INDEX IF NOT EXISTS idx_weight_checks_date ON weight_checks (check_date DESC);
 CREATE INDEX IF NOT EXISTS idx_weight_checks_product ON weight_checks (product_id);
+
+-- 3) RLS 정책 — 로그인 사용자(authenticated) 전체 CRUD 허용 (다른 테이블과 동일)
+ALTER TABLE weight_checks ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "weight_checks_select" ON weight_checks;
+CREATE POLICY "weight_checks_select" ON weight_checks
+  FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "weight_checks_insert" ON weight_checks;
+CREATE POLICY "weight_checks_insert" ON weight_checks
+  FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "weight_checks_update" ON weight_checks;
+CREATE POLICY "weight_checks_update" ON weight_checks
+  FOR UPDATE TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "weight_checks_delete" ON weight_checks;
+CREATE POLICY "weight_checks_delete" ON weight_checks
+  FOR DELETE TO authenticated USING (true);

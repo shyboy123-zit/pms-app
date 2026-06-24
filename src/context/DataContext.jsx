@@ -682,8 +682,14 @@ export const DataProvider = ({ children }) => {
 
     const updateProduct = async (id, updates) => {
         const { data, error } = await supabase.from('products').update(updates).eq('id', id).select();
-        if (error) console.error('Error updating product:', error);
-        if (data) setProducts(products.map(p => p.id === id ? data[0] : p));
+        if (error) {
+            console.error('Error updating product:', error);
+            alert('제품 수정에 실패했습니다: ' + error.message);
+            return;
+        }
+        // data[0]가 비어 있어도(RLS 등으로 빈 배열 반환) 기존 제품을 지우지 말고 updates만 병합 — undefined 주입 방지
+        const updated = data && data[0] ? data[0] : null;
+        setProducts(prev => prev.map(p => p.id === id ? (updated || { ...p, ...updates }) : p));
     };
 
     const deleteProduct = async (id) => {

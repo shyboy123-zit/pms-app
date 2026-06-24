@@ -201,27 +201,45 @@ const Quality = () => {
     }, [weightChecks, wcStartDate, wcEndDate]);
 
     // 날짜+제품별 그룹핑 → 오전/오후 / 일자 문제 여부
+    // 스펙·판정은 "측정 당시 스냅샷"이 아니라 제품의 "현재 스펙"을 기준으로 표시·재판정한다.
+    // (스펙을 나중에 설정해도 기존 측정 기록에 반영되도록 — '미설정'으로 굳는 문제 해결)
     const weightDailyRows = useMemo(() => {
+        const num = (v) => (v == null || v === '' ? null : parseFloat(v));
         const groups = {};
         filteredWeightChecks.forEach(w => {
             const key = `${w.check_date}__${w.product_id || w.product_name || '?'}`;
+            const prod = products.find(p => p.id === w.product_id);
+            // 현재 제품 스펙 우선, 없으면(제품 삭제 등) 측정 당시 스냅샷으로 폴백
+            const specMin = prod && prod.weight_spec_min != null ? num(prod.weight_spec_min) : num(w.spec_min);
+            const specMax = prod && prod.weight_spec_max != null ? num(prod.weight_spec_max) : num(w.spec_max);
+            const specTarget = prod && prod.product_weight != null && prod.product_weight !== 0
+                ? num(prod.product_weight) : num(w.spec_target);
             if (!groups[key]) {
                 groups[key] = {
                     key,
                     date: w.check_date,
-                    productName: w.product_name || products.find(p => p.id === w.product_id)?.name || '-',
-                    specMin: w.spec_min,
-                    specMax: w.spec_max,
-                    specTarget: w.spec_target,
+                    productName: w.product_name || prod?.name || '-',
+                    specMin,
+                    specMax,
+                    specTarget,
                     am: null,
                     pm: null
                 };
             }
+            // 현재 스펙으로 재판정한 레코드 사본 (fmtWeight/판정 컬럼이 rec.spec_min/result를 그대로 사용)
+            const cavs = Array.isArray(w.cavity_weights) ? w.cavity_weights.filter(v => v != null).map(num) : [];
+            const violates = (v) => (specMin != null && v < specMin) || (specMax != null && v > specMax);
+            let result = 'OK';
+            if (specMin != null || specMax != null) {
+                const values = cavs.length > 0 ? cavs : (w.measured_weight != null ? [num(w.measured_weight)] : []);
+                result = values.some(violates) ? 'NG' : 'OK';
+            }
+            const rec = { ...w, spec_min: specMin, spec_max: specMax, spec_target: specTarget, result };
             // 같은 슬롯에 여러 기록이면 최신(created_at) 우선
             const slot = w.time_slot === 'PM' ? 'pm' : 'am';
             const existing = groups[key][slot];
             if (!existing || (w.created_at || '') > (existing.created_at || '')) {
-                groups[key][slot] = w;
+                groups[key][slot] = rec;
             }
         });
         return Object.values(groups).sort((a, b) => {
@@ -1293,7 +1311,7 @@ const Quality = () => {
                     <label className="form-label">제품 선택</label>
                     <select className="form-input" value={specProductId} onChange={(e) => onSpecProductChange(e.target.value)}>
                         <option value="">제품을 선택하세요</option>
-                        {products.map(p => (
+                        {products.filter(Boolean).map(p => (
                             <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
                     </select>

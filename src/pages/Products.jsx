@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import ExcelToolbar from '../components/ExcelToolbar';
-import { Plus, Package, Edit, Trash2 } from 'lucide-react';
+import { Plus, Package, Edit, Trash2, Calculator } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { parsers } from '../lib/excel';
 import LevelGauge from '../components/viz/LevelGauge';
@@ -33,6 +33,13 @@ const Products = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [currentProduct, setCurrentProduct] = useState(null);
+
+    // 안전재고 자동계산 (최근 3개월 일평균 납품 × 14일)
+    const SAFETY_WINDOW_DAYS = 90;   // 납품량 집계 기간
+    const SAFETY_COVERAGE_DAYS = 14; // 안전재고 = 일평균 납품 × 이 일수
+    const [isAutoStockOpen, setIsAutoStockOpen] = useState(false);
+    const [autoStockRows, setAutoStockRows] = useState([]);
+    const [isApplyingStock, setIsApplyingStock] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
         model: '',
@@ -218,6 +225,66 @@ const Products = () => {
         setIsModalOpen(false);
     };
 
+    // --- 안전재고 자동계산 ---
+    // 제품별 최근 SAFETY_WINDOW_DAYS일 OUT(납품) 합계 → 일평균 × SAFETY_COVERAGE_DAYS = 제안 안전재고
+    const buildSafetyStockSuggestions = () => {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - SAFETY_WINDOW_DAYS);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+
+        // 출고(매출) 제품만 대상 — 과잉생산 방지가 목적
+        const targets = (products || []).filter(p => (p.product_type || '매출') === '매출');
+
+        const rows = targets.map(p => {
+            const code = p.product_code;
+            const name = p.name;
+            let delivered = 0;
+            (inventoryTransactions || []).forEach(t => {
+                if (t.transaction_type !== 'OUT') return;
+                if (!t.transaction_date || t.transaction_date < cutoffStr) return;
+                const codeMatch = code && t.item_code && t.item_code === code;
+                const nameMatch = name && t.item_name && t.item_name === name;
+                if (codeMatch || nameMatch) delivered += parseFloat(t.quantity) || 0;
+            });
+            const avgDaily = delivered / SAFETY_WINDOW_DAYS;
+            const suggested = Math.round(avgDaily * SAFETY_COVERAGE_DAYS);
+            const current = parseFloat(p.min_stock) || 0;
+            return {
+                id: p.id,
+                name,
+                unit: p.unit,
+                delivered,
+                avgDaily,
+                current,
+                suggested,
+                changed: suggested !== current
+            };
+        });
+        // 변경 있는 것 우선, 그 안에서 납품량 많은 순
+        rows.sort((a, b) => (b.changed - a.changed) || (b.delivered - a.delivered));
+        return rows;
+    };
+
+    const openAutoStock = () => {
+        setAutoStockRows(buildSafetyStockSuggestions());
+        setIsAutoStockOpen(true);
+    };
+
+    const applyAutoStock = async () => {
+        const changes = autoStockRows.filter(r => r.changed);
+        if (changes.length === 0) { alert('변경할 제품이 없습니다.'); return; }
+        if (!window.confirm(`${changes.length}개 제품의 안전재고를 제안값으로 변경합니다. 진행할까요?`)) return;
+        setIsApplyingStock(true);
+        let ok = 0;
+        for (const r of changes) {
+            await updateProduct(r.id, { min_stock: r.suggested });
+            ok++;
+        }
+        setIsApplyingStock(false);
+        setIsAutoStockOpen(false);
+        alert(`${ok}개 제품의 안전재고를 업데이트했습니다.`);
+    };
+
     return (
         <div className="page-container">
             <div className="page-header-row">
@@ -266,6 +333,9 @@ const Products = () => {
                             alert(`${ok}건 등록, ${fail}건 실패`);
                         }}
                     />
+                    <button className="btn-secondary" onClick={openAutoStock} title="최근 3개월 납품량 기준으로 안전재고를 자동 계산합니다">
+                        <Calculator size={18} /> 안전재고 자동계산
+                    </button>
                     <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
                         <Plus size={18} /> 제품 등록
                     </button>
@@ -525,8 +595,65 @@ const Products = () => {
                 </div>
             </Modal>
 
+            {/* 안전재고 자동계산 미리보기 모달 */}
+            <Modal title="안전재고 자동계산 (미리보기)" isOpen={isAutoStockOpen} onClose={() => setIsAutoStockOpen(false)}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                    최근 <b>3개월</b> 납품량(출고) 기준 <b>일평균 × {SAFETY_COVERAGE_DAYS}일치</b>로 안전재고를 제안합니다.
+                    납품이 적은 제품은 안전재고가 낮아져 <b>과잉생산을 막아줍니다.</b> (출고 제품만 대상)
+                </p>
+                {(() => {
+                    const changeCnt = autoStockRows.filter(r => r.changed).length;
+                    const downCnt = autoStockRows.filter(r => r.changed && r.suggested < r.current).length;
+                    const upCnt = autoStockRows.filter(r => r.changed && r.suggested > r.current).length;
+                    return (
+                        <div style={{ fontSize: '0.82rem', marginBottom: '0.75rem' }}>
+                            대상 {autoStockRows.length}개 · 변경 <b>{changeCnt}</b>개
+                            (<span style={{ color: '#2563eb' }}>▼{downCnt} 감소</span> · <span style={{ color: '#d97706' }}>▲{upCnt} 증가</span>)
+                        </div>
+                    );
+                })()}
+                <div style={{ maxHeight: '50vh', overflowY: 'auto', border: '1px solid var(--border, #e5e7eb)', borderRadius: '8px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                        <thead>
+                            <tr style={{ background: 'var(--bg-main, #f8fafc)', position: 'sticky', top: 0 }}>
+                                <th style={{ textAlign: 'left', padding: '8px' }}>제품명</th>
+                                <th style={{ textAlign: 'right', padding: '8px' }}>3개월 납품</th>
+                                <th style={{ textAlign: 'right', padding: '8px' }}>일평균</th>
+                                <th style={{ textAlign: 'right', padding: '8px' }}>현재</th>
+                                <th style={{ textAlign: 'right', padding: '8px' }}>제안</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {autoStockRows.length === 0 && (
+                                <tr><td colSpan={5} style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>출고 제품이 없습니다.</td></tr>
+                            )}
+                            {autoStockRows.map(r => (
+                                <tr key={r.id} style={{ borderTop: '1px solid var(--border, #eef2f7)', background: r.changed ? 'transparent' : 'rgba(0,0,0,0.02)' }}>
+                                    <td style={{ padding: '8px' }}>{r.name}</td>
+                                    <td style={{ padding: '8px', textAlign: 'right' }}>{r.delivered.toLocaleString()}</td>
+                                    <td style={{ padding: '8px', textAlign: 'right', color: 'var(--text-muted)' }}>{r.avgDaily.toFixed(1)}</td>
+                                    <td style={{ padding: '8px', textAlign: 'right' }}>{r.current.toLocaleString()}</td>
+                                    <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700,
+                                        color: !r.changed ? 'var(--text-muted)' : (r.suggested < r.current ? '#2563eb' : '#d97706') }}>
+                                        {r.changed && (r.suggested < r.current ? '▼ ' : '▲ ')}{r.suggested.toLocaleString()}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="modal-actions">
+                    <button className="btn-cancel" onClick={() => setIsAutoStockOpen(false)}>취소</button>
+                    <button className="btn-submit" onClick={applyAutoStock} disabled={isApplyingStock || autoStockRows.filter(r => r.changed).length === 0}>
+                        {isApplyingStock ? '적용 중...' : '제안값 적용'}
+                    </button>
+                </div>
+            </Modal>
+
             <style>{`
                 .page-container { padding: 0 1rem; }
+                .btn-secondary { background: var(--bg-main, #f1f5f9); color: var(--text-main); border: 1px solid var(--border, #e2e8f0); padding: 0.6rem 1.2rem; border-radius: var(--radius-md); display: flex; align-items: center; gap: 0.5rem; font-weight: 500; cursor: pointer; }
+                .btn-secondary:hover { background: var(--bg-hover, #e2e8f0); }
                 .page-header-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
                 .page-subtitle { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; }
                 .page-description { color: var(--text-muted); font-size: 0.9rem; }

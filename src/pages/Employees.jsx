@@ -33,6 +33,11 @@ const Employees = () => {
     const [pdfType, setPdfType] = useState('promotion'); // 'promotion', 'application', 'retirement'
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isPdfPreview, setIsPdfPreview] = useState(false);
+    // 재직증명서 입력 (DB에 없는 항목 + 회사정보)
+    const [certData, setCertData] = useState({
+        purpose: '', residentNo: '', address: '',
+        companyName: '', ceoName: '', companyAddress: '', companyBizNo: ''
+    });
     const pdfRef = useRef(null);
     const trainingPhotoPdfRef = useRef(null);
     const [leaveAppData, setLeaveAppData] = useState({
@@ -462,7 +467,8 @@ const Employees = () => {
                 application: `연차사용내역확인서_${pdfTarget.name}_${leaveAppYear}.pdf`,
                 retirement: `퇴직금계산서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
                 training: `의무교육_${TRAININGS.find(t => t.code === effTraining)?.name || ''}_${new Date().toISOString().split('T')[0]}.pdf`,
-                contract: `근로계약서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`
+                contract: `근로계약서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`,
+                employment: `재직증명서_${pdfTarget.name}_${new Date().toISOString().split('T')[0]}.pdf`
             };
             const fileName = fileNames[effType] || fileNames.promotion;
             pdf.save(fileName);
@@ -1065,7 +1071,7 @@ const Employees = () => {
                         </div>
 
                         <div style={{ display: 'flex', gap: '6px', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                            {[{ key: 'promotion', icon: '📋', label: '연차사용촉진' }, { key: 'application', icon: '📝', label: '연차신청서' }, { key: 'retirement', icon: '💰', label: '퇴직금계산' }, { key: 'training', icon: '📚', label: '의무교육' }, { key: 'contract', icon: '📄', label: '근로계약서' }].map(t => (
+                            {[{ key: 'promotion', icon: '📋', label: '연차사용촉진' }, { key: 'application', icon: '📝', label: '연차신청서' }, { key: 'retirement', icon: '💰', label: '퇴직금계산' }, { key: 'training', icon: '📚', label: '의무교육' }, { key: 'contract', icon: '📄', label: '근로계약서' }, { key: 'employment', icon: '🪪', label: '재직증명서' }].map(t => (
                                 <button key={t.key}
                                     onClick={() => setPdfType(t.key)}
                                     style={{
@@ -1079,6 +1085,52 @@ const Employees = () => {
                                 </button>
                             ))}
                         </div>
+
+                        {pdfType === 'employment' && (
+                            <div style={{ background: '#eff6ff', padding: '14px', borderRadius: '10px', marginBottom: '1rem' }}>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e40af', marginBottom: '10px' }}>🪪 재직증명서 정보 입력</div>
+                                <div style={{ fontSize: '0.74rem', color: '#3b82f6', marginBottom: '10px', lineHeight: 1.5 }}>
+                                    성명·부서·직위·입사일은 직원 정보에서 자동으로 들어갑니다. 아래는 추가 입력 항목입니다.<br />빈칸은 인쇄 후 손으로 적거나 직인을 찍으셔도 됩니다.
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                    <div>
+                                        <label className="form-label" style={{ fontSize: '0.76rem' }}>제출처 / 용도</label>
+                                        <input className="form-input" placeholder="예: 은행 제출용" value={certData.purpose}
+                                            onChange={(e) => setCertData({ ...certData, purpose: e.target.value })} />
+                                    </div>
+                                    <div>
+                                        <label className="form-label" style={{ fontSize: '0.76rem' }}>주민등록번호 (또는 생년월일)</label>
+                                        <input className="form-input" placeholder="예: 900101-1******" value={certData.residentNo}
+                                            onChange={(e) => setCertData({ ...certData, residentNo: e.target.value })} />
+                                    </div>
+                                    <div style={{ gridColumn: '1 / -1' }}>
+                                        <label className="form-label" style={{ fontSize: '0.76rem' }}>직원 주소</label>
+                                        <input className="form-input" placeholder="직원 거주지 주소" value={certData.address}
+                                            onChange={(e) => setCertData({ ...certData, address: e.target.value })} />
+                                    </div>
+                                    <div>
+                                        <label className="form-label" style={{ fontSize: '0.76rem' }}>회사명</label>
+                                        <input className="form-input" placeholder="예: 주식회사 한림" value={certData.companyName}
+                                            onChange={(e) => setCertData({ ...certData, companyName: e.target.value })} />
+                                    </div>
+                                    <div>
+                                        <label className="form-label" style={{ fontSize: '0.76rem' }}>대표자</label>
+                                        <input className="form-input" placeholder="대표자 성명" value={certData.ceoName}
+                                            onChange={(e) => setCertData({ ...certData, ceoName: e.target.value })} />
+                                    </div>
+                                    <div>
+                                        <label className="form-label" style={{ fontSize: '0.76rem' }}>사업자등록번호</label>
+                                        <input className="form-input" placeholder="000-00-00000" value={certData.companyBizNo}
+                                            onChange={(e) => setCertData({ ...certData, companyBizNo: e.target.value })} />
+                                    </div>
+                                    <div>
+                                        <label className="form-label" style={{ fontSize: '0.76rem' }}>회사 주소</label>
+                                        <input className="form-input" placeholder="회사 소재지" value={certData.companyAddress}
+                                            onChange={(e) => setCertData({ ...certData, companyAddress: e.target.value })} />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {pdfType === 'application' && (
                             <div style={{ background: '#faf5ff', padding: '14px', borderRadius: '10px', marginBottom: '1rem' }}>
@@ -2197,6 +2249,74 @@ const Employees = () => {
                                             </table>
                                         </div>
                                     </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* === 재직증명서 === */}
+                        {pdfType === 'employment' && (() => {
+                            const fmtYmd = (s) => { if (!s) return '____년 __월 __일'; const d = new Date(s); return isNaN(d.getTime()) ? s : `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`; };
+                            return (
+                                <div>
+                                    <div style={{ textAlign: 'center', marginBottom: '50px' }}>
+                                        <h1 style={{ fontSize: '30px', fontWeight: 800, letterSpacing: '12px' }}>재 직 증 명 서</h1>
+                                        <div style={{ width: '60px', height: '3px', background: '#4f46e5', margin: '14px auto 0' }}></div>
+                                    </div>
+
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px', fontSize: '14px' }}>
+                                        <tbody>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '22%', textAlign: 'center' }}>성 명</td>
+                                                <td style={{ ...cellStyle, width: '28%' }}>{pdfTarget.name}</td>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '22%', textAlign: 'center' }}>주민등록번호</td>
+                                                <td style={{ ...cellStyle, width: '28%' }}>{certData.residentNo || '____________'}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>주 소</td>
+                                                <td style={cellStyle} colSpan={3}>{certData.address || '____________________'}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>부 서</td>
+                                                <td style={cellStyle}>{pdfTarget.department || '-'}</td>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>직 위</td>
+                                                <td style={cellStyle}>{pdfTarget.position || '-'}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>입 사 일</td>
+                                                <td style={cellStyle}>{fmtYmd(pdfTarget.join_date)}</td>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>재직기간</td>
+                                                <td style={cellStyle}>{fmtYmd(pdfTarget.join_date)} ~ 현재 (재직중)</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '24px', marginBottom: '40px', fontSize: '15px', lineHeight: 2.2, textAlign: 'center' }}>
+                                        위 사람은 현재 당사에 위와 같이 <strong>재직하고 있음을 증명</strong>합니다.
+                                        {certData.purpose && <div style={{ fontSize: '13px', color: '#64748b', marginTop: '10px' }}>※ 용도: {certData.purpose}</div>}
+                                    </div>
+
+                                    <div style={{ textAlign: 'center', margin: '50px 0 40px', fontSize: '15px', fontWeight: 600 }}>{formatDate(today)}</div>
+
+                                    <table style={{ width: '72%', margin: '0 auto', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                        <tbody>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, width: '35%', textAlign: 'center' }}>회 사 명</td>
+                                                <td style={cellStyle}>{certData.companyName || '____________________'}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>사업자등록번호</td>
+                                                <td style={cellStyle}>{certData.companyBizNo || '____________________'}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>주 소</td>
+                                                <td style={cellStyle}>{certData.companyAddress || '____________________'}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ ...cellStyle, background: '#f8fafc', fontWeight: 700, textAlign: 'center' }}>대 표 자</td>
+                                                <td style={{ ...cellStyle, height: '46px' }}>{certData.ceoName || '________'} &nbsp;&nbsp; (인)</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             );
                         })()}

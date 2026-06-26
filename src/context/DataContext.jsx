@@ -449,6 +449,29 @@ export const DataProvider = ({ children }) => {
         const { error } = await supabase.from('inventory_transactions').delete().eq('id', id);
         if (!error) {
             setInventoryTransactions(prev => prev.filter(t => t.id !== id));
+            // 자동 생성된 매출 전표 동기화 삭제 (고아 전표 방지) — OUT 거래였을 때만
+            if (oldRow && oldRow.transaction_type === 'OUT') {
+                try {
+                    // 1) 거래ID 태그(#id)가 박힌 자동 전표 우선
+                    let target = (vouchers || []).find(v => v.voucher_type === '매출' && (v.notes || '').includes(`#${id}`));
+                    // 2) 없으면(옛 전표) 일자/품목/수량/거래처 일치 + 자동생성 전표가 '정확히 1건'일 때만
+                    if (!target) {
+                        const matches = (vouchers || []).filter(v =>
+                            v.voucher_type === '매출' &&
+                            v.voucher_date === oldRow.transaction_date &&
+                            (v.item_name || '') === (oldRow.item_name || '') &&
+                            parseFloat(v.quantity) === parseFloat(oldRow.quantity) &&
+                            (v.client || '') === (oldRow.client || '') &&
+                            (v.notes || '').includes('자동')
+                        );
+                        if (matches.length === 1) target = matches[0];
+                    }
+                    if (target) {
+                        const { error: vErr } = await supabase.from('vouchers').delete().eq('id', target.id);
+                        if (!vErr) setVouchers(prev => prev.filter(v => v.id !== target.id));
+                    }
+                } catch (e) { console.error('매출 전표 동기화 삭제 실패:', e); }
+            }
             logAudit({
                 tableName: 'inventory_transactions',
                 recordId: id,

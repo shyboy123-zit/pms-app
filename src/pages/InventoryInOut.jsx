@@ -303,13 +303,18 @@ const InventoryInOut = () => {
                         (v.client || '') === (refClient || '')
                     );
                 };
+                // 거래ID 태그(#id) 기반 매칭 — 수량/일자가 바뀌어도 정확히 찾음 (값 매칭은 폴백)
+                const findVoucherByTx = (txId) =>
+                    (vouchers || []).find(v => v.voucher_type === '매출' && (v.notes || '').includes(`#${txId}`));
+                const tagNote = (label) => `[자동-입출고 ${label}#${editingId}] ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`;
                 const wasOut = original?.transaction_type === 'OUT';
                 const isOut = newItem.transactionType === 'OUT';
 
                 try {
                     if (wasOut && isOut) {
-                        // OUT → OUT: 기존 voucher UPDATE
-                        const existing = findMatchingVoucher(original.transaction_date, original.item_name, original.quantity, original.client);
+                        // OUT → OUT: 연결된 voucher UPDATE (태그 우선, 없으면 값 매칭)
+                        const existing = findVoucherByTx(editingId) ||
+                            findMatchingVoucher(original.transaction_date, original.item_name, original.quantity, original.client);
                         if (existing && updateVoucher) {
                             await updateVoucher(existing.id, {
                                 voucher_date: newItem.transactionDate,
@@ -319,7 +324,7 @@ const InventoryInOut = () => {
                                 unit: newItem.unit,
                                 unit_price: parseFloat(newItem.unitPrice),
                                 client: newItem.client,
-                                notes: `[자동-입출고 수정] ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`
+                                notes: tagNote('수정')
                             });
                         } else if (addVoucher && !salesVoucherExists(newItem.transactionDate, newItem.itemName, newItem.quantity, newItem.client)) {
                             // 기존 voucher가 없으면 신규 생성 (과거 누락분 보완) — 단, 동일 전표 중복 방지
@@ -328,7 +333,7 @@ const InventoryInOut = () => {
                                 item_name: newItem.itemName, item_code: newItem.itemCode,
                                 quantity: parseFloat(newItem.quantity), unit: newItem.unit,
                                 unit_price: parseFloat(newItem.unitPrice), client: newItem.client,
-                                notes: `[자동-입출고 수정생성] ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`
+                                notes: tagNote('수정생성')
                             });
                         }
                     } else if (!wasOut && isOut && addVoucher && !salesVoucherExists(newItem.transactionDate, newItem.itemName, newItem.quantity, newItem.client)) {
@@ -338,11 +343,12 @@ const InventoryInOut = () => {
                             item_name: newItem.itemName, item_code: newItem.itemCode,
                             quantity: parseFloat(newItem.quantity), unit: newItem.unit,
                             unit_price: parseFloat(newItem.unitPrice), client: newItem.client,
-                            notes: `[자동-입출고 수정생성] ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`
+                            notes: tagNote('수정생성')
                         });
                     } else if (wasOut && !isOut && deleteVoucher) {
-                        // OUT → non-OUT: 기존 voucher DELETE
-                        const existing = findMatchingVoucher(original.transaction_date, original.item_name, original.quantity, original.client);
+                        // OUT → non-OUT: 연결된 voucher DELETE (태그 우선, 없으면 값 매칭)
+                        const existing = findVoucherByTx(editingId) ||
+                            findMatchingVoucher(original.transaction_date, original.item_name, original.quantity, original.client);
                         if (existing) await deleteVoucher(existing.id);
                     }
                 } catch (e) {
@@ -405,7 +411,7 @@ const InventoryInOut = () => {
         const voucherFailures = [];
         const createdVoucherKeys = new Set(); // 한 배치 내 동일 전표 중복 방지
         for (const item of validItems) {
-            await addInventoryTransaction({
+            const { data: txData } = await addInventoryTransaction({
                 transaction_type: batchCommon.transactionType,
                 item_name: item.itemName,
                 item_code: item.itemCode,
@@ -416,6 +422,7 @@ const InventoryInOut = () => {
                 client: batchCommon.client,
                 notes: batchCommon.notes
             }, { context: `inventory:batch_${batchCommon.transactionType.toLowerCase()}` });
+            const newTxId = txData && txData[0] ? txData[0].id : null;
 
             // 출고 → 매출 전표 자동 생성 (입고는 제품 입고이므로 매입 아님)
             if (addVoucher && batchCommon.transactionType === 'OUT') {
@@ -435,7 +442,7 @@ const InventoryInOut = () => {
                         unit: item.unit,
                         unit_price: parseFloat(item.unitPrice),
                         client: batchCommon.client,
-                        notes: `[자동-입출고] ${item.itemName} ${item.quantity}${item.unit} 출고`
+                        notes: `[자동-입출고${newTxId ? '#' + newTxId : ''}] ${item.itemName} ${item.quantity}${item.unit} 출고`
                     }) || {};
                     if (vErr) voucherFailures.push({ item: item.itemName, error: vErr.message || String(vErr) });
                 } catch (e) {

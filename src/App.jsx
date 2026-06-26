@@ -1,3 +1,4 @@
+import { lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
@@ -8,26 +9,27 @@ import DashboardLayout from './layouts/DashboardLayout';
 import AuthLayout from './layouts/AuthLayout';
 import LoadingScreen from './components/LoadingScreen';
 
-import Dashboard from './pages/Dashboard';
-import Molds from './pages/Molds';
-import Materials from './pages/Materials';
-import InventoryInOut from './pages/InventoryInOut';
-import Quality from './pages/Quality';
-import Sales from './pages/Sales';
-import Employees from './pages/Employees';
-import Equipments from './pages/Equipments';
-import Products from './pages/Products';
-import WorkOrders from './pages/WorkOrders';
-import DailyProduction from './pages/DailyProduction';
-import WorkHistory from './pages/WorkHistory';
-import InjectionConditions from './pages/InjectionConditions';
-import Suppliers from './pages/Suppliers';
-import Purchase from './pages/Purchase';
-import Board from './pages/Board';
-import Chat from './pages/Chat';
-import GovernmentSupport from './pages/GovernmentSupport';
-import Payroll from './pages/Payroll';
-import AuditLog from './pages/AuditLog';
+// 페이지를 코드 분리(lazy) — 접속 시 현재 페이지만 받아오고, PDF/엑셀/차트는 해당 페이지 들어갈 때만 로딩
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Molds = lazy(() => import('./pages/Molds'));
+const Materials = lazy(() => import('./pages/Materials'));
+const InventoryInOut = lazy(() => import('./pages/InventoryInOut'));
+const Quality = lazy(() => import('./pages/Quality'));
+const Sales = lazy(() => import('./pages/Sales'));
+const Employees = lazy(() => import('./pages/Employees'));
+const Equipments = lazy(() => import('./pages/Equipments'));
+const Products = lazy(() => import('./pages/Products'));
+const WorkOrders = lazy(() => import('./pages/WorkOrders'));
+const DailyProduction = lazy(() => import('./pages/DailyProduction'));
+const WorkHistory = lazy(() => import('./pages/WorkHistory'));
+const InjectionConditions = lazy(() => import('./pages/InjectionConditions'));
+const Suppliers = lazy(() => import('./pages/Suppliers'));
+const Purchase = lazy(() => import('./pages/Purchase'));
+const Board = lazy(() => import('./pages/Board'));
+const Chat = lazy(() => import('./pages/Chat'));
+const GovernmentSupport = lazy(() => import('./pages/GovernmentSupport'));
+const Payroll = lazy(() => import('./pages/Payroll'));
+const AuditLog = lazy(() => import('./pages/AuditLog'));
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();

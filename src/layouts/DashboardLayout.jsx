@@ -1,7 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
+
+// 페이지(코드 분리) 로딩 중 내용 영역에만 표시되는 가벼운 로더 — 사이드바/헤더는 유지
+const PageFallback = () => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#94a3b8', fontSize: '0.9rem' }}>
+        <div className="page-spinner" style={{ width: 28, height: 28, border: '3px solid #e2e8f0', borderTopColor: '#6366f1', borderRadius: '50%', marginRight: 12, animation: 'pmsspin 0.7s linear infinite' }} />
+        불러오는 중…
+        <style>{`@keyframes pmsspin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+);
 
 const DashboardLayout = () => {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -44,7 +53,9 @@ const DashboardLayout = () => {
                     overflowY: 'auto',
                     borderRadius: '1rem'
                 }}>
-                    <Outlet />
+                    <Suspense fallback={<PageFallback />}>
+                        <Outlet />
+                    </Suspense>
                 </main>
             </div>
         </div>

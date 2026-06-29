@@ -29,6 +29,7 @@ const Board = lazy(() => import('./pages/Board'));
 const Chat = lazy(() => import('./pages/Chat'));
 const GovernmentSupport = lazy(() => import('./pages/GovernmentSupport'));
 const Payroll = lazy(() => import('./pages/Payroll'));
+const Expenses = lazy(() => import('./pages/Expenses'));
 const AuditLog = lazy(() => import('./pages/AuditLog'));
 
 const ProtectedRoute = () => {
@@ -90,6 +91,7 @@ function App() {
                 <Route path="chat" element={<PermissionGate permissionKey="chat"><Chat /></PermissionGate>} />
                 <Route path="government-support" element={<PermissionGate permissionKey="government_support"><GovernmentSupport /></PermissionGate>} />
                 <Route path="payroll" element={<PermissionGate permissionKey="payroll"><Payroll /></PermissionGate>} />
+                <Route path="expenses" element={<PermissionGate permissionKey="expenses"><Expenses /></PermissionGate>} />
                 <Route path="audit-log" element={<PermissionGate permissionKey="audit_log"><AuditLog /></PermissionGate>} />
               </Route>
             </Route>

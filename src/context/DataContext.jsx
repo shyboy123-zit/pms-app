@@ -65,6 +65,7 @@ export const DataProvider = ({ children }) => {
     const [payrollRecords, setPayrollRecords] = useState([]);
     const [vouchers, setVouchers] = useState([]);
     const [weightChecks, setWeightChecks] = useState([]);
+    const [expenses, setExpenses] = useState([]);
 
     // --- Fetch ALL Data ---
     const fetchAllData = async () => {
@@ -209,6 +210,13 @@ export const DataProvider = ({ children }) => {
                 if (wc) setWeightChecks(wc);
             } catch (e) {
                 console.warn('weight_checks table not available:', e.message);
+            }
+
+            try {
+                const { data: exp } = await supabase.from('expenses').select('*').order('expense_date', { ascending: false }).order('created_at', { ascending: false });
+                if (exp) setExpenses(exp);
+            } catch (e) {
+                console.warn('expenses table not available:', e.message);
             }
 
         } catch (error) {
@@ -1234,6 +1242,56 @@ export const DataProvider = ({ children }) => {
         return { error };
     };
 
+    // --- Expenses (지출관리) CRUD ---
+    const addExpense = async (item) => {
+        const { data, error } = await supabase.from('expenses').insert([item]).select();
+        if (error) {
+            console.error('expense insert error:', error);
+            alert('지출 저장에 실패했습니다: ' + error.message);
+            return { error };
+        }
+        if (data) setExpenses(prev => [data[0], ...prev]);
+        return { data, error };
+    };
+    const updateExpense = async (id, fields) => {
+        const { error } = await supabase.from('expenses').update(fields).eq('id', id);
+        if (!error) setExpenses(prev => prev.map(x => x.id === id ? { ...x, ...fields } : x));
+        return { error };
+    };
+    const deleteExpense = async (id) => {
+        const { error } = await supabase.from('expenses').delete().eq('id', id);
+        if (!error) setExpenses(prev => prev.filter(x => x.id !== id));
+        return { error };
+    };
+    // 엑셀/대량 입력 — 여러 건 한 번에 저장 후 목록 갱신
+    const bulkAddExpenses = async (items) => {
+        if (!items || items.length === 0) return { data: [], error: null };
+        const { data, error } = await supabase.from('expenses').insert(items).select();
+        if (error) {
+            console.error('expenses bulk insert error:', error);
+            return { error };
+        }
+        if (data) setExpenses(prev => [...data, ...prev]);
+        return { data, error };
+    };
+    // 외부 수집 API 호출 후 목록 새로고침
+    const refreshExpenses = async () => {
+        const { data } = await supabase.from('expenses').select('*').order('expense_date', { ascending: false }).order('created_at', { ascending: false });
+        if (data) setExpenses(data);
+        return data;
+    };
+    // 홈택스 엑셀 업로드 — external_id(승인번호) 기준 upsert 로 중복 방지 후 목록 갱신
+    const bulkUpsertExpenses = async (items) => {
+        if (!items || items.length === 0) return { count: 0, error: null };
+        const { error } = await supabase.from('expenses').upsert(items, { onConflict: 'external_id' });
+        if (error) {
+            console.error('expenses upsert error:', error);
+            return { count: 0, error };
+        }
+        await refreshExpenses();
+        return { count: items.length, error: null };
+    };
+
     return (
         <DataContext.Provider value={{
             loading,
@@ -1264,6 +1322,7 @@ export const DataProvider = ({ children }) => {
             payrollRecords, addPayrollRecord, updatePayrollRecord, deletePayrollRecord,
             vouchers, addVoucher, updateVoucher, deleteVoucher,
             weightChecks, addWeightCheck, updateWeightCheck, deleteWeightCheck,
+            expenses, addExpense, updateExpense, deleteExpense, bulkAddExpenses, bulkUpsertExpenses, refreshExpenses,
             logAudit,
             runNotificationChecks
         }}>

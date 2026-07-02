@@ -5,7 +5,7 @@ import DateRangePicker from '../components/DateRangePicker';
 import ExcelToolbar from '../components/ExcelToolbar';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import InventoryValuation from '../components/InventoryValuation';
-import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X, Camera } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X, Camera, Search } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -37,6 +37,7 @@ const InventoryInOut = () => {
 
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [itemFilter, setItemFilter] = useState('all'); // 특정 품목만 조회
     const [filteredTransactions, setFilteredTransactions] = useState([]);
 
     const [newItem, setNewItem] = useState({
@@ -145,7 +146,7 @@ const InventoryInOut = () => {
 
     useEffect(() => {
         filterTransactions();
-    }, [inventoryTransactions, activeTab, startDate, endDate]);
+    }, [inventoryTransactions, activeTab, startDate, endDate, itemFilter]);
 
     const filterTransactions = () => {
         let filtered = inventoryTransactions || [];
@@ -167,8 +168,20 @@ const InventoryInOut = () => {
             filtered = filtered.filter(t => t.transaction_date <= endDate);
         }
 
+        // Filter by item (특정 품목만)
+        if (itemFilter !== 'all') {
+            filtered = filtered.filter(t => (t.item_name || '') === itemFilter);
+        }
+
         setFilteredTransactions(filtered);
     };
+
+    // 거래내역에 등장한 품목 목록 (중복 제거·정렬)
+    const itemOptions = React.useMemo(() => {
+        const set = new Set();
+        (inventoryTransactions || []).forEach(t => { if (t.item_name) set.add(t.item_name); });
+        return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
+    }, [inventoryTransactions]);
 
     // 시스템 재고 계산 함수 (item_code 또는 item_name 기준 매칭)
     const getSystemStock = (itemCode, itemName) => {
@@ -748,9 +761,28 @@ const InventoryInOut = () => {
                 </button>
             </div>
 
-            {/* Date Range Filter */}
+            {/* Date Range + Item Filter */}
             {activeTab !== 'status' && activeTab !== 'valuation' && (
-                <DateRangePicker onApply={handleDateRangeApply} />
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <DateRangePicker onApply={handleDateRangeApply} />
+                    <div className="item-filter">
+                        <Search size={15} />
+                        <select value={itemFilter} onChange={(e) => setItemFilter(e.target.value)} title="특정 품목만 조회">
+                            <option value="all">전체 품목</option>
+                            {itemOptions.map(name => (
+                                <option key={name} value={name}>{name}</option>
+                            ))}
+                        </select>
+                        {itemFilter !== 'all' && (
+                            <button className="item-filter-clear" onClick={() => setItemFilter('all')} title="품목 필터 해제">✕</button>
+                        )}
+                    </div>
+                    {itemFilter !== 'all' && (
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            「{itemFilter}」 {filteredTransactions.length}건
+                        </span>
+                    )}
+                </div>
             )}
 
             {/* Transaction Table / Inventory Status / Valuation */}
@@ -1184,6 +1216,11 @@ const InventoryInOut = () => {
                 .stat-net .stat-icon { background: #dbeafe; color: #2563eb; }
                 .stat-label { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.25rem; }
                 .stat-value { font-size: 1.5rem; font-weight: 700; }
+
+                .item-filter { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.7rem; background: white; border: 1px solid var(--border, #e2e8f0); border-radius: var(--radius-sm); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+                .item-filter select { border: none; background: transparent; outline: none; font-size: 0.9rem; color: var(--text-main); max-width: 260px; cursor: pointer; }
+                .item-filter-clear { border: none; background: #f1f5f9; color: #64748b; border-radius: 50%; width: 20px; height: 20px; font-size: 0.75rem; cursor: pointer; line-height: 1; }
+                .item-filter-clear:hover { background: #e2e8f0; color: #ef4444; }
 
                 .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; background: white; padding: 0.5rem; border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
                 .tab { padding: 0.75rem 1.5rem; border-radius: var(--radius-sm); font-weight: 500; color: var(--text-muted); transition: all 0.2s; }

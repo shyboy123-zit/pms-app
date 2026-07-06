@@ -252,6 +252,36 @@ const InventoryInOut = () => {
             (v.client || '') === (client || '')
         );
 
+    // ── 텔레그램 출하요청서 ↔ 앱 입출고 자동 대사 ──
+    // 텔레그램 봇은 '출하요청' 시점(실제 출고보다 앞선 날짜)에 출고+매출전표를 먼저 등록한다.
+    // 이후 실제 출고를 앱에서 다시 등록하면 같은 물량이 이중 계상된다.
+    // → 앱에서 OUT 등록 시, 같은 (품목·수량·거래처)의 '미대사 텔레그램 출고'가 최근 N일 내에
+    //    (요청일 ≤ 실제출고일) 있으면 그 재고행+매출전표를 제거해 1:1 상쇄한다.
+    //    정상적인 반복 출고는 텔레그램 원본이 1건뿐이라 1회만 매칭되어 영향받지 않는다.
+    const RECONCILE_WINDOW_DAYS = 10;
+    const daysApart = (a, b) => Math.abs((new Date(a) - new Date(b)) / 86400000);
+    const findTelegramOutDup = (item, qty, client, appDate, consumedIds) =>
+        (inventoryTransactions || []).find(t =>
+            t.transaction_type === 'OUT' &&
+            !consumedIds.has(t.id) &&
+            (t.item_name || '') === (item || '') &&
+            parseFloat(t.quantity) === parseFloat(qty) &&
+            (t.client || '') === (client || '') &&
+            /\[출하요청서\]/.test(t.notes || '') &&
+            new Date(t.transaction_date) <= new Date(appDate) &&
+            daysApart(t.transaction_date, appDate) <= RECONCILE_WINDOW_DAYS
+        );
+    // 텔레그램 출고 재고행에 대응하는 텔레그램 매출전표(같은 일자·품목·수량·거래처, [자동-텔레그램])
+    const findTelegramVoucher = (tgTx) =>
+        (vouchers || []).find(v =>
+            v.voucher_type === '매출' &&
+            v.voucher_date === tgTx.transaction_date &&
+            (v.item_name || '') === (tgTx.item_name || '') &&
+            parseFloat(v.quantity) === parseFloat(tgTx.quantity) &&
+            (v.client || '') === (tgTx.client || '') &&
+            /\[자동-텔레그램\]/.test(v.notes || '')
+        );
+
     const handleSave = async () => {
         // ── 수정 모드 (단일) ──
         if (isEditMode && editingId) {
@@ -423,7 +453,24 @@ const InventoryInOut = () => {
 
         const voucherFailures = [];
         const createdVoucherKeys = new Set(); // 한 배치 내 동일 전표 중복 방지
+        const reconciledTgIds = new Set(); // 이번 등록에서 상쇄한 텔레그램 재고행 (중복매칭 방지)
+        const reconciledLog = [];           // 상쇄 결과 안내용
         for (const item of validItems) {
+            // 출고면 먼저 텔레그램 '예정 출고'와 자동 대사 (있으면 텔레그램 재고행+전표 제거)
+            if (batchCommon.transactionType === 'OUT' && batchCommon.client) {
+                const tgDup = findTelegramOutDup(item.itemName, item.quantity, batchCommon.client, batchCommon.transactionDate, reconciledTgIds);
+                if (tgDup) {
+                    reconciledTgIds.add(tgDup.id);
+                    try {
+                        const tgV = findTelegramVoucher(tgDup);
+                        if (tgV && deleteVoucher) await deleteVoucher(tgV.id);
+                        if (deleteInventoryTransaction) await deleteInventoryTransaction(tgDup.id);
+                        reconciledLog.push(`${item.itemName} ${parseFloat(item.quantity).toLocaleString()}${item.unit} (텔레그램 ${tgDup.transaction_date} 요청분 상쇄)`);
+                    } catch (e) {
+                        console.error('텔레그램 출고 대사 실패:', e);
+                    }
+                }
+            }
             const { data: txData } = await addInventoryTransaction({
                 transaction_type: batchCommon.transactionType,
                 item_name: item.itemName,
@@ -464,12 +511,16 @@ const InventoryInOut = () => {
                 }
             }
         }
+        const reconMsg = reconciledLog.length > 0
+            ? `\n\n🔄 텔레그램 예정출고 ${reconciledLog.length}건 자동 대사(중복 제거):\n` +
+              reconciledLog.map(r => `  - ${r}`).join('\n')
+            : '';
         if (voucherFailures.length > 0) {
             alert(`⚠️ ${validItems.length}건 입출고는 등록되었으나, 매출 전표 ${voucherFailures.length}건 생성 실패\n` +
                   voucherFailures.map(f => `  - ${f.item}: ${f.error}`).join('\n') +
-                  '\n매입매출 페이지에서 수동 보충 필요.');
+                  '\n매입매출 페이지에서 수동 보충 필요.' + reconMsg);
         } else {
-            alert(`${validItems.length}건의 거래가 등록되었습니다.`);
+            alert(`${validItems.length}건의 거래가 등록되었습니다.` + reconMsg);
         }
         resetForm();
     };

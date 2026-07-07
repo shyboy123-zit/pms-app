@@ -1,6 +1,19 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
-const Table = ({ columns, data, actions }) => {
+const Table = ({ columns, data, actions, pageSize }) => {
+    // 페이지네이션 (opt-in): pageSize가 주어지면 그 행수만 DOM에 렌더 → 대용량 테이블 성능/메모리 개선.
+    // pageSize 미지정 시 기존 동작(전 행 렌더) 유지.
+    const [page, setPage] = useState(1);
+    const total = data.length;
+    const pageCount = pageSize ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+
+    // 데이터가 바뀌어(필터 등) 현재 페이지가 범위를 벗어나면 1페이지로
+    useEffect(() => {
+        if (page > pageCount) setPage(1);
+    }, [pageCount, page]);
+
+    const pageData = pageSize ? data.slice((page - 1) * pageSize, page * pageSize) : data;
+
     return (
         <div className="table-container glass-panel">
             <table className="custom-table">
@@ -15,8 +28,8 @@ const Table = ({ columns, data, actions }) => {
                     </tr>
                 </thead>
                 <tbody>
-                    {data.length > 0 ? (
-                        data.map((row, rowIdx) => (
+                    {pageData.length > 0 ? (
+                        pageData.map((row, rowIdx) => (
                             <tr key={row.id || rowIdx}>
                                 {columns.map((col, colIdx) => (
                                     <td key={colIdx} className={colIdx < 1 ? 'sticky-col' : ''} data-col-index={colIdx}>
@@ -40,7 +53,30 @@ const Table = ({ columns, data, actions }) => {
                 </tbody>
             </table>
 
+            {pageSize && pageCount > 1 && (
+                <div className="table-pager">
+                    <span className="table-pager-info">
+                        총 {total.toLocaleString()}건 · {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)}
+                    </span>
+                    <div className="table-pager-btns">
+                        <button onClick={() => setPage(1)} disabled={page === 1}>«</button>
+                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>이전</button>
+                        <span className="table-pager-page">{page} / {pageCount}</span>
+                        <button onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={page === pageCount}>다음</button>
+                        <button onClick={() => setPage(pageCount)} disabled={page === pageCount}>»</button>
+                    </div>
+                </div>
+            )}
+
             <style>{`
+        .table-pager { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 0.5rem 0.25rem; }
+        .table-pager-info { font-size: 0.82rem; color: var(--text-muted); }
+        .table-pager-btns { display: flex; align-items: center; gap: 0.35rem; }
+        .table-pager-btns button { padding: 0.35rem 0.7rem; border: 1px solid var(--border, #e2e8f0); border-radius: var(--radius-sm, 6px); background: var(--bg-card, #fff); color: var(--text-main); font-size: 0.82rem; cursor: pointer; transition: all 0.15s; }
+        .table-pager-btns button:hover:not(:disabled) { background: var(--primary, #4f46e5); color: #fff; border-color: var(--primary, #4f46e5); }
+        .table-pager-btns button:disabled { opacity: 0.4; cursor: default; }
+        .table-pager-page { font-size: 0.82rem; font-weight: 600; padding: 0 0.4rem; min-width: 48px; text-align: center; }
+
         .table-container {
             overflow-x: auto;
             padding: 0.5rem;

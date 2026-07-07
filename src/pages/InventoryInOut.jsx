@@ -886,6 +886,7 @@ const InventoryInOut = () => {
                 <Table
                     columns={columns}
                     data={filteredTransactions}
+                    pageSize={50}
                     actions={(row) => (
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
                             {can('delivery', 'update') && (

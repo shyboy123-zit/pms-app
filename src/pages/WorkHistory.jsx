@@ -187,6 +187,7 @@ const WorkHistory = () => {
             <Table
                 columns={columns}
                 data={filteredHistory}
+                pageSize={50}
             />
         </div>
     );

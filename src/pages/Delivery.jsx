@@ -212,6 +212,7 @@ const Delivery = () => {
             <Table
                 columns={columns}
                 data={inventoryTransactions || []}
+                pageSize={50}
             />
 
             <Modal

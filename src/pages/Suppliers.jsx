@@ -151,6 +151,7 @@ const Suppliers = () => {
             <Table
                 columns={columns}
                 data={suppliers || []}
+                pageSize={50}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="icon-btn" onClick={() => handleEdit(row)} title="수정">

@@ -294,6 +294,7 @@ const WorkOrders = () => {
             {viewMode === 'table' && <Table
                 columns={columns}
                 data={filteredOrders || []}
+                pageSize={50}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         {/* 이력 조회 */}

@@ -589,6 +589,7 @@ const DailyProduction = () => {
 
                     <Table
                         columns={columns}
+                        pageSize={50}
                         data={filteredOrders.map(order => ({
                             ...order,
                             equipment_name: getEquipmentName(order.equipment_id),

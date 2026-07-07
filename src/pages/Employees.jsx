@@ -570,6 +570,7 @@ const Employees = () => {
             <Table
                 columns={columns}
                 data={filteredEmployees}
+                pageSize={50}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="icon-btn" onClick={() => handleEdit(row)} title="정보 수정">

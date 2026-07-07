@@ -370,6 +370,7 @@ const Products = () => {
             <Table
                 columns={columns}
                 data={products || []}
+                pageSize={50}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="icon-btn" onClick={() => openEditModal(row)} title="수정">

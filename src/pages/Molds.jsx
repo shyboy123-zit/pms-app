@@ -276,6 +276,7 @@ const Molds = () => {
             <Table
                 columns={columns}
                 data={molds || []}
+                pageSize={50}
                 actions={(row) => {
                     const isOut = row.status === '출고중';
                     const canGoOut = row.status === '사용가능' || row.status === '점검필요';

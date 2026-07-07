@@ -648,6 +648,7 @@ const Materials = () => {
             <Table
                 columns={columns}
                 data={materials || []}
+                pageSize={50}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {can('materials', 'update') && (

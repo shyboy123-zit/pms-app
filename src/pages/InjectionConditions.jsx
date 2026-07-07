@@ -224,7 +224,7 @@ const InjectionConditions = () => {
                 if (filterProduct && row.product_id !== filterProduct) return false;
                 if (filterEquipment && row.equipment_id !== filterEquipment) return false;
                 return true;
-            })} actions={renderActions} />
+            })} actions={renderActions} pageSize={50} />
 
             <Modal
                 title={editingCondition ? '사출조건 수정' : '사출조건 등록'}

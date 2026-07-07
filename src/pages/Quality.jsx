@@ -815,7 +815,7 @@ const Quality = () => {
                 .qa-empty { color: var(--text-muted); font-size: 0.85rem; padding: 1.5rem 0; text-align: center; }
             `}</style>
 
-            <Table columns={columns} data={filteredInspections} />
+            <Table columns={columns} data={filteredInspections} pageSize={50} />
             </>)}
 
             {activeTab === 'weight' && (
@@ -1730,7 +1730,7 @@ const WeightSection = ({
                 </div>
             )}
 
-            <Table columns={columns} data={weightDailyRows} />
+            <Table columns={columns} data={weightDailyRows} pageSize={50} />
         </>
     );
 };

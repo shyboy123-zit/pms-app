@@ -152,6 +152,7 @@ const Purchase = () => {
             <Table
                 columns={columns}
                 data={purchaseRequests || []}
+                pageSize={50}
                 actions={(row) => (
                     <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                         {row.status === '대기' && (

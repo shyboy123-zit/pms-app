@@ -785,6 +785,7 @@ const Sales = () => {
                     <Table
                         columns={voucherColumns}
                         data={filteredVouchers}
+                        pageSize={50}
                         actions={(row) => (
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                 <button className="icon-btn" onClick={() => handleEditVoucher(row)} title="수정">

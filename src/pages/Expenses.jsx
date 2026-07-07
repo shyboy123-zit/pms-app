@@ -488,7 +488,7 @@ const Expenses = () => {
                 </div>
             </div>
 
-            <Table columns={columns} data={filtered} actions={(row) => (
+            <Table columns={columns} data={filtered} pageSize={50} actions={(row) => (
                 <div style={{ display: 'flex', gap: '0.4rem' }}>
                     <button className="icon-btn" onClick={() => openEdit(row)} title="수정"><Edit size={15} /></button>
                     <button className="icon-btn danger" onClick={() => handleDelete(row)} title="삭제"><Trash2 size={15} /></button>

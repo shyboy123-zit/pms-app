@@ -9,28 +9,50 @@ import DashboardLayout from './layouts/DashboardLayout';
 import AuthLayout from './layouts/AuthLayout';
 import LoadingScreen from './components/LoadingScreen';
 
+// 새 배포로 청크(코드 조각) 파일명이 바뀌면, 열려 있던 옛 탭이 사라진 옛 청크를 불러오려다
+// "Failed to fetch dynamically imported module" 오류가 난다. 이때 1회 자동 새로고침으로
+// 최신 버전을 받아 스스로 복구한다. (sessionStorage 플래그로 무한 새로고침 방지)
+function lazyWithReload(importFn) {
+    return lazy(async () => {
+        try {
+            const mod = await importFn();
+            sessionStorage.removeItem('chunkReloaded'); // 성공 시 플래그 해제 → 다음 배포에도 복구 가능
+            return mod;
+        } catch (err) {
+            const msg = String((err && err.message) || err);
+            const isChunkError = /dynamically imported module|Importing a module script failed|Loading chunk|error loading dynamically/i.test(msg);
+            if (isChunkError && !sessionStorage.getItem('chunkReloaded')) {
+                sessionStorage.setItem('chunkReloaded', '1');
+                window.location.reload();
+                return new Promise(() => {}); // 새로고침 진행 중 — 렌더 보류
+            }
+            throw err;
+        }
+    });
+}
+
 // 페이지를 코드 분리(lazy) — 접속 시 현재 페이지만 받아오고, PDF/엑셀/차트는 해당 페이지 들어갈 때만 로딩
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Molds = lazy(() => import('./pages/Molds'));
-const Materials = lazy(() => import('./pages/Materials'));
-const InventoryInOut = lazy(() => import('./pages/InventoryInOut'));
-const Quality = lazy(() => import('./pages/Quality'));
-const Sales = lazy(() => import('./pages/Sales'));
-const Employees = lazy(() => import('./pages/Employees'));
-const Equipments = lazy(() => import('./pages/Equipments'));
-const Products = lazy(() => import('./pages/Products'));
-const WorkOrders = lazy(() => import('./pages/WorkOrders'));
-const DailyProduction = lazy(() => import('./pages/DailyProduction'));
-const WorkHistory = lazy(() => import('./pages/WorkHistory'));
-const InjectionConditions = lazy(() => import('./pages/InjectionConditions'));
-const Suppliers = lazy(() => import('./pages/Suppliers'));
-const Purchase = lazy(() => import('./pages/Purchase'));
-const Board = lazy(() => import('./pages/Board'));
-const Chat = lazy(() => import('./pages/Chat'));
-const GovernmentSupport = lazy(() => import('./pages/GovernmentSupport'));
-const Payroll = lazy(() => import('./pages/Payroll'));
-const Expenses = lazy(() => import('./pages/Expenses'));
-const AuditLog = lazy(() => import('./pages/AuditLog'));
+const Dashboard = lazyWithReload(() => import('./pages/Dashboard'));
+const Molds = lazyWithReload(() => import('./pages/Molds'));
+const Materials = lazyWithReload(() => import('./pages/Materials'));
+const InventoryInOut = lazyWithReload(() => import('./pages/InventoryInOut'));
+const Quality = lazyWithReload(() => import('./pages/Quality'));
+const Sales = lazyWithReload(() => import('./pages/Sales'));
+const Employees = lazyWithReload(() => import('./pages/Employees'));
+const Equipments = lazyWithReload(() => import('./pages/Equipments'));
+const Products = lazyWithReload(() => import('./pages/Products'));
+const WorkOrders = lazyWithReload(() => import('./pages/WorkOrders'));
+const DailyProduction = lazyWithReload(() => import('./pages/DailyProduction'));
+const WorkHistory = lazyWithReload(() => import('./pages/WorkHistory'));
+const InjectionConditions = lazyWithReload(() => import('./pages/InjectionConditions'));
+const Suppliers = lazyWithReload(() => import('./pages/Suppliers'));
+const Purchase = lazyWithReload(() => import('./pages/Purchase'));
+const Board = lazyWithReload(() => import('./pages/Board'));
+const Chat = lazyWithReload(() => import('./pages/Chat'));
+const GovernmentSupport = lazyWithReload(() => import('./pages/GovernmentSupport'));
+const Payroll = lazyWithReload(() => import('./pages/Payroll'));
+const Expenses = lazyWithReload(() => import('./pages/Expenses'));
+const AuditLog = lazyWithReload(() => import('./pages/AuditLog'));
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();

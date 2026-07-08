@@ -12,6 +12,14 @@ class ErrorBoundary extends React.Component {
 
     componentDidCatch(error, errorInfo) {
         console.error("Uncaught error:", error, errorInfo);
+        // 새 배포 후 옛 청크를 못 불러오는 오류면 1회 자동 새로고침으로 복구 (무한 새로고침 방지)
+        const msg = String((error && error.message) || error);
+        const isChunkError = /dynamically imported module|Importing a module script failed|Loading chunk|error loading dynamically/i.test(msg);
+        if (isChunkError && !sessionStorage.getItem('chunkReloaded')) {
+            sessionStorage.setItem('chunkReloaded', '1');
+            window.location.reload();
+            return;
+        }
         this.setState({ error, errorInfo });
     }
 

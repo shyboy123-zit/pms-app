@@ -4,6 +4,15 @@ import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
+// 새 배포로 청크 파일명이 바뀌어 옛 탭이 프리로드에 실패하면 1회 자동 새로고침으로 복구
+window.addEventListener('vite:preloadError', (event) => {
+  if (!sessionStorage.getItem('chunkReloaded')) {
+    sessionStorage.setItem('chunkReloaded', '1');
+    event.preventDefault();
+    window.location.reload();
+  }
+});
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>

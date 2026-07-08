@@ -181,6 +181,12 @@ const Modal = ({ isOpen, onClose, title, children }) => {
         .btn-submit:active {
              transform: translateY(0);
         }
+        .btn-submit:disabled {
+             opacity: 0.55;
+             cursor: default;
+             transform: none;
+             box-shadow: none;
+        }
 
         /* 모바일 — 모달 풀스크린화 (Phase 4d) */
         @media (max-width: 640px) {

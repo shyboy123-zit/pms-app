@@ -104,6 +104,7 @@ const InventoryInOut = () => {
         { code: 'OTHER', label: '기타 (비고에 상세 기재)' }
     ];
     const [adjustReason, setAdjustReason] = useState('PHYSICAL_COUNT');
+    const [isSaving, setIsSaving] = useState(false); // 등록/수정 중복 제출(더블클릭) 방지
 
     const addBatchItemRow = () => setBatchItems(prev => [...prev, { ...emptyBatchItem }]);
     const removeBatchItemRow = (idx) => { if (batchItems.length > 1) setBatchItems(prev => prev.filter((_, i) => i !== idx)); };
@@ -282,7 +283,18 @@ const InventoryInOut = () => {
             /\[자동-텔레그램\]/.test(v.notes || '')
         );
 
+    // 중복 제출 가드: 저장이 끝나기 전 재클릭/재실행을 차단. 실제 로직은 handleSaveInner.
     const handleSave = async () => {
+        if (isSaving) return;
+        setIsSaving(true);
+        try {
+            await handleSaveInner();
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSaveInner = async () => {
         // ── 수정 모드 (단일) ──
         if (isEditMode && editingId) {
             if (newItem.transactionType === 'ADJUST') {
@@ -1246,8 +1258,8 @@ const InventoryInOut = () => {
 
                 <div className="modal-actions">
                     <button className="btn-cancel" onClick={resetForm}>취소</button>
-                    <button className="btn-submit" onClick={handleSave}>
-                        {isEditMode ? '수정' : (batchCommon.transactionType === 'ADJUST' ? '조정' : `${batchItems.filter(i => i.itemName && i.quantity > 0).length}건 일괄 등록`)}
+                    <button className="btn-submit" onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? '처리 중...' : (isEditMode ? '수정' : (batchCommon.transactionType === 'ADJUST' ? '조정' : `${batchItems.filter(i => i.itemName && i.quantity > 0).length}건 일괄 등록`))}
                     </button>
                 </div>
             </Modal>

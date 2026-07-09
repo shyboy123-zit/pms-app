@@ -20,6 +20,7 @@ import {
   X,
   ShoppingBag,
   Building,
+  PackageCheck,
   MessageSquare,
   MessagesSquare,
   Briefcase,
@@ -88,6 +89,7 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
         { icon: Truck, label: '입출고관리', path: '/delivery', key: 'delivery' },
         { icon: ShoppingBag, label: '구매관리', path: '/purchase', key: 'purchase' },
         { icon: Building, label: '거래처관리', path: '/suppliers', key: 'suppliers' },
+        { icon: PackageCheck, label: '포장표준관리', path: '/packaging-standards', key: 'packaging_standards' },
         { icon: DollarSign, label: '매입매출', path: '/sales', key: 'sales' }
       ]
     },

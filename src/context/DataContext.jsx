@@ -58,6 +58,7 @@ export const DataProvider = ({ children }) => {
     const [salesRecords, setSalesRecords] = useState([]);
     const [notifications, setNotifications] = useState([]);
     const [injectionConditions, setInjectionConditions] = useState([]);
+    const [packagingStandards, setPackagingStandards] = useState([]);
     const [productionLogs, setProductionLogs] = useState([]);
     const [boardPosts, setBoardPosts] = useState([]);
     const [boardComments, setBoardComments] = useState([]);
@@ -161,6 +162,13 @@ export const DataProvider = ({ children }) => {
                 if (conditions) setInjectionConditions(conditions);
             } catch (e) {
                 console.warn('injection_conditions table not available:', e.message);
+            }
+
+            try {
+                const { data: pkg } = await supabase.from('packaging_standards').select('*').order('created_at', { ascending: false });
+                if (pkg) setPackagingStandards(pkg);
+            } catch (e) {
+                console.warn('packaging_standards table not available:', e.message);
             }
 
             try {
@@ -1074,6 +1082,56 @@ export const DataProvider = ({ children }) => {
         return injectionConditions.find(c => c.product_id === productId);
     };
 
+    // --- Packaging Standards (포장표준관리) ---
+    const addPackagingStandard = async (payload) => {
+        try {
+            const { data, error } = await supabase
+                .from('packaging_standards')
+                .insert([payload])
+                .select();
+            if (error) throw error;
+            if (data) setPackagingStandards(prev => [data[0], ...prev]);
+            return data?.[0];
+        } catch (error) {
+            console.error('Error adding packaging standard:', error);
+            alert(`등록 실패: ${error.message || '포장표준 등록에 실패했습니다.'}`);
+            return { error };
+        }
+    };
+
+    const updatePackagingStandard = async (id, updates) => {
+        try {
+            const { id: _, created_at: __, product_name: ___, ...clean } = updates;
+            const { error } = await supabase
+                .from('packaging_standards')
+                .update({ ...clean, updated_at: new Date().toISOString() })
+                .eq('id', id);
+            if (error) throw error;
+            setPackagingStandards(prev => prev.map(p =>
+                p.id === id ? { ...p, ...clean, updated_at: new Date().toISOString() } : p
+            ));
+            return { success: true };
+        } catch (error) {
+            console.error('Error updating packaging standard:', error);
+            alert(`수정 실패: ${error.message || '포장표준 수정에 실패했습니다.'}`);
+            return { error };
+        }
+    };
+
+    const deletePackagingStandard = async (id) => {
+        try {
+            const { error } = await supabase
+                .from('packaging_standards')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+            setPackagingStandards(prev => prev.filter(p => p.id !== id));
+        } catch (error) {
+            console.error('Error deleting packaging standard:', error);
+            alert('포장표준 삭제에 실패했습니다.');
+        }
+    };
+
     // --- Production Logs ---
     const addProductionLog = async (log) => {
         try {
@@ -1314,6 +1372,7 @@ export const DataProvider = ({ children }) => {
             uploadImage,
             notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification,
             injectionConditions, addInjectionCondition, updateInjectionCondition, deleteInjectionCondition, getConditionByProduct,
+            packagingStandards, addPackagingStandard, updatePackagingStandard, deletePackagingStandard,
             suppliers, addSupplier, updateSupplier, deleteSupplier,
             purchaseRequests, addPurchaseRequest, updatePurchaseRequest, deletePurchaseRequest,
             productionLogs, addProductionLog, updateProductionLog, deleteProductionLog,

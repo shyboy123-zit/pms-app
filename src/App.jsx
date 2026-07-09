@@ -53,6 +53,7 @@ const GovernmentSupport = lazyWithReload(() => import('./pages/GovernmentSupport
 const Payroll = lazyWithReload(() => import('./pages/Payroll'));
 const Expenses = lazyWithReload(() => import('./pages/Expenses'));
 const AuditLog = lazyWithReload(() => import('./pages/AuditLog'));
+const PackagingStandards = lazyWithReload(() => import('./pages/PackagingStandards'));
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();
@@ -108,6 +109,7 @@ function App() {
                 <Route path="work-history" element={<PermissionGate permissionKey="work_history"><WorkHistory /></PermissionGate>} />
                 <Route path="injection-conditions" element={<PermissionGate permissionKey="injection_conditions"><InjectionConditions /></PermissionGate>} />
                 <Route path="suppliers" element={<PermissionGate permissionKey="suppliers"><Suppliers /></PermissionGate>} />
+                <Route path="packaging-standards" element={<PermissionGate permissionKey="packaging_standards"><PackagingStandards /></PermissionGate>} />
                 <Route path="purchase" element={<PermissionGate permissionKey="purchase"><Purchase /></PermissionGate>} />
                 <Route path="board" element={<PermissionGate permissionKey="board"><Board /></PermissionGate>} />
                 <Route path="chat" element={<PermissionGate permissionKey="chat"><Chat /></PermissionGate>} />

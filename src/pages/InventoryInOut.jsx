@@ -184,6 +184,27 @@ const InventoryInOut = () => {
         return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
     }, [inventoryTransactions]);
 
+    // 조회 중인 기간·품목·탭에 대한 합계 (필터 결과 기준)
+    const filteredSummary = React.useMemo(() => {
+        const s = {
+            inQty: 0, inAmount: 0,
+            outQty: 0, outAmount: 0,
+            adjustQty: 0,
+            unit: ''
+        };
+        (filteredTransactions || []).forEach(t => {
+            const qty = parseFloat(t.quantity) || 0;
+            const amt = parseFloat(t.total_amount || 0) || 0;
+            if (!s.unit && t.unit) s.unit = t.unit;
+            if (t.transaction_type === 'IN') { s.inQty += qty; s.inAmount += amt; }
+            else if (t.transaction_type === 'OUT') { s.outQty += qty; s.outAmount += amt; }
+            else if (t.transaction_type === 'ADJUST') { s.adjustQty += qty; }
+        });
+        // 여러 품목이 섞이면 단위 혼재 → 단위 표기 생략
+        if (itemFilter === 'all') s.unit = '';
+        return s;
+    }, [filteredTransactions, itemFilter]);
+
     // 시스템 재고 계산 함수 (item_code 또는 item_name 기준 매칭)
     const getSystemStock = (itemCode, itemName) => {
         let stock = 0;
@@ -843,6 +864,37 @@ const InventoryInOut = () => {
                     {itemFilter !== 'all' && (
                         <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                             「{itemFilter}」 {filteredTransactions.length}건
+                        </span>
+                    )}
+                </div>
+            )}
+
+            {/* 조회 기간·품목 합계 (필터 결과 기준) */}
+            {activeTab !== 'status' && activeTab !== 'valuation' && filteredTransactions.length > 0 && (
+                <div className="filtered-summary-bar" style={{
+                    display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'center',
+                    padding: '0.65rem 1rem', margin: '0.5rem 0',
+                    background: 'var(--surface, #f8fafc)', border: '1px solid var(--border, #e2e8f0)',
+                    borderRadius: '8px', fontSize: '0.9rem'
+                }}>
+                    <span style={{ fontWeight: 700, color: 'var(--text-muted, #64748b)' }}>
+                        조회 합계 ({filteredTransactions.length}건)
+                    </span>
+                    {(activeTab === 'all' || activeTab === 'in') && (
+                        <span style={{ color: '#2563eb' }}>
+                            입고 <strong>{filteredSummary.inQty.toLocaleString()}{filteredSummary.unit ? ' ' + filteredSummary.unit : ''}</strong>
+                            {' / '}₩<strong>{filteredSummary.inAmount.toLocaleString()}</strong>
+                        </span>
+                    )}
+                    {(activeTab === 'all' || activeTab === 'out') && (
+                        <span style={{ color: '#059669' }}>
+                            출고 <strong>{filteredSummary.outQty.toLocaleString()}{filteredSummary.unit ? ' ' + filteredSummary.unit : ''}</strong>
+                            {' / '}₩<strong>{filteredSummary.outAmount.toLocaleString()}</strong>
+                        </span>
+                    )}
+                    {(activeTab === 'all' || activeTab === 'adjust') && filteredSummary.adjustQty !== 0 && (
+                        <span style={{ color: '#d97706' }}>
+                            재고조정 <strong>{filteredSummary.adjustQty > 0 ? '+' : ''}{filteredSummary.adjustQty.toLocaleString()}{filteredSummary.unit ? ' ' + filteredSummary.unit : ''}</strong>
                         </span>
                     )}
                 </div>

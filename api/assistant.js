@@ -120,6 +120,21 @@ const fuzzy = (rows, query, fields) => {
   return rows.filter((r) => fields.some((f) => norm(r[f]).includes(q)));
 };
 
+// Supabase는 요청당 최대 1000행만 반환한다 → 재고 합산처럼 전량이 필요한
+// 조회는 range()로 끝까지 페이지네이션해야 한다(잘려도 에러가 안 나므로 주의).
+const PAGE_SIZE = 1000;
+async function fetchAll(buildQuery) {
+  const rows = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    rows.push(...data);
+    if (data.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
 // 제품 현재고 = inventory_transactions 합산 (item_name = 제품명 또는 코드)
 function productStock(product, txns) {
   let stock = 0;
@@ -153,7 +168,7 @@ async function runTool(name, input, supa, cache, isAdmin) {
     return cache.materials;
   };
   const getTxns = async () => {
-    if (!cache.txns) cache.txns = (await supa.from('inventory_transactions').select('item_name,transaction_type,quantity')).data || [];
+    if (!cache.txns) cache.txns = await fetchAll(() => supa.from('inventory_transactions').select('item_name,transaction_type,quantity'));
     return cache.txns;
   };
 
@@ -214,10 +229,12 @@ async function runTool(name, input, supa, cache, isAdmin) {
   if (name === 'sales_summary') {
     if (!isAdmin) return { 오류: '매출/매입 정보는 관리자만 조회할 수 있습니다.' };
     const type = input.type || '매출';
-    let q = supa.from('vouchers').select('voucher_date,voucher_type,item_name,quantity,unit_price,total_amount,client').eq('voucher_type', type);
-    if (input.start_date) q = q.gte('voucher_date', input.start_date);
-    if (input.end_date) q = q.lte('voucher_date', input.end_date);
-    const rows = (await q).data || [];
+    const rows = await fetchAll(() => {
+      let q = supa.from('vouchers').select('voucher_date,voucher_type,item_name,quantity,unit_price,total_amount,client').eq('voucher_type', type);
+      if (input.start_date) q = q.gte('voucher_date', input.start_date);
+      if (input.end_date) q = q.lte('voucher_date', input.end_date);
+      return q;
+    });
     const total = rows.reduce((s, r) => s + (parseFloat(r.total_amount) || 0), 0);
     const byClient = {}, byItem = {};
     for (const r of rows) {

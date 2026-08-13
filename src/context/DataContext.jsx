@@ -4,6 +4,30 @@ import { useAuth } from './AuthContext';
 
 const DataContext = createContext(null);
 
+// ============================================================
+// Supabase 전체 행 조회 헬퍼 (max-rows 1000 우회)
+// ------------------------------------------------------------
+// Supabase(PostgREST)는 한 번의 요청에 최대 1000행만 돌려준다.
+// 그냥 .select('*')로 읽으면 1000행에서 조용히 잘려서, 오래된 거래가
+// 통째로 빠진 채 재고·매출이 계산된다(에러도 안 남).
+// → .range()로 1000행씩 끝까지 페이지네이션해서 전부 가져온다.
+// 행이 계속 쌓이는 테이블(inventory_transactions, production_logs,
+// vouchers, material_usage 등)은 반드시 이 헬퍼를 쓸 것.
+// ============================================================
+const PAGE_SIZE = 1000;
+
+const fetchAllRows = async (buildQuery) => {
+    const rows = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        rows.push(...data);
+        if (data.length < PAGE_SIZE) break;
+    }
+    return rows;
+};
+
 export const DataProvider = ({ children }) => {
     const { user } = useAuth() || {};
 
@@ -109,14 +133,21 @@ export const DataProvider = ({ children }) => {
 
             // Optional tables - fail silently if not exist
             try {
-                const { data: usage } = await supabase.from('material_usage').select('*').order('usage_date', { ascending: false });
+                const usage = await fetchAllRows(() =>
+                    supabase.from('material_usage').select('*').order('usage_date', { ascending: false })
+                );
                 if (usage) setMaterialUsage(usage);
             } catch (e) {
                 console.warn('material_usage table not available:', e.message);
             }
 
             try {
-                const { data: trans } = await supabase.from('inventory_transactions').select('*').order('transaction_date', { ascending: false }).order('created_at', { ascending: false });
+                // 재고 계산의 기준 데이터 → 1행이라도 잘리면 재고가 틀어지므로 전량 조회
+                const trans = await fetchAllRows(() =>
+                    supabase.from('inventory_transactions').select('*')
+                        .order('transaction_date', { ascending: false })
+                        .order('created_at', { ascending: false })
+                );
                 if (trans) setInventoryTransactions(trans);
             } catch (e) {
                 console.warn('inventory_transactions table not available:', e.message);
@@ -172,7 +203,9 @@ export const DataProvider = ({ children }) => {
             }
 
             try {
-                const { data: logs } = await supabase.from('production_logs').select('*').order('production_date', { ascending: false });
+                const logs = await fetchAllRows(() =>
+                    supabase.from('production_logs').select('*').order('production_date', { ascending: false })
+                );
                 if (logs) setProductionLogs(logs);
             } catch (e) {
                 console.warn('production_logs table not available:', e.message);
@@ -207,7 +240,9 @@ export const DataProvider = ({ children }) => {
             }
 
             try {
-                const { data: v } = await supabase.from('vouchers').select('*').order('voucher_date', { ascending: false });
+                const v = await fetchAllRows(() =>
+                    supabase.from('vouchers').select('*').order('voucher_date', { ascending: false })
+                );
                 if (v) setVouchers(v);
             } catch (e) {
                 console.warn('vouchers table not available:', e.message);
@@ -500,23 +535,24 @@ export const DataProvider = ({ children }) => {
     };
 
     const getTransactionsByDateRange = async (startDate, endDate) => {
-        let query = supabase.from('inventory_transactions').select('*');
-
-        if (startDate) query = query.gte('transaction_date', startDate);
-        if (endDate) query = query.lte('transaction_date', endDate);
-
-        const { data } = await query.order('transaction_date', { ascending: false });
-        return data || [];
+        return await fetchAllRows(() => {
+            let query = supabase.from('inventory_transactions').select('*');
+            if (startDate) query = query.gte('transaction_date', startDate);
+            if (endDate) query = query.lte('transaction_date', endDate);
+            return query.order('transaction_date', { ascending: false });
+        });
     };
 
     // Historical queries
     const getInventorySnapshot = async (targetDate) => {
-        // Get all transactions up to target date
-        const { data } = await supabase
-            .from('inventory_transactions')
-            .select('*')
-            .lte('transaction_date', targetDate)
-            .order('transaction_date', { ascending: false });
+        // Get all transactions up to target date (1000행 제한 없이 전량)
+        const data = await fetchAllRows(() =>
+            supabase
+                .from('inventory_transactions')
+                .select('*')
+                .lte('transaction_date', targetDate)
+                .order('transaction_date', { ascending: false })
+        );
 
         // Calculate stock by item (item_name 기준 그룹핑)
         const stockByItem = {};

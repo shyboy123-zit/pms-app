@@ -12,6 +12,21 @@ const SECRET = process.env.ALERT_DIGEST_SECRET;
 
 const won = (n) => '₩' + Math.round(n || 0).toLocaleString('ko-KR');
 
+// Supabase는 요청당 최대 1000행만 반환한다 → 행이 계속 쌓이는 테이블은
+// range()로 끝까지 페이지네이션해야 재고/합계가 틀어지지 않는다.
+const PAGE_SIZE = 1000;
+async function fetchAll(buildQuery) {
+  const rows = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    rows.push(...data);
+    if (data.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
 // KST 기준 날짜 문자열 (YYYY-MM-DD)
 function kstDate(offsetDays = 0) {
   const now = new Date();
@@ -45,21 +60,21 @@ export default async function handler(req, res) {
     const [
       { data: products = [] },
       { data: materials = [] },
-      { data: txs = [] },
+      txs,
       { data: workOrders = [] },
       { data: molds = [] },
       { data: prodLogs = [] },
       { data: inspections = [] },
-      { data: vouchers = [] },
+      vouchers,
     ] = await Promise.all([
       supa.from('products').select('*'),
       supa.from('materials').select('*'),
-      supa.from('inventory_transactions').select('*'),
+      fetchAll(() => supa.from('inventory_transactions').select('*')),
       supa.from('work_orders').select('*'),
       supa.from('molds').select('*'),
       supa.from('production_logs').select('*').eq('production_date', yesterday),
       supa.from('inspections').select('*').eq('date', yesterday),
-      supa.from('vouchers').select('*'),
+      fetchAll(() => supa.from('vouchers').select('*')),
     ]);
 
     // 1) 어제 생산량

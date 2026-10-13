@@ -811,9 +811,37 @@ export const DataProvider = ({ children }) => {
     };
 
     const updateWorkOrder = async (id, updates) => {
+        const before = workOrders.find(wo => wo.id === id);
+
         const { data, error } = await supabase.from('work_orders').update(updates).eq('id', id).select();
         if (error) console.error('Error updating work order:', error);
         if (data) setWorkOrders(workOrders.map(wo => wo.id === id ? data[0] : wo));
+
+        // 설비(호기)가 변경된 경우, 기존/신규 설비의 current_work_order_id를 동기화
+        // (안 그러면 이전 설비에 "이 작업 중"이라는 낡은 포인터가 영구히 남음)
+        if (data && !error && 'equipment_id' in updates && before && before.equipment_id !== updates.equipment_id) {
+            const isRunning = (updates.status || before.status) === '진행중';
+
+            if (before.equipment_id) {
+                const oldEq = equipments.find(e => e.id === before.equipment_id);
+                if (oldEq && oldEq.current_work_order_id === id) {
+                    await updateEquipment(before.equipment_id, {
+                        status: '대기',
+                        current_work_order_id: null,
+                        temperature: 0,
+                        cycle_time: 0
+                    });
+                }
+            }
+            if (updates.equipment_id && isRunning) {
+                await updateEquipment(updates.equipment_id, {
+                    status: '가동중',
+                    current_work_order_id: id,
+                    temperature: 220,
+                    cycle_time: 38
+                });
+            }
+        }
     };
 
     const startWork = async (orderId) => {

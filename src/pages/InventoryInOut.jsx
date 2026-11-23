@@ -5,9 +5,14 @@ import DateRangePicker from '../components/DateRangePicker';
 import ExcelToolbar from '../components/ExcelToolbar';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import InventoryValuation from '../components/InventoryValuation';
-import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X, Camera, Search } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X, Camera, Search, Layers, AlertTriangle, CheckCircle2, Split } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import {
+    UNSPECIFIED_LOT, normalizeLot, isSameLot, suggestLotNo, lotDateLabel,
+    buildLotLedger, getLotsForItem, allocateFifo, lotAgeDays, getLotRemain,
+    deliveryLotStatus
+} from '../lib/lotUtils';
 
 const InventoryInOut = () => {
     const {
@@ -28,6 +33,23 @@ const InventoryInOut = () => {
     // 활성 거래처 목록 (드롭다운용)
     const activeSuppliers = (suppliers || []).filter(s => s.status === '활성');
 
+    // ── LOT 원장: 제품 × LOT 단위 입고/출고/잔량 집계 ──
+    // 출고 시 "그 LOT에 실제로 남은 수량"을 보고 막기 위해 쓰인다.
+    const lotLedger = React.useMemo(
+        () => buildLotLedger(inventoryTransactions || []),
+        [inventoryTransactions]
+    );
+    // 제품명 → 잔량 있는 LOT 목록 (FIFO 순)
+    const availableLots = React.useCallback(
+        (itemName) => getLotsForItem(lotLedger, itemName, { onlyRemaining: true }),
+        [lotLedger]
+    );
+    // 납품서 LOT ≠ 시스템 LOT 인 출고 (항상 상단에 경고로 띄운다)
+    const lotMismatches = React.useMemo(
+        () => (inventoryTransactions || []).filter(t => deliveryLotStatus(t) === 'mismatch'),
+        [inventoryTransactions]
+    );
+
     const [activeTab, setActiveTab] = useState('all'); // 'all', 'in', 'out', 'adjust', 'status'
     const [actualStock, setActualStock] = useState(0);
     const [systemStock, setSystemStock] = useState(0);
@@ -40,6 +62,10 @@ const InventoryInOut = () => {
     const [itemFilter, setItemFilter] = useState('all'); // 특정 품목만 조회
     const [filteredTransactions, setFilteredTransactions] = useState([]);
 
+    const [lotSearch, setLotSearch] = useState('');          // LOT 현황 탭 검색어
+    const [lotOnlyRemaining, setLotOnlyRemaining] = useState(true); // 잔량 있는 LOT만
+    const [lotDetail, setLotDetail] = useState(null);        // 드릴다운 중인 LOT {itemName, lotNo}
+
     const [newItem, setNewItem] = useState({
         transactionType: 'IN',
         productId: '',
@@ -50,7 +76,9 @@ const InventoryInOut = () => {
         unitPrice: 0,
         transactionDate: new Date().toISOString().split('T')[0],
         client: '',
-        notes: ''
+        notes: '',
+        lotNo: '',
+        deliveryLotNo: ''
     });
 
     // 다건 등록용 state
@@ -60,7 +88,7 @@ const InventoryInOut = () => {
         client: '',
         notes: ''
     });
-    const emptyBatchItem = { productId: '', itemName: '', itemCode: '', quantity: 0, unit: 'EA', unitPrice: 0 };
+    const emptyBatchItem = { productId: '', itemName: '', itemCode: '', quantity: 0, unit: 'EA', unitPrice: 0, lotNo: '', deliveryLotNo: '' };
     const [batchItems, setBatchItems] = useState([{ ...emptyBatchItem }]);
     const [activeBatchDropdown, setActiveBatchDropdown] = useState(-1);
 
@@ -110,30 +138,79 @@ const InventoryInOut = () => {
     const removeBatchItemRow = (idx) => { if (batchItems.length > 1) setBatchItems(prev => prev.filter((_, i) => i !== idx)); };
     const updateBatchItem = (idx, field, value) => setBatchItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
     const selectBatchProduct = (idx, product) => {
+        // LOT 기본값: 입고는 거래일자 기반 회사 체계(년월일 3자리) 제안, 출고는 잔량 있는 가장 오래된 LOT(FIFO)
+        const isOut = batchCommon.transactionType === 'OUT';
+        const lots = isOut ? availableLots(product.name) : [];
+        const defaultLot = isOut
+            ? (lots.find(l => l.lotNo !== UNSPECIFIED_LOT)?.lotNo || lots[0]?.lotNo || '')
+            : suggestLotNo(batchCommon.transactionDate);
         setBatchItems(prev => prev.map((item, i) => i === idx ? {
             ...item,
             productId: product.id,
             itemName: product.name,
             itemCode: product.product_code || '',
             unitPrice: product.unit_price || 0,
-            unit: product.unit || 'EA'
+            unit: product.unit || 'EA',
+            lotNo: defaultLot,
+            deliveryLotNo: ''
         } : item));
         setActiveBatchDropdown(-1);
+    };
+
+    // 다건 출고 행 하나를 FIFO로 여러 LOT 행으로 쪼갠다 (요청 수량을 오래된 LOT부터 채움)
+    const splitRowByFifo = (idx) => {
+        const row = batchItems[idx];
+        if (!row?.itemName) return alert('먼저 제품을 선택해주세요.');
+        const qty = parseFloat(row.quantity) || 0;
+        if (qty <= 0) return alert('먼저 출고 수량을 입력해주세요.');
+
+        // 이 행을 제외한 다른 행들이 이미 쓴 LOT 수량을 차감한 가용 잔량으로 계산
+        const usedByOthers = {};
+        batchItems.forEach((it, i) => {
+            if (i === idx || it.itemName !== row.itemName) return;
+            const key = normalizeLot(it.lotNo);
+            usedByOthers[key] = (usedByOthers[key] || 0) + (parseFloat(it.quantity) || 0);
+        });
+        const lots = availableLots(row.itemName)
+            .map(l => ({ ...l, remain: l.remain - (usedByOthers[l.lotNo] || 0) }))
+            .filter(l => l.remain > 0);
+
+        const { allocations, shortage } = allocateFifo(lots, qty);
+        if (allocations.length === 0) {
+            return alert(`'${row.itemName}'의 LOT 잔량이 없습니다.\n입고를 먼저 등록하거나 LOT를 직접 지정해주세요.`);
+        }
+        if (shortage > 0) {
+            const ok = window.confirm(
+                `LOT 잔량이 ${shortage.toLocaleString()}${row.unit} 부족합니다.\n` +
+                `가능한 ${allocations.reduce((s, a) => s + a.qty, 0).toLocaleString()}${row.unit}만 LOT별로 나눠 채울까요?`
+            );
+            if (!ok) return;
+        }
+        const newRows = allocations.map(a => ({ ...row, lotNo: a.lotNo, quantity: a.qty, deliveryLotNo: '' }));
+        setBatchItems(prev => [...prev.slice(0, idx), ...newRows, ...prev.slice(idx + 1)]);
     };
 
     // 제품 선택 시 정보 자동 적용
     const handleProductSelect = (productId) => {
         const product = products.find(p => p.id === productId);
         if (product) {
-            setNewItem(prev => ({
-                ...prev,
-                productId: productId,
-                itemName: product.name,
-                itemCode: product.product_code || '',
-                unitPrice: product.unit_price || 0,
-                unit: product.unit || 'EA',
-                client: product.company_name || prev.client
-            }));
+            setNewItem(prev => {
+                const isOut = prev.transactionType === 'OUT';
+                const lots = isOut ? availableLots(product.name) : [];
+                const defaultLot = isOut
+                    ? (lots.find(l => l.lotNo !== UNSPECIFIED_LOT)?.lotNo || lots[0]?.lotNo || '')
+                    : (prev.transactionType === 'IN' ? suggestLotNo(prev.transactionDate) : '');
+                return {
+                    ...prev,
+                    productId: productId,
+                    itemName: product.name,
+                    itemCode: product.product_code || '',
+                    unitPrice: product.unit_price || 0,
+                    unit: product.unit || 'EA',
+                    client: product.company_name || prev.client,
+                    lotNo: defaultLot
+                };
+            });
         } else {
             setNewItem(prev => ({
                 ...prev,
@@ -223,6 +300,49 @@ const InventoryInOut = () => {
         return stock;
     };
 
+    // ── LOT 검증 ──
+    // 출고는 "그 LOT에 실제 남은 수량" 안에서만 나갈 수 있다.
+    // alreadyUsed: 같은 배치 안에서 같은 (제품,LOT)를 앞 행들이 이미 쓴 수량
+    // excludeTxId: 수정 모드에서 자기 자신 거래의 영향을 되돌리기 위한 ID
+    const checkLotOut = (itemName, lotNo, qty, { excludeTxId = null, alreadyUsed = 0 } = {}) => {
+        const remain = getLotRemain(inventoryTransactions, itemName, lotNo, excludeTxId) - alreadyUsed;
+        const need = parseFloat(qty) || 0;
+        if (need > remain) {
+            return {
+                ok: false,
+                message:
+                    `'${itemName}' LOT [${normalizeLot(lotNo)}] 잔량이 부족합니다.\n` +
+                    `LOT 잔량: ${remain.toLocaleString()}\n출고 요청: ${need.toLocaleString()}\n` +
+                    `부족: ${(need - remain).toLocaleString()}\n\n` +
+                    `→ 다른 LOT를 선택하거나 'LOT 분할' 버튼으로 나눠서 출고하세요.`
+            };
+        }
+        return { ok: true, remain };
+    };
+
+    // 납품서 LOT ↔ 시스템 LOT 대조. 불일치면 사용자에게 한 번 확인받는다.
+    const confirmDeliveryLotMismatch = (rows) => {
+        const bad = rows.filter(r => {
+            const dlv = (r.deliveryLotNo || '').trim();
+            return dlv && !isSameLot(dlv, r.lotNo);
+        });
+        if (bad.length === 0) return true;
+        return window.confirm(
+            `⚠️ 납품 LOT와 시스템 LOT가 다릅니다 (${bad.length}건)\n\n` +
+            bad.map(r => `  • ${r.itemName}: 시스템 [${normalizeLot(r.lotNo)}] ↔ 납품서 [${r.deliveryLotNo.trim()}]`).join('\n') +
+            `\n\n납품서 LOT가 맞다면 시스템 LOT를 그 LOT로 바꿔 선택하세요.\n그래도 이대로 등록하시겠습니까? (불일치로 기록됩니다)`
+        );
+    };
+
+    // 재고조정 기준 재고: LOT를 지정하면 그 LOT 잔량, 비우면 품목 전체 재고
+    const setAdjustStockFor = (itemName, itemCode, lotNo) => {
+        const stock = (lotNo || '').trim()
+            ? getLotRemain(inventoryTransactions, itemName, lotNo)
+            : getSystemStock(itemCode, itemName);
+        setSystemStock(stock);
+        setActualStock(stock);
+    };
+
     const handleDateRangeApply = (start, end) => {
         setStartDate(start);
         setEndDate(end);
@@ -241,6 +361,37 @@ const InventoryInOut = () => {
         },
         { header: '품목코드', accessor: 'item_code', render: (row) => row.item_code || '-' },
         { header: '품목명', accessor: 'item_name' },
+        {
+            header: 'LOT',
+            accessor: 'lot_no',
+            render: (row) => {
+                const sys = (row.lot_no || '').trim();
+                const dlv = (row.delivery_lot_no || '').trim();
+                if (!sys && !dlv) return <span className="lot-chip lot-none">미지정</span>;
+                // 출고 + 납품 LOT 기재 → 시스템 LOT와 대조 결과를 항상 표시
+                const status = deliveryLotStatus(row);
+                return (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                        <span className={`lot-chip ${sys ? '' : 'lot-none'}`}>{sys || '미지정'}</span>
+                        {status === 'ok' && (
+                            <span className="lot-match ok" title={`납품 LOT ${dlv} 일치`}>
+                                <CheckCircle2 size={13} /> 일치
+                            </span>
+                        )}
+                        {status === 'mismatch' && (
+                            <span className="lot-match bad" title={`납품서 LOT: ${dlv}`}>
+                                <AlertTriangle size={13} /> 납품 {dlv}
+                            </span>
+                        )}
+                        {status === 'pending' && (
+                            <span className="lot-match wait" title={`납품서 LOT: ${dlv} — 시스템 LOT 미지정`}>
+                                납품 {dlv} 대조대기
+                            </span>
+                        )}
+                    </span>
+                );
+            }
+        },
         {
             header: '수량',
             accessor: 'quantity',
@@ -265,14 +416,20 @@ const InventoryInOut = () => {
 
     // 중복 매출전표 방지: 같은 (일자/품목/수량/거래처) 매출 전표가 이미 있으면 true
     // (텔레그램 봇·중복 입력·수정과 겹쳐 전표가 부풀어 거래처 대사가 틀어지는 문제 방지)
-    const salesVoucherExists = (date, item, qty, client) =>
-        (vouchers || []).some(v =>
-            v.voucher_type === '매출' &&
-            v.voucher_date === date &&
-            (v.item_name || '') === (item || '') &&
-            parseFloat(v.quantity) === parseFloat(qty) &&
-            (v.client || '') === (client || '')
-        );
+    // LOT 분할 출고 주의: 같은 날 같은 거래처에 같은 품목·같은 수량이 LOT만 다르게
+    // 두 번 나갈 수 있다. 이때 전표를 '중복'으로 보고 건너뛰면 매출이 누락되므로,
+    // 기존 전표에 [LOT:xxx] 태그가 있으면 LOT까지 같을 때만 중복으로 판정한다.
+    const salesVoucherExists = (date, item, qty, client, lotNo = null) =>
+        (vouchers || []).some(v => {
+            if (v.voucher_type !== '매출') return false;
+            if (v.voucher_date !== date) return false;
+            if ((v.item_name || '') !== (item || '')) return false;
+            if (parseFloat(v.quantity) !== parseFloat(qty)) return false;
+            if ((v.client || '') !== (client || '')) return false;
+            const tag = (v.notes || '').match(/\[LOT:([^\]]*)\]/);
+            if (lotNo && tag) return isSameLot(tag[1], lotNo);
+            return true; // LOT 태그가 없는 옛 전표는 보수적으로 중복 취급
+        });
 
     // ── 텔레그램 출하요청서 ↔ 앱 입출고 자동 대사 ──
     // 텔레그램 봇은 '출하요청' 시점(실제 출고보다 앞선 날짜)에 출고+매출전표를 먼저 등록한다.
@@ -332,7 +489,9 @@ const InventoryInOut = () => {
                     unit_price: parseFloat(newItem.unitPrice) || 0,
                     transaction_date: newItem.transactionDate,
                     client: '',
-                    notes: `[재고조정:${adjustReason}] 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff}) / 사유: ${reasonLabel}${newItem.notes ? ' / ' + newItem.notes : ''}`
+                    lot_no: (newItem.lotNo || '').trim() || null,
+                    delivery_lot_no: null,
+                    notes: `[재고조정:${adjustReason}]${newItem.lotNo?.trim() ? ` [LOT:${newItem.lotNo.trim()}]` : ''} 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff}) / 사유: ${reasonLabel}${newItem.notes ? ' / ' + newItem.notes : ''}`
                 }, { reason: reasonLabel, context: 'inventory:adjust_update' });
             } else {
                 // 입고/출고 수정: product_id 필수
@@ -352,6 +511,19 @@ const InventoryInOut = () => {
                     if (afterOut < 0) {
                         return alert(`출고 후 재고가 음수가 됩니다.\n현재 가용 재고: ${stockBefore.toLocaleString()} ${newItem.unit}\n출고 요청: ${parseFloat(newItem.quantity).toLocaleString()} ${newItem.unit}\n부족: ${Math.abs(afterOut).toLocaleString()} ${newItem.unit}`);
                     }
+                    // LOT별 잔량 검증 (자기 자신 거래 영향 제외)
+                    if (!newItem.lotNo?.trim()) {
+                        return alert('출고 LOT를 선택해주세요.\n납품 LOT 대조를 위해 출고는 LOT 지정이 필요합니다.');
+                    }
+                    const lotCheck = checkLotOut(newItem.itemName, newItem.lotNo, newItem.quantity, { excludeTxId: editingId });
+                    if (!lotCheck.ok) return alert(lotCheck.message);
+                }
+                if (!confirmDeliveryLotMismatch(
+                    newItem.transactionType === 'OUT' ? [{ ...newItem }] : []
+                )) return;
+                // 입고에 LOT가 없으면 한 번 확인 (이후 출고에서 LOT 추적이 끊긴다)
+                if (newItem.transactionType === 'IN' && !newItem.lotNo?.trim()) {
+                    if (!window.confirm('LOT 번호가 비어 있습니다.\nLOT 없이 입고하면 이 재고는 \'(미지정)\'으로 묶여 납품 LOT 대조가 안 됩니다.\n계속하시겠습니까?')) return;
                 }
 
                 const original = inventoryTransactions.find(t => t.id === editingId);
@@ -364,7 +536,11 @@ const InventoryInOut = () => {
                     unit_price: parseFloat(newItem.unitPrice),
                     transaction_date: newItem.transactionDate,
                     client: newItem.client,
-                    notes: newItem.notes
+                    notes: newItem.notes,
+                    lot_no: (newItem.lotNo || '').trim() || null,
+                    delivery_lot_no: newItem.transactionType === 'OUT'
+                        ? ((newItem.deliveryLotNo || '').trim() || null)
+                        : null
                 }, { context: 'inventory:update' });
 
                 // ── 매출 전표 동기화 (OUT 거래 변경 시) ──
@@ -382,7 +558,7 @@ const InventoryInOut = () => {
                 // 거래ID 태그(#id) 기반 매칭 — 수량/일자가 바뀌어도 정확히 찾음 (값 매칭은 폴백)
                 const findVoucherByTx = (txId) =>
                     (vouchers || []).find(v => v.voucher_type === '매출' && (v.notes || '').includes(`#${txId}`));
-                const tagNote = (label) => `[자동-입출고 ${label}#${editingId}] ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`;
+                const tagNote = (label) => `[자동-입출고 ${label}#${editingId}]${newItem.lotNo?.trim() ? ` [LOT:${newItem.lotNo.trim()}]` : ''} ${newItem.itemName} ${newItem.quantity}${newItem.unit} 출고`;
                 const wasOut = original?.transaction_type === 'OUT';
                 const isOut = newItem.transactionType === 'OUT';
 
@@ -402,7 +578,7 @@ const InventoryInOut = () => {
                                 client: newItem.client,
                                 notes: tagNote('수정')
                             });
-                        } else if (addVoucher && !salesVoucherExists(newItem.transactionDate, newItem.itemName, newItem.quantity, newItem.client)) {
+                        } else if (addVoucher && !salesVoucherExists(newItem.transactionDate, newItem.itemName, newItem.quantity, newItem.client, newItem.lotNo)) {
                             // 기존 voucher가 없으면 신규 생성 (과거 누락분 보완) — 단, 동일 전표 중복 방지
                             await addVoucher({
                                 voucher_date: newItem.transactionDate, voucher_type: '매출',
@@ -412,7 +588,7 @@ const InventoryInOut = () => {
                                 notes: tagNote('수정생성')
                             });
                         }
-                    } else if (!wasOut && isOut && addVoucher && !salesVoucherExists(newItem.transactionDate, newItem.itemName, newItem.quantity, newItem.client)) {
+                    } else if (!wasOut && isOut && addVoucher && !salesVoucherExists(newItem.transactionDate, newItem.itemName, newItem.quantity, newItem.client, newItem.lotNo)) {
                         // non-OUT → OUT: voucher 신규 생성 (동일 전표 중복 방지)
                         await addVoucher({
                             voucher_date: newItem.transactionDate, voucher_type: '매출',
@@ -452,7 +628,9 @@ const InventoryInOut = () => {
                 unit_price: parseFloat(newItem.unitPrice) || 0,
                 transaction_date: batchCommon.transactionDate,
                 client: '',
-                notes: `[재고조정:${adjustReason}] 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff}) / 사유: ${reasonLabel}${batchCommon.notes ? ' / ' + batchCommon.notes : ''}`
+                lot_no: (newItem.lotNo || '').trim() || null,
+                delivery_lot_no: null,
+                notes: `[재고조정:${adjustReason}]${newItem.lotNo?.trim() ? ` [LOT:${newItem.lotNo.trim()}]` : ''} 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff}) / 사유: ${reasonLabel}${batchCommon.notes ? ' / ' + batchCommon.notes : ''}`
             }, { reason: reasonLabel, context: 'inventory:adjust_new' });
             resetForm();
             return;
@@ -476,6 +654,39 @@ const InventoryInOut = () => {
                 if (currentStock - cumulativeOut[key] < 0) {
                     return alert(`'${item.itemName}'의 출고 후 재고가 음수가 됩니다.\n현재 가용 재고: ${currentStock.toLocaleString()} ${item.unit}\n출고 요청(누적): ${cumulativeOut[key].toLocaleString()} ${item.unit}\n부족: ${(cumulativeOut[key] - currentStock).toLocaleString()} ${item.unit}`);
                 }
+            }
+        }
+
+        // ── LOT 검증 ──
+        if (batchCommon.transactionType === 'OUT') {
+            // 출고는 LOT 지정 필수 + LOT별 잔량 범위 안에서만 (같은 LOT 누적도 함께 체크)
+            const missingLot = validItems.filter(item => !item.lotNo?.trim());
+            if (missingLot.length > 0) {
+                return alert(
+                    `출고 LOT를 선택하지 않은 항목이 있습니다 (${missingLot.length}건)\n` +
+                    missingLot.map(i => `  • ${i.itemName}`).join('\n') +
+                    `\n\n납품 LOT 대조를 위해 출고는 LOT 지정이 필요합니다.`
+                );
+            }
+            const usedByLot = {};
+            for (const item of validItems) {
+                const lotKey = `${item.itemName}\u0000${normalizeLot(item.lotNo)}`;
+                const already = usedByLot[lotKey] || 0;
+                const res = checkLotOut(item.itemName, item.lotNo, item.quantity, { alreadyUsed: already });
+                if (!res.ok) return alert(res.message);
+                usedByLot[lotKey] = already + (parseFloat(item.quantity) || 0);
+            }
+            // 납품서 LOT ↔ 시스템 LOT 대조
+            if (!confirmDeliveryLotMismatch(validItems)) return;
+        } else if (batchCommon.transactionType === 'IN') {
+            const noLot = validItems.filter(item => !item.lotNo?.trim());
+            if (noLot.length > 0) {
+                const ok = window.confirm(
+                    `LOT 번호가 비어 있는 입고가 ${noLot.length}건 있습니다.\n` +
+                    noLot.map(i => `  • ${i.itemName}`).join('\n') +
+                    `\n\nLOT 없이 입고하면 이 재고는 '(미지정)'으로 묶여 납품 LOT 대조가 안 됩니다.\n계속하시겠습니까?`
+                );
+                if (!ok) return;
             }
         }
 
@@ -513,15 +724,19 @@ const InventoryInOut = () => {
                 unit_price: parseFloat(item.unitPrice),
                 transaction_date: batchCommon.transactionDate,
                 client: batchCommon.client,
-                notes: batchCommon.notes
+                notes: batchCommon.notes,
+                lot_no: (item.lotNo || '').trim() || null,
+                delivery_lot_no: batchCommon.transactionType === 'OUT'
+                    ? ((item.deliveryLotNo || '').trim() || null)
+                    : null
             }, { context: `inventory:batch_${batchCommon.transactionType.toLowerCase()}` });
             const newTxId = txData && txData[0] ? txData[0].id : null;
 
             // 출고 → 매출 전표 자동 생성 (입고는 제품 입고이므로 매입 아님)
             if (addVoucher && batchCommon.transactionType === 'OUT') {
                 // 중복 방지: 동일 (일자/품목/수량/거래처) 전표가 이미 있거나 이번 배치에서 만들었으면 스킵
-                const dupKey = `${batchCommon.transactionDate}|${item.itemName}|${parseFloat(item.quantity)}|${batchCommon.client || ''}`;
-                if (salesVoucherExists(batchCommon.transactionDate, item.itemName, item.quantity, batchCommon.client) || createdVoucherKeys.has(dupKey)) {
+                const dupKey = `${batchCommon.transactionDate}|${item.itemName}|${parseFloat(item.quantity)}|${batchCommon.client || ''}|${normalizeLot(item.lotNo)}`;
+                if (salesVoucherExists(batchCommon.transactionDate, item.itemName, item.quantity, batchCommon.client, item.lotNo) || createdVoucherKeys.has(dupKey)) {
                     continue;
                 }
                 createdVoucherKeys.add(dupKey);
@@ -535,7 +750,7 @@ const InventoryInOut = () => {
                         unit: item.unit,
                         unit_price: parseFloat(item.unitPrice),
                         client: batchCommon.client,
-                        notes: `[자동-입출고${newTxId ? '#' + newTxId : ''}] ${item.itemName} ${item.quantity}${item.unit} 출고`
+                        notes: `[자동-입출고${newTxId ? '#' + newTxId : ''}]${item.lotNo?.trim() ? ` [LOT:${item.lotNo.trim()}]` : ''} ${item.itemName} ${item.quantity}${item.unit} 출고`
                     }) || {};
                     if (vErr) voucherFailures.push({ item: item.itemName, error: vErr.message || String(vErr) });
                 } catch (e) {
@@ -574,7 +789,9 @@ const InventoryInOut = () => {
             unitPrice: row.unit_price || 0,
             transactionDate: row.transaction_date,
             client: row.client || '',
-            notes: row.notes || ''
+            notes: row.notes || '',
+            lotNo: row.lot_no || '',
+            deliveryLotNo: row.delivery_lot_no || ''
         });
         // 거래처가 활성 거래처 목록에 없으면 직접입력 모드로 초기화
         const clientInList = !!row.client && activeSuppliers.some(s => s.name === row.client);
@@ -586,8 +803,10 @@ const InventoryInOut = () => {
             if (reasonMatch && ADJUST_REASONS.some(r => r.code === reasonMatch[1])) {
                 setAdjustReason(reasonMatch[1]);
             }
-            // 재고조정 수정에서는 systemStock/actualStock 복원
-            const stockNow = getSystemStock(row.item_code, row.item_name);
+            // 재고조정 수정에서는 systemStock/actualStock 복원 (LOT 지정분은 LOT 잔량 기준)
+            const stockNow = (row.lot_no || '').trim()
+                ? getLotRemain(inventoryTransactions, row.item_name, row.lot_no)
+                : getSystemStock(row.item_code, row.item_name);
             // 본인 거래 영향 제거: stockNow에서 row.quantity 빼야 진짜 "조정 전" 상태
             const stockBefore = stockNow - parseFloat(row.quantity);
             setSystemStock(stockBefore);
@@ -621,7 +840,9 @@ const InventoryInOut = () => {
             unitPrice: 0,
             transactionDate: new Date().toISOString().split('T')[0],
             client: '',
-            notes: ''
+            notes: '',
+            lotNo: '',
+            deliveryLotNo: ''
         });
         setBatchCommon({
             transactionType: 'IN',
@@ -651,7 +872,9 @@ const InventoryInOut = () => {
             unitPrice: parseFloat(item.lastPrice) || 0,
             transactionDate: new Date().toISOString().split('T')[0],
             client: '',
-            notes: ''
+            notes: '',
+            lotNo: item.lotNo && item.lotNo !== UNSPECIFIED_LOT ? item.lotNo : '',
+            deliveryLotNo: ''
         });
         setIsModalOpen(true);
     };
@@ -722,6 +945,31 @@ const InventoryInOut = () => {
 
     const inventoryStatus = getInventoryStatus();
 
+    // LOT 현황 탭에 뿌릴 행 (검색어·잔량 필터 적용, 품목명 → 최초입고일 순)
+    const lotRows = React.useMemo(() => {
+        const q = lotSearch.trim().toLowerCase();
+        return lotLedger
+            .filter(r => (lotOnlyRemaining ? r.remain !== 0 : true))
+            .filter(r => !q
+                || r.itemName.toLowerCase().includes(q)
+                || r.lotNo.toLowerCase().includes(q)
+                || (r.itemCode || '').toLowerCase().includes(q))
+            .sort((a, b) => {
+                const byName = a.itemName.localeCompare(b.itemName, 'ko');
+                if (byName !== 0) return byName;
+                return (a.firstInDate || '9999').localeCompare(b.firstInDate || '9999');
+            });
+    }, [lotLedger, lotSearch, lotOnlyRemaining]);
+
+    // 드릴다운: 선택한 LOT의 입출고 이력 (최신순)
+    const lotDetailTxs = React.useMemo(() => {
+        if (!lotDetail) return [];
+        return (inventoryTransactions || [])
+            .filter(t => (t.item_name || '').trim() === lotDetail.itemName
+                && normalizeLot(t.lot_no) === lotDetail.lotNo)
+            .sort((a, b) => (b.transaction_date || '').localeCompare(a.transaction_date || '') || (b.id - a.id));
+    }, [inventoryTransactions, lotDetail]);
+
     return (
         <div className="page-container">
             <div className="page-header-row">
@@ -737,6 +985,8 @@ const InventoryInOut = () => {
                             { key: 'transaction_type', label: '구분', format: (v) => v === 'IN' ? '입고' : v === 'OUT' ? '출고' : '재고조정' },
                             { key: 'item_code', label: '품목코드' },
                             { key: 'item_name', label: '품목명' },
+                            { key: 'lot_no', label: 'LOT', format: (v) => v || '(미지정)' },
+                            { key: 'delivery_lot_no', label: '납품LOT' },
                             { key: 'quantity', label: '수량', format: (v) => parseFloat(v) },
                             { key: 'unit', label: '단위' },
                             { key: 'unit_price', label: '단가', format: (v) => parseFloat(v || 0) },
@@ -805,6 +1055,28 @@ const InventoryInOut = () => {
                 </div>
             </div>
 
+            {/* 납품 LOT 불일치 경고 — 출고 LOT ≠ 납품서 LOT 인 건이 있으면 항상 띄운다 */}
+            {lotMismatches.length > 0 && (
+                <div className="lot-warn-banner">
+                    <AlertTriangle size={18} />
+                    <div style={{ flex: 1 }}>
+                        <strong>납품 LOT 불일치 {lotMismatches.length}건</strong>
+                        <div style={{ fontSize: '0.82rem', marginTop: '2px', opacity: 0.9 }}>
+                            {lotMismatches.slice(0, 3).map(t => (
+                                <div key={t.id}>
+                                    {t.transaction_date} {t.item_name} — 시스템 [{normalizeLot(t.lot_no)}] ↔ 납품서 [{t.delivery_lot_no}]
+                                </div>
+                            ))}
+                            {lotMismatches.length > 3 && <div>… 외 {lotMismatches.length - 3}건</div>}
+                        </div>
+                    </div>
+                    <button className="adjust-btn" style={{ background: 'white', color: '#b91c1c', borderColor: '#fecaca' }}
+                        onClick={() => { setActiveTab('out'); setItemFilter('all'); }}>
+                        출고 내역 보기
+                    </button>
+                </div>
+            )}
+
             {/* Tabs */}
             <div className="tabs">
                 <button
@@ -838,6 +1110,12 @@ const InventoryInOut = () => {
                     재고현황
                 </button>
                 <button
+                    className={`tab ${activeTab === 'lot' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('lot')}
+                >
+                    LOT 현황
+                </button>
+                <button
                     className={`tab ${activeTab === 'valuation' ? 'active' : ''}`}
                     onClick={() => setActiveTab('valuation')}
                 >
@@ -846,7 +1124,7 @@ const InventoryInOut = () => {
             </div>
 
             {/* Date Range + Item Filter */}
-            {activeTab !== 'status' && activeTab !== 'valuation' && (
+            {activeTab !== 'status' && activeTab !== 'valuation' && activeTab !== 'lot' && (
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <DateRangePicker onApply={handleDateRangeApply} />
                     <div className="item-filter">
@@ -870,7 +1148,7 @@ const InventoryInOut = () => {
             )}
 
             {/* 조회 기간·품목 합계 (필터 결과 기준) */}
-            {activeTab !== 'status' && activeTab !== 'valuation' && filteredTransactions.length > 0 && (
+            {activeTab !== 'status' && activeTab !== 'valuation' && activeTab !== 'lot' && filteredTransactions.length > 0 && (
                 <div className="filtered-summary-bar" style={{
                     display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'center',
                     padding: '0.65rem 1rem', margin: '0.5rem 0',
@@ -900,8 +1178,131 @@ const InventoryInOut = () => {
                 </div>
             )}
 
-            {/* Transaction Table / Inventory Status / Valuation */}
-            {activeTab === 'valuation' ? (
+            {/* Transaction Table / Inventory Status / LOT / Valuation */}
+            {activeTab === 'lot' ? (
+                <div className="inventory-status-table">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+                        <h3 className="section-title" style={{ margin: 0 }}>
+                            <Layers size={17} style={{ verticalAlign: '-3px', marginRight: '6px' }} />
+                            LOT별 재고 현황
+                        </h3>
+                        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <div className="item-filter">
+                                <Search size={15} />
+                                <input
+                                    value={lotSearch}
+                                    onChange={(e) => setLotSearch(e.target.value)}
+                                    placeholder="품목명 / LOT 검색"
+                                    style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '0.9rem', width: '180px' }}
+                                />
+                                {lotSearch && (
+                                    <button className="item-filter-clear" onClick={() => setLotSearch('')} title="검색 해제">✕</button>
+                                )}
+                            </div>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem', color: '#475569', cursor: 'pointer' }}>
+                                <input type="checkbox" checked={lotOnlyRemaining} onChange={(e) => setLotOnlyRemaining(e.target.checked)} />
+                                잔량 있는 LOT만
+                            </label>
+                            <ExcelToolbar
+                                data={lotRows}
+                                columns={[
+                                    { key: 'itemCode', label: '품목코드' },
+                                    { key: 'itemName', label: '품목명' },
+                                    { key: 'lotNo', label: 'LOT' },
+                                    { key: 'inQty', label: '입고', format: (v) => parseFloat(v || 0) },
+                                    { key: 'outQty', label: '출고', format: (v) => parseFloat(v || 0) },
+                                    { key: 'adjustQty', label: '조정', format: (v) => parseFloat(v || 0) },
+                                    { key: 'remain', label: '잔량', format: (v) => parseFloat(v || 0) },
+                                    { key: 'unit', label: '단위' },
+                                    { key: 'firstInDate', label: '최초입고일' },
+                                    { key: 'lastOutDate', label: '최근출고일' }
+                                ]}
+                                fileName="LOT별재고현황"
+                                showTemplate={false}
+                            />
+                        </div>
+                    </div>
+
+                    {/* LOT 요약 */}
+                    <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', padding: '0.65rem 1rem', marginBottom: '1rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem' }}>
+                        <span><strong>{lotRows.length}</strong> LOT</span>
+                        <span style={{ color: '#059669' }}>잔량 보유 <strong>{lotRows.filter(r => r.remain > 0).length}</strong></span>
+                        <span style={{ color: '#64748b' }}>소진 <strong>{lotRows.filter(r => r.remain === 0).length}</strong></span>
+                        {lotRows.some(r => r.remain < 0) && (
+                            <span style={{ color: '#dc2626' }}>마이너스 <strong>{lotRows.filter(r => r.remain < 0).length}</strong></span>
+                        )}
+                        <span style={{ color: '#2563eb' }}>총 잔량 <strong>{lotRows.reduce((sum, r) => sum + r.remain, 0).toLocaleString()}</strong></span>
+                    </div>
+
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', fontSize: '0.9rem' }}>
+                            <thead>
+                                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                                    <th style={{ padding: '0.7rem', textAlign: 'left', fontWeight: 600 }}>품목코드</th>
+                                    <th style={{ padding: '0.7rem', textAlign: 'left', fontWeight: 600 }}>품목명</th>
+                                    <th style={{ padding: '0.7rem', textAlign: 'left', fontWeight: 600 }}>LOT</th>
+                                    <th style={{ padding: '0.7rem', textAlign: 'right', fontWeight: 600 }}>입고</th>
+                                    <th style={{ padding: '0.7rem', textAlign: 'right', fontWeight: 600 }}>출고</th>
+                                    <th style={{ padding: '0.7rem', textAlign: 'right', fontWeight: 600 }}>조정</th>
+                                    <th style={{ padding: '0.7rem', textAlign: 'right', fontWeight: 600 }}>잔량</th>
+                                    <th style={{ padding: '0.7rem', textAlign: 'center', fontWeight: 600 }}>최초입고</th>
+                                    <th style={{ padding: '0.7rem', textAlign: 'center', fontWeight: 600 }}>경과</th>
+                                    <th style={{ padding: '0.7rem', textAlign: 'center', fontWeight: 600 }}>상태</th>
+                                    <th style={{ padding: '0.7rem', textAlign: 'center', fontWeight: 600 }}>이력</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {lotRows.length === 0 && (
+                                    <tr><td colSpan={11} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                                        표시할 LOT가 없습니다. 입고 등록 시 LOT 번호를 입력하면 여기에 쌓입니다.
+                                    </td></tr>
+                                )}
+                                {lotRows.map((r) => {
+                                    const age = lotAgeDays(r.firstInDate);
+                                    return (
+                                        <tr key={`${r.itemName}|${r.lotNo}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                            <td style={{ padding: '0.7rem', color: '#64748b' }}>{r.itemCode || '-'}</td>
+                                            <td style={{ padding: '0.7rem', fontWeight: 600 }}>{r.itemName}</td>
+                                            <td style={{ padding: '0.7rem' }}>
+                                                <span className={`lot-chip ${r.lotNo === UNSPECIFIED_LOT ? 'lot-none' : ''}`}
+                                                    title={lotDateLabel(r.lotNo) ? `제조 ${lotDateLabel(r.lotNo)}` : undefined}>{r.lotNo}</span>
+                                                {lotDateLabel(r.lotNo) && (
+                                                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>제조 {lotDateLabel(r.lotNo)}</div>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '0.7rem', textAlign: 'right', color: '#2563eb' }}>{r.inQty.toLocaleString()}</td>
+                                            <td style={{ padding: '0.7rem', textAlign: 'right', color: '#059669' }}>{r.outQty.toLocaleString()}</td>
+                                            <td style={{ padding: '0.7rem', textAlign: 'right', color: r.adjustQty ? '#d97706' : '#cbd5e1' }}>
+                                                {r.adjustQty ? `${r.adjustQty > 0 ? '+' : ''}${r.adjustQty.toLocaleString()}` : '-'}
+                                            </td>
+                                            <td style={{ padding: '0.7rem', textAlign: 'right', fontWeight: 700, color: r.remain > 0 ? '#059669' : r.remain < 0 ? '#dc2626' : '#94a3b8' }}>
+                                                {r.remain.toLocaleString()} {r.unit}
+                                            </td>
+                                            <td style={{ padding: '0.7rem', textAlign: 'center', color: '#64748b' }}>{r.firstInDate || '-'}</td>
+                                            <td style={{ padding: '0.7rem', textAlign: 'center', color: age != null && age > 180 ? '#dc2626' : '#64748b' }}>
+                                                {age != null ? `${age}일` : '-'}
+                                            </td>
+                                            <td style={{ padding: '0.7rem', textAlign: 'center' }}>
+                                                {r.remain < 0
+                                                    ? <span className="lot-status neg">마이너스</span>
+                                                    : r.remain === 0
+                                                        ? <span className="lot-status done">소진</span>
+                                                        : <span className="lot-status live">잔량</span>}
+                                            </td>
+                                            <td style={{ padding: '0.7rem', textAlign: 'center' }}>
+                                                <button className="adjust-btn" style={{ background: '#eef2ff', color: '#4338ca', borderColor: '#c7d2fe' }}
+                                                    onClick={() => setLotDetail({ itemName: r.itemName, lotNo: r.lotNo })} title="이 LOT의 입출고 이력">
+                                                    <Layers size={13} /> 이력
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : activeTab === 'valuation' ? (
                 <InventoryValuation />
             ) : activeTab === 'status' ? (
                 <div className="inventory-status-table">
@@ -913,6 +1314,7 @@ const InventoryInOut = () => {
                                 <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>품목명</th>
                                 <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>재고수량</th>
                                 <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>최근단가</th>
+                                <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>LOT</th>
                                 <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>재고조정</th>
                             </tr>
                         </thead>
@@ -931,6 +1333,19 @@ const InventoryInOut = () => {
                                     </td>
                                     <td style={{ padding: '0.75rem', textAlign: 'right', color: '#64748b' }}>
                                         ₩{parseFloat(item.lastPrice || 0).toLocaleString()}
+                                    </td>
+                                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                        {(() => {
+                                            const lots = getLotsForItem(lotLedger, item.itemName, { onlyRemaining: true });
+                                            const named = lots.filter(l => l.lotNo !== UNSPECIFIED_LOT);
+                                            return (
+                                                <button className="adjust-btn" style={{ background: '#eef2ff', color: '#4338ca', borderColor: '#c7d2fe' }}
+                                                    onClick={() => { setActiveTab('lot'); setLotSearch(item.itemName); setLotOnlyRemaining(true); }}
+                                                    title="이 품목의 LOT별 잔량 보기">
+                                                    <Layers size={13} /> {named.length ? `${named.length}개` : '미지정'}
+                                                </button>
+                                            );
+                                        })()}
                                     </td>
                                     <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                                         <button
@@ -968,6 +1383,74 @@ const InventoryInOut = () => {
                 />
             )}
 
+            {/* LOT 이력 모달 — 이 LOT로 들어오고 나간 내역 전체 */}
+            <Modal
+                title={lotDetail ? `LOT 이력 — ${lotDetail.itemName} [${lotDetail.lotNo}]` : 'LOT 이력'}
+                isOpen={!!lotDetail}
+                onClose={() => setLotDetail(null)}
+            >
+                {lotDetail && (() => {
+                    const inQty = lotDetailTxs.filter(t => t.transaction_type === 'IN').reduce((a, t) => a + (parseFloat(t.quantity) || 0), 0);
+                    const outQty = lotDetailTxs.filter(t => t.transaction_type === 'OUT').reduce((a, t) => a + (parseFloat(t.quantity) || 0), 0);
+                    const adjQty = lotDetailTxs.filter(t => t.transaction_type === 'ADJUST').reduce((a, t) => a + (parseFloat(t.quantity) || 0), 0);
+                    const unit = lotDetailTxs[0]?.unit || 'EA';
+                    return (
+                        <>
+                            <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', padding: '0.7rem 1rem', marginBottom: '0.9rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem' }}>
+                                <span style={{ color: '#2563eb' }}>입고 <strong>{inQty.toLocaleString()}</strong></span>
+                                <span style={{ color: '#059669' }}>출고 <strong>{outQty.toLocaleString()}</strong></span>
+                                {adjQty !== 0 && <span style={{ color: '#d97706' }}>조정 <strong>{adjQty > 0 ? '+' : ''}{adjQty.toLocaleString()}</strong></span>}
+                                <span style={{ fontWeight: 700 }}>잔량 <strong>{(inQty - outQty + adjQty).toLocaleString()} {unit}</strong></span>
+                            </div>
+                            <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.86rem' }}>
+                                    <thead>
+                                        <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                                            <th style={{ padding: '0.5rem', textAlign: 'left' }}>일자</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'center' }}>구분</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'right' }}>수량</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'left' }}>거래처</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'left' }}>납품LOT</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {lotDetailTxs.map(t => (
+                                            <tr key={t.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '0.5rem' }}>{t.transaction_date}</td>
+                                                <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                                                    <span className={`type-badge ${t.transaction_type === 'IN' ? 'type-in' : t.transaction_type === 'ADJUST' ? 'type-adjust' : 'type-out'}`} style={{ fontSize: '0.75rem' }}>
+                                                        {t.transaction_type === 'IN' ? '입고' : t.transaction_type === 'ADJUST' ? '조정' : '출고'}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600 }}>
+                                                    {parseFloat(t.quantity).toLocaleString()} {t.unit}
+                                                </td>
+                                                <td style={{ padding: '0.5rem', color: '#64748b' }}>{t.client || '-'}</td>
+                                                <td style={{ padding: '0.5rem' }}>
+                                                    {(() => {
+                                                        const st = deliveryLotStatus(t);
+                                                        if (st === 'ok') return <span className="lot-match ok"><CheckCircle2 size={13} /> {t.delivery_lot_no}</span>;
+                                                        if (st === 'mismatch') return <span className="lot-match bad"><AlertTriangle size={13} /> {t.delivery_lot_no}</span>;
+                                                        if (st === 'pending') return <span className="lot-match wait">{t.delivery_lot_no} 대조대기</span>;
+                                                        return <span style={{ color: '#cbd5e1' }}>-</span>;
+                                                    })()}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {lotDetailTxs.length === 0 && (
+                                            <tr><td colSpan={5} style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>이력이 없습니다.</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div className="modal-actions">
+                                <button className="btn-cancel" onClick={() => setLotDetail(null)}>닫기</button>
+                            </div>
+                        </>
+                    );
+                })()}
+            </Modal>
+
             {/* 바코드 스캐너 모달 (Phase 4b) */}
             <BarcodeScannerModal
                 isOpen={isScannerOpen}
@@ -988,7 +1471,7 @@ const InventoryInOut = () => {
                         <div className="form-group">
                             <label className="form-label">거래 구분</label>
                             <select className="form-input" value={newItem.transactionType}
-                                onChange={(e) => setNewItem({ ...newItem, transactionType: e.target.value, productId: '', itemName: '', itemCode: '', unitPrice: 0 })}>
+                                onChange={(e) => setNewItem({ ...newItem, transactionType: e.target.value, productId: '', itemName: '', itemCode: '', unitPrice: 0, lotNo: '', deliveryLotNo: '' })}>
                                 <option value="IN">입고</option>
                                 <option value="OUT">출고</option>
                                 <option value="ADJUST">재고조정</option>
@@ -1018,6 +1501,29 @@ const InventoryInOut = () => {
                         </div>
                         {newItem.transactionType === 'ADJUST' ? (
                             <>
+                                <div className="form-group">
+                                    <label className="form-label">조정 대상 LOT</label>
+                                    <select className="form-input" value={newItem.lotNo}
+                                        onChange={(e) => {
+                                            const lot = e.target.value;
+                                            setNewItem(prev => ({ ...prev, lotNo: lot }));
+                                            setAdjustStockFor(newItem.itemName, newItem.itemCode, lot);
+                                        }}>
+                                        <option value="">품목 전체 (LOT 미지정)</option>
+                                        {getLotsForItem(lotLedger, newItem.itemName)
+                                            .filter(l => l.lotNo !== UNSPECIFIED_LOT)
+                                            .map(l => (
+                                                <option key={l.lotNo} value={l.lotNo}>
+                                                    {l.lotNo} — 잔량 {l.remain.toLocaleString()}{l.unit}
+                                                </option>
+                                            ))}
+                                    </select>
+                                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem' }}>
+                                        {newItem.lotNo
+                                            ? `LOT [${newItem.lotNo}] 잔량만 조정합니다.`
+                                            : "LOT를 비우면 품목 전체 기준으로 조정되고, 조정분은 '(미지정)' LOT로 들어갑니다."}
+                                    </div>
+                                </div>
                                 <div className="adjust-info-card">
                                     <div className="adjust-info-row">
                                         <span className="adjust-label">📦 시스템 재고</span>
@@ -1053,6 +1559,62 @@ const InventoryInOut = () => {
                             </>
                         ) : (
                             <>
+                                {/* LOT */}
+                                {newItem.transactionType === 'OUT' ? (
+                                    <>
+                                        <div className="form-group">
+                                            <label className="form-label">출고 LOT *</label>
+                                            <select className="form-input" value={newItem.lotNo}
+                                                onChange={(e) => setNewItem({ ...newItem, lotNo: e.target.value })}>
+                                                <option value="">LOT 선택...</option>
+                                                {getLotsForItem(lotLedger, newItem.itemName).map(l => (
+                                                    <option key={l.lotNo} value={l.lotNo}>
+                                                        {l.lotNo} — 잔량 {l.remain.toLocaleString()}{l.unit}{l.firstInDate ? ` (입고 ${l.firstInDate})` : ''}
+                                                    </option>
+                                                ))}
+                                                {newItem.lotNo && !getLotsForItem(lotLedger, newItem.itemName).some(l => isSameLot(l.lotNo, newItem.lotNo)) && (
+                                                    <option value={newItem.lotNo}>{newItem.lotNo}</option>
+                                                )}
+                                            </select>
+                                            {newItem.itemName && newItem.lotNo && (
+                                                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem' }}>
+                                                    이 거래를 뺀 LOT 잔량: {getLotRemain(inventoryTransactions, newItem.itemName, newItem.lotNo, editingId).toLocaleString()} {newItem.unit}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">납품서 LOT (대조용)</label>
+                                            <input className="form-input" value={newItem.deliveryLotNo}
+                                                placeholder="납품서에 적힌 LOT"
+                                                onChange={(e) => setNewItem({ ...newItem, deliveryLotNo: e.target.value })} />
+                                            {(newItem.deliveryLotNo || '').trim() && (
+                                                <div style={{ marginTop: '0.3rem' }}>
+                                                    {isSameLot(newItem.deliveryLotNo, newItem.lotNo)
+                                                        ? <span className="lot-match ok"><CheckCircle2 size={13} /> 시스템 LOT와 일치</span>
+                                                        : <span className="lot-match bad"><AlertTriangle size={13} /> 시스템 LOT와 불일치</span>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="form-group">
+                                        <label className="form-label">입고 LOT</label>
+                                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                            <input className="form-input" value={newItem.lotNo}
+                                                placeholder={`예: ${suggestLotNo(newItem.transactionDate) || 'VKW'}`}
+                                                onChange={(e) => setNewItem({ ...newItem, lotNo: e.target.value })} />
+                                            <button type="button" className="btn-cancel" style={{ whiteSpace: 'nowrap' }}
+                                                onClick={() => setNewItem({ ...newItem, lotNo: suggestLotNo(newItem.transactionDate) })}>
+                                                일자 LOT
+                                            </button>
+                                        </div>
+                                        {(newItem.lotNo || '').trim() && lotDateLabel(newItem.lotNo) && (
+                                            <div style={{ fontSize: '0.75rem', marginTop: '4px', color: '#16a34a' }}>
+                                                {newItem.lotNo.trim().toUpperCase()} = 제조 {lotDateLabel(newItem.lotNo)}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="form-group">
                                     <label className="form-label">수량 *</label>
                                     <input type="number" className="form-input" value={newItem.quantity}
@@ -1119,7 +1681,16 @@ const InventoryInOut = () => {
                             <div className="form-group" style={{ margin: 0 }}>
                                 <label className="form-label">거래 구분 *</label>
                                 <select className="form-input" value={batchCommon.transactionType}
-                                    onChange={(e) => setBatchCommon({ ...batchCommon, transactionType: e.target.value })}>
+                                    onChange={(e) => {
+                                        const type = e.target.value;
+                                        setBatchCommon({ ...batchCommon, transactionType: type });
+                                        // 구분이 바뀌면 LOT 의미가 달라지므로 초기화 (입고=부여 / 출고=선택)
+                                        setBatchItems(prev => prev.map(it => ({
+                                            ...it,
+                                            lotNo: type === 'IN' && it.itemName ? suggestLotNo(batchCommon.transactionDate) : '',
+                                            deliveryLotNo: ''
+                                        })));
+                                    }}>
                                     <option value="IN">입고</option>
                                     <option value="OUT">출고</option>
                                     <option value="ADJUST">재고조정</option>
@@ -1128,7 +1699,17 @@ const InventoryInOut = () => {
                             <div className="form-group" style={{ margin: 0 }}>
                                 <label className="form-label">거래일자 *</label>
                                 <input type="date" className="form-input" value={batchCommon.transactionDate}
-                                    onChange={(e) => setBatchCommon({ ...batchCommon, transactionDate: e.target.value })} />
+                                    onChange={(e) => {
+                                        const date = e.target.value;
+                                        const prevSuggest = suggestLotNo(batchCommon.transactionDate);
+                                        setBatchCommon({ ...batchCommon, transactionDate: date });
+                                        // 자동 제안값(년월일 코드)을 그대로 쓰던 입고 행만 새 일자로 갱신
+                                        if (batchCommon.transactionType === 'IN') {
+                                            setBatchItems(prev => prev.map(it => (
+                                                it.lotNo === prevSuggest ? { ...it, lotNo: suggestLotNo(date) } : it
+                                            )));
+                                        }
+                                    }} />
                             </div>
                         </div>
                         {batchCommon.transactionType !== 'ADJUST' && (
@@ -1190,6 +1771,29 @@ const InventoryInOut = () => {
                                         ))}
                                     </select>
                                 </div>
+                                <div className="form-group">
+                                    <label className="form-label">조정 대상 LOT</label>
+                                    <select className="form-input" value={newItem.lotNo}
+                                        onChange={(e) => {
+                                            const lot = e.target.value;
+                                            setNewItem(prev => ({ ...prev, lotNo: lot }));
+                                            setAdjustStockFor(newItem.itemName, newItem.itemCode, lot);
+                                        }}>
+                                        <option value="">품목 전체 (LOT 미지정)</option>
+                                        {getLotsForItem(lotLedger, newItem.itemName)
+                                            .filter(l => l.lotNo !== UNSPECIFIED_LOT)
+                                            .map(l => (
+                                                <option key={l.lotNo} value={l.lotNo}>
+                                                    {l.lotNo} — 잔량 {l.remain.toLocaleString()}{l.unit}
+                                                </option>
+                                            ))}
+                                    </select>
+                                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem' }}>
+                                        {newItem.lotNo
+                                            ? `LOT [${newItem.lotNo}] 잔량만 조정합니다.`
+                                            : "LOT를 비우면 품목 전체 기준으로 조정되고, 조정분은 '(미지정)' LOT로 들어갑니다."}
+                                    </div>
+                                </div>
                                 <div className="adjust-info-card">
                                     <div className="adjust-info-row">
                                         <span className="adjust-label">📦 시스템 재고</span>
@@ -1229,7 +1833,20 @@ const InventoryInOut = () => {
                                     </button>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '340px', overflowY: 'auto', paddingRight: '4px' }}>
-                                    {batchItems.map((item, idx) => (
+                                    {batchItems.map((item, idx) => {
+                                        const isOutRow = batchCommon.transactionType === 'OUT';
+                                        const lotsForRow = isOutRow && item.itemName ? availableLots(item.itemName) : [];
+                                        // 같은 배치의 앞뒤 행이 이미 쓴 같은 LOT 수량 (중복 출고 방지용 표시)
+                                        const usedElsewhere = batchItems.reduce((sum, it, i) =>
+                                            (i !== idx && it.itemName === item.itemName && normalizeLot(it.lotNo) === normalizeLot(item.lotNo))
+                                                ? sum + (parseFloat(it.quantity) || 0) : sum, 0);
+                                        const lotRemain = (item.itemName && item.lotNo)
+                                            ? getLotRemain(inventoryTransactions, item.itemName, item.lotNo) - usedElsewhere
+                                            : null;
+                                        const dlvTrim = (item.deliveryLotNo || '').trim();
+                                        const dlvMatch = dlvTrim ? isSameLot(dlvTrim, item.lotNo) : null;
+                                        const overDraw = isOutRow && lotRemain != null && (parseFloat(item.quantity) || 0) > lotRemain;
+                                        return (
                                         <div key={idx} style={{ background: item.itemName ? '#f8fafc' : '#fff', border: `1px solid ${item.itemName ? '#e2e8f0' : '#fca5a5'}`, borderRadius: '10px', padding: '0.6rem 0.75rem', position: 'relative' }}>
                                             {batchItems.length > 1 && (
                                                 <button type="button" onClick={() => removeBatchItemRow(idx)}
@@ -1259,6 +1876,91 @@ const InventoryInOut = () => {
                                                     <Camera size={14} />
                                                 </button>
                                             </div>
+                                            {/* LOT */}
+                                            {isOutRow ? (
+                                                <div style={{ marginBottom: '0.45rem' }}>
+                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>출고 LOT *</div>
+                                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                                        <select className="form-input" value={item.lotNo}
+                                                            style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem', flex: 1, borderColor: item.lotNo ? '#e2e8f0' : '#fca5a5' }}
+                                                            onChange={(e) => updateBatchItem(idx, 'lotNo', e.target.value)}>
+                                                            <option value="">LOT 선택...</option>
+                                                            {lotsForRow.map(l => (
+                                                                <option key={l.lotNo} value={l.lotNo}>
+                                                                    {l.lotNo} — 잔량 {l.remain.toLocaleString()}{l.unit}{l.firstInDate ? ` (입고 ${l.firstInDate})` : ''}
+                                                                </option>
+                                                            ))}
+                                                            {/* 잔량 0이 된 LOT를 수정 중일 때 선택값 유지 */}
+                                                            {item.lotNo && !lotsForRow.some(l => isSameLot(l.lotNo, item.lotNo)) && (
+                                                                <option value={item.lotNo}>{item.lotNo} (잔량 없음)</option>
+                                                            )}
+                                                        </select>
+                                                        <button type="button" onClick={() => splitRowByFifo(idx)}
+                                                            style={{ background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', padding: '0 0.55rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 700 }}
+                                                            title="수량을 오래된 LOT부터 자동 분할 (FIFO)">
+                                                            <Split size={13} /> 분할
+                                                        </button>
+                                                    </div>
+                                                    {item.itemName && lotsForRow.length === 0 && (
+                                                        <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: '3px' }}>
+                                                            잔량 있는 LOT가 없습니다. 입고를 먼저 등록하세요.
+                                                        </div>
+                                                    )}
+                                                    {item.lotNo && lotRemain != null && (
+                                                        <div style={{ fontSize: '0.72rem', marginTop: '3px', color: overDraw ? '#dc2626' : '#64748b', fontWeight: overDraw ? 700 : 400 }}>
+                                                            LOT 잔량 {lotRemain.toLocaleString()}{item.unit}
+                                                            {(parseFloat(item.quantity) || 0) > 0 && ` → 출고 후 ${(lotRemain - (parseFloat(item.quantity) || 0)).toLocaleString()}${item.unit}`}
+                                                            {overDraw && ' ⚠ 잔량 초과'}
+                                                        </div>
+                                                    )}
+                                                    {/* 납품서(출하요청서·현품표)에 적힌 LOT — 시스템 LOT와 대조 */}
+                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', margin: '0.35rem 0 2px' }}>납품서 LOT (대조용, 선택)</div>
+                                                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                                        <input className="form-input" value={item.deliveryLotNo}
+                                                            style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem', flex: 1, borderColor: dlvMatch === false ? '#fca5a5' : '#e2e8f0' }}
+                                                            placeholder="납품서에 적힌 LOT를 입력해 대조"
+                                                            onChange={(e) => updateBatchItem(idx, 'deliveryLotNo', e.target.value)} />
+                                                        {dlvMatch === true && <span className="lot-match ok"><CheckCircle2 size={13} /> 일치</span>}
+                                                        {dlvMatch === false && <span className="lot-match bad"><AlertTriangle size={13} /> 불일치</span>}
+                                                    </div>
+                                                    {(item.deliveryLotNo || '').trim() && lotDateLabel(item.deliveryLotNo) && (
+                                                        <div style={{ fontSize: '0.72rem', marginTop: '3px', color: '#64748b' }}>
+                                                            납품서 LOT 제조일 {lotDateLabel(item.deliveryLotNo)}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div style={{ marginBottom: '0.45rem' }}>
+                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>입고 LOT</div>
+                                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                                        <input className="form-input" value={item.lotNo}
+                                                            style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem', flex: 1 }}
+                                                            placeholder={`예: ${suggestLotNo(batchCommon.transactionDate) || 'VKW'}`}
+                                                            onChange={(e) => updateBatchItem(idx, 'lotNo', e.target.value)} />
+                                                        <button type="button"
+                                                            onClick={() => updateBatchItem(idx, 'lotNo', suggestLotNo(batchCommon.transactionDate))}
+                                                            style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 0.55rem', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700 }}
+                                                            title="거래일자로 LOT 채우기 (년월일 코드)">
+                                                            일자
+                                                        </button>
+                                                    </div>
+                                                    {(item.lotNo || '').trim() && (
+                                                        lotDateLabel(item.lotNo)
+                                                            ? <div style={{ fontSize: '0.72rem', marginTop: '3px', color: '#16a34a' }}>
+                                                                {item.lotNo.trim().toUpperCase()} = 제조 {lotDateLabel(item.lotNo)}
+                                                            </div>
+                                                            : <div style={{ fontSize: '0.72rem', marginTop: '3px', color: '#94a3b8' }}>
+                                                                회사 LOT 체계(년월일 3자리)가 아닙니다 — 그대로 저장됩니다.
+                                                            </div>
+                                                    )}
+                                                    {item.itemName && item.lotNo && lotRemain != null && lotRemain !== 0 && (
+                                                        <div style={{ fontSize: '0.72rem', marginTop: '3px', color: '#d97706' }}>
+                                                            이미 있는 LOT입니다 (현재 잔량 {lotRemain.toLocaleString()}{item.unit}) — 같은 LOT에 합산됩니다.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
                                             {/* 수량 / 단가 / 금액 */}
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', alignItems: 'center' }}>
                                                 <div>
@@ -1283,7 +1985,8 @@ const InventoryInOut = () => {
                                                 </div>
                                             </div>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
 
                                 {/* 합계 */}
@@ -1365,6 +2068,18 @@ const InventoryInOut = () => {
                 .icon-btn { padding: 0.5rem; border-radius: var(--radius-sm); color: var(--text-muted); transition: all 0.2s; }
                 .icon-btn:hover { background: #f1f5f9; color: var(--primary); }
                 .delete-btn:hover { color: var(--danger); background: #fee2e2; }
+
+                .lot-chip { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 6px; background: #eef2ff; color: #4338ca; font-size: 0.82rem; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.02em; }
+                .lot-chip.lot-none { background: #f1f5f9; color: #94a3b8; font-weight: 600; }
+                .lot-match { display: inline-flex; align-items: center; gap: 3px; padding: 0.15rem 0.45rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+                .lot-match.ok { background: #dcfce7; color: #047857; }
+                .lot-match.bad { background: #fee2e2; color: #b91c1c; }
+                .lot-match.wait { background: #fef3c7; color: #b45309; }
+                .lot-status { padding: 0.18rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+                .lot-status.live { background: #dcfce7; color: #047857; }
+                .lot-status.done { background: #f1f5f9; color: #94a3b8; }
+                .lot-status.neg { background: #fee2e2; color: #b91c1c; }
+                .lot-warn-banner { display: flex; align-items: flex-start; gap: 0.7rem; padding: 0.85rem 1rem; margin-bottom: 1rem; background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 8px; color: #b91c1c; }
 
                 .inventory-status-table { background: white; padding: 1.5rem; border-radius: var(--radius-lg); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
                 .section-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }

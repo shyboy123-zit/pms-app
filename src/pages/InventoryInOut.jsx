@@ -9,7 +9,7 @@ import { Package, TrendingUp, TrendingDown, Edit, Trash2, Plus, RefreshCw, X, Ca
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import {
-    UNSPECIFIED_LOT, normalizeLot, isSameLot, suggestLotNo, lotDateLabel,
+    UNSPECIFIED_LOT, normalizeLot, isSameLot, suggestLotNo, lotDateLabel, toStoredLot,
     buildLotLedger, getLotsForItem, allocateFifo, lotAgeDays, getLotRemain,
     deliveryLotStatus
 } from '../lib/lotUtils';
@@ -489,7 +489,7 @@ const InventoryInOut = () => {
                     unit_price: parseFloat(newItem.unitPrice) || 0,
                     transaction_date: newItem.transactionDate,
                     client: '',
-                    lot_no: (newItem.lotNo || '').trim() || null,
+                    lot_no: toStoredLot(newItem.lotNo),
                     delivery_lot_no: null,
                     notes: `[재고조정:${adjustReason}]${newItem.lotNo?.trim() ? ` [LOT:${newItem.lotNo.trim()}]` : ''} 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff}) / 사유: ${reasonLabel}${newItem.notes ? ' / ' + newItem.notes : ''}`
                 }, { reason: reasonLabel, context: 'inventory:adjust_update' });
@@ -537,9 +537,9 @@ const InventoryInOut = () => {
                     transaction_date: newItem.transactionDate,
                     client: newItem.client,
                     notes: newItem.notes,
-                    lot_no: (newItem.lotNo || '').trim() || null,
+                    lot_no: toStoredLot(newItem.lotNo),
                     delivery_lot_no: newItem.transactionType === 'OUT'
-                        ? ((newItem.deliveryLotNo || '').trim() || null)
+                        ? (toStoredLot(newItem.deliveryLotNo))
                         : null
                 }, { context: 'inventory:update' });
 
@@ -628,7 +628,7 @@ const InventoryInOut = () => {
                 unit_price: parseFloat(newItem.unitPrice) || 0,
                 transaction_date: batchCommon.transactionDate,
                 client: '',
-                lot_no: (newItem.lotNo || '').trim() || null,
+                lot_no: toStoredLot(newItem.lotNo),
                 delivery_lot_no: null,
                 notes: `[재고조정:${adjustReason}]${newItem.lotNo?.trim() ? ` [LOT:${newItem.lotNo.trim()}]` : ''} 시스템재고: ${systemStock} → 실제재고: ${actualStock} (차이: ${diff > 0 ? '+' : ''}${diff}) / 사유: ${reasonLabel}${batchCommon.notes ? ' / ' + batchCommon.notes : ''}`
             }, { reason: reasonLabel, context: 'inventory:adjust_new' });
@@ -725,9 +725,9 @@ const InventoryInOut = () => {
                 transaction_date: batchCommon.transactionDate,
                 client: batchCommon.client,
                 notes: batchCommon.notes,
-                lot_no: (item.lotNo || '').trim() || null,
+                lot_no: toStoredLot(item.lotNo),
                 delivery_lot_no: batchCommon.transactionType === 'OUT'
-                    ? ((item.deliveryLotNo || '').trim() || null)
+                    ? (toStoredLot(item.deliveryLotNo))
                     : null
             }, { context: `inventory:batch_${batchCommon.transactionType.toLowerCase()}` });
             const newTxId = txData && txData[0] ? txData[0].id : null;
@@ -1887,7 +1887,7 @@ const InventoryInOut = () => {
                                                             <option value="">LOT 선택...</option>
                                                             {lotsForRow.map(l => (
                                                                 <option key={l.lotNo} value={l.lotNo}>
-                                                                    {l.lotNo} — 잔량 {l.remain.toLocaleString()}{l.unit}{l.firstInDate ? ` (입고 ${l.firstInDate})` : ''}
+                                                                    {l.lotNo === UNSPECIFIED_LOT ? 'LOT 없는 기존 재고' : l.lotNo} — 잔량 {l.remain.toLocaleString()}{l.unit}{l.firstInDate ? ` (입고 ${l.firstInDate})` : ''}
                                                                 </option>
                                                             ))}
                                                             {/* 잔량 0이 된 LOT를 수정 중일 때 선택값 유지 */}
@@ -1904,6 +1904,11 @@ const InventoryInOut = () => {
                                                     {item.itemName && lotsForRow.length === 0 && (
                                                         <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: '3px' }}>
                                                             잔량 있는 LOT가 없습니다. 입고를 먼저 등록하세요.
+                                                        </div>
+                                                    )}
+                                                    {item.lotNo === UNSPECIFIED_LOT && (
+                                                        <div style={{ fontSize: '0.72rem', color: '#b45309', marginTop: '3px' }}>
+                                                            LOT 적용 전 재고라 시스템 LOT가 없습니다 — 납품서 LOT는 「대조대기」로만 기록됩니다.
                                                         </div>
                                                     )}
                                                     {item.lotNo && lotRemain != null && (

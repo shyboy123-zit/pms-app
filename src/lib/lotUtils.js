@@ -18,6 +18,17 @@ export const normalizeLot = (lot) => {
     return v === '' ? UNSPECIFIED_LOT : v;
 };
 
+/**
+ * DB 저장용 LOT 변환 — 빈 값과 '(미지정)'은 NULL 로 저장한다.
+ * '(미지정)'은 "LOT를 모른다"는 뜻의 화면 표시용 라벨이므로 그대로 저장하면
+ * 납품서 LOT와 비교됐을 때 '불일치'로 잡혀 버린다. NULL 이어야 '대조대기'가 된다.
+ */
+export const toStoredLot = (lot) => {
+    const v = (lot ?? '').toString().trim();
+    if (v === '' || v === UNSPECIFIED_LOT) return null;
+    return v;
+};
+
 /** LOT 비교용 정규화 — 대소문자·공백·하이픈 차이를 무시한다. (납품서 표기 차이 흡수) */
 export const canonicalLot = (lot) =>
     (lot ?? '').toString().trim().toUpperCase().replace(/[\s\-_/.]/g, '');

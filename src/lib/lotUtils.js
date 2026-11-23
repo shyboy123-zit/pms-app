@@ -33,8 +33,13 @@ export const toStoredLot = (lot) => {
 export const canonicalLot = (lot) =>
     (lot ?? '').toString().trim().toUpperCase().replace(/[\s\-_/.]/g, '');
 
-/** 두 LOT 번호가 실질적으로 같은지 */
-export const isSameLot = (a, b) => canonicalLot(a) === canonicalLot(b);
+/**
+ * 두 LOT 번호가 실질적으로 같은지.
+ * 금형타수 시트·현품표는 날짜 3자리 뒤에 교대 코드(A=주간 / B=야간)를 붙여 4자리로 쓴다.
+ * PMS 입고는 하루 합산이라 교대를 나누지 않으므로, 대조할 때 교대 글자는 무시한다.
+ *   VKW = VKWA = VKWB
+ */
+export const isSameLot = (a, b) => stripShiftCode(a) === stripShiftCode(b);
 
 // ============================================================
 // 회사 LOT 체계 (금호정공 「LOT NO 체계표」) — 제조년월일 3자리
@@ -88,7 +93,10 @@ export const suggestLotNo = (dateStr) => {
  */
 export const parseLotNo = (lot, today = new Date()) => {
     const s = canonicalLot(lot);
-    if (!/^[A-Z][A-L][A-Z1-5]$/.test(s)) return null;
+    // 4번째 글자는 교대 코드(A=주간 / B=야간) — 금형타수 시트·현품표 표기
+    const m = s.match(/^([A-Z][A-L][A-Z1-5])([AB])?$/);
+    if (!m) return null;
+    const shift = m[2] || null;
 
     const month = s.charCodeAt(1) - 64;                 // A=1 … L=12
     const dc = s[2];
@@ -104,7 +112,17 @@ export const parseLotNo = (lot, today = new Date()) => {
     if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
 
     const pad = (n) => String(n).padStart(2, '0');
-    return { year, month, day, dateStr: `${year}-${pad(month)}-${pad(day)}` };
+    return { year, month, day, shift, dateStr: `${year}-${pad(month)}-${pad(day)}` };
+};
+
+/**
+ * 교대 코드가 붙은 4자리 LOT → 날짜 3자리로 줄인다 (VKWA → VKW).
+ * 체계에 맞지 않는 LOT은 비교용 정규화만 해서 그대로 돌려준다.
+ */
+export const stripShiftCode = (lot) => {
+    const s = canonicalLot(lot);
+    const parsed = parseLotNo(s);
+    return parsed && parsed.shift ? s.slice(0, 3) : s;
 };
 
 /** LOT 번호를 사람이 읽는 제조일자로 ('VKW' → '2026-11-23'), 해석 불가면 null */

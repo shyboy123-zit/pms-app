@@ -1559,6 +1559,12 @@ const InventoryInOut = () => {
                             </>
                         ) : (
                             <>
+                                {/* 수량 — LOT보다 먼저. 수량이 있어야 LOT 잔량 확인이 된다 */}
+                                <div className="form-group">
+                                    <label className="form-label">수량 *</label>
+                                    <input type="number" className="form-input" value={newItem.quantity}
+                                        onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })} />
+                                </div>
                                 {/* LOT */}
                                 {newItem.transactionType === 'OUT' ? (
                                     <>
@@ -1615,11 +1621,6 @@ const InventoryInOut = () => {
                                         )}
                                     </div>
                                 )}
-                                <div className="form-group">
-                                    <label className="form-label">수량 *</label>
-                                    <input type="number" className="form-input" value={newItem.quantity}
-                                        onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })} />
-                                </div>
                                 <div className="form-group">
                                     <label className="form-label">단가</label>
                                     <input type="number" className="form-input" value={newItem.unitPrice}
@@ -1876,6 +1877,29 @@ const InventoryInOut = () => {
                                                     <Camera size={14} />
                                                 </button>
                                             </div>
+                                            {/* 수량 / 단가 / 금액 — LOT보다 먼저. 수량이 있어야 LOT 잔량 계산·분할이 동작한다 */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', alignItems: 'center', marginBottom: '0.45rem' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>수량</div>
+                                                    <input type="number" className="form-input" value={item.quantity}
+                                                        style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem' }}
+                                                        onFocus={(e) => e.target.select()}
+                                                        onChange={(e) => updateBatchItem(idx, 'quantity', parseFloat(e.target.value) || 0)} />
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>단가</div>
+                                                    <input type="number" className="form-input" value={item.unitPrice}
+                                                        style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem' }}
+                                                        onFocus={(e) => e.target.select()}
+                                                        onChange={(e) => updateBatchItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} />
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>금액</div>
+                                                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#4f46e5', padding: '0.35rem 0' }}>
+                                                        ₩{(item.quantity * item.unitPrice).toLocaleString()}
+                                                    </div>
+                                                </div>
+                                            </div>
                                             {/* LOT */}
                                             {isOutRow ? (
                                                 <div style={{ marginBottom: '0.45rem' }}>
@@ -1966,29 +1990,6 @@ const InventoryInOut = () => {
                                                 </div>
                                             )}
 
-                                            {/* 수량 / 단가 / 금액 */}
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', alignItems: 'center' }}>
-                                                <div>
-                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>수량</div>
-                                                    <input type="number" className="form-input" value={item.quantity}
-                                                        style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem' }}
-                                                        onFocus={(e) => e.target.select()}
-                                                        onChange={(e) => updateBatchItem(idx, 'quantity', parseFloat(e.target.value) || 0)} />
-                                                </div>
-                                                <div>
-                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>단가</div>
-                                                    <input type="number" className="form-input" value={item.unitPrice}
-                                                        style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem' }}
-                                                        onFocus={(e) => e.target.select()}
-                                                        onChange={(e) => updateBatchItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} />
-                                                </div>
-                                                <div>
-                                                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>금액</div>
-                                                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#4f46e5', padding: '0.35rem 0' }}>
-                                                        ₩{(item.quantity * item.unitPrice).toLocaleString()}
-                                                    </div>
-                                                </div>
-                                            </div>
                                         </div>
                                         );
                                     })}
